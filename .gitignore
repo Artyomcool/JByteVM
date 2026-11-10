@@ -1,0 +1,10 @@
+/build/
+/out/
+/.local/
+/.idea/
+/.vs/
+*.obj
+*.o
+*.pdb
+*.ilk
+*.class
