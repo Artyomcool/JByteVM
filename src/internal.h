@@ -40,6 +40,7 @@ typedef struct JbvMethod {
     const uint8_t *lines;
     uint8_t intrinsic;
     uint8_t accessor;        /* 1: aload_0 getfield [ia]return, 2: aload_0 iload_1 putfield return */
+    uint8_t return_char;     /* last descriptor character: ireturn narrows by it */
     JbvNative native;
     JbvNativeSlots native_slots;
     void *native_user;

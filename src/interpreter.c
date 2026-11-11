@@ -61,6 +61,7 @@ void jbv_prepare_method(JbvMethod *m) {
     (void)jbv_signature(m->descriptor, &slots, &result);
     m->argument_slots = (uint16_t)(slots + !(m->flags & JBV_STATIC));
     m->result_kind = (uint8_t)result;
+    m->return_char = m->descriptor.size ? m->descriptor.data[m->descriptor.size - 1] : 'V';
 }
 JbvStatus jbv_arguments(JbvVM *vm, JbvClass *owner, JbvMethod *method,
     const int32_t *args, uint16_t count, uint8_t *refs, int pin) {
@@ -201,44 +202,36 @@ int32_t jbv_narrow(int32_t value, uint8_t type) {
     default: return value;
     }
 }
+/* What the x86 core keeps per method: where it runs, plus copies of vm->handles and the
+ * young region, reloaded from the VM after anything that may collect. The rest it reads
+ * through vm. */
 typedef struct JbvCoreState {
     const uint8_t *code;
     int32_t *locals;
     uint8_t *refs;
     uint32_t pc, sp;          /* in/out; sp counts from locals */
-    uint64_t *remaining;
     uintptr_t *handles;
     const JbvConstant *pool;
     JbvVM *vm;
-    JbvFrame *frame;
     JbvStatus status;         /* out: a call made by the core failed (frame synced) */
-    uintptr_t *const *handle_table;   /* &vm->handles: reloaded after calls, which may collect */
-    uint64_t result;          /* out with JBV_CORE_RETURN: the returned value */
-    uint8_t int_result;       /* the method's return descriptor character: ireturn narrows by it */
-    uint8_t *nursery;         /* the young region, for the write barrier; reloaded after calls */
+    uint8_t *nursery;         /* the young region, for the write barrier */
     size_t nursery_size;
-    uint8_t *const *nursery_ref;
-    const size_t *nursery_size_ref;
-    JbvClass *object_class;
-    JbvObject *const *last_remembered;   /* &vm->last_remembered */
+    uint32_t reserved;
+    uint64_t result;          /* out with JBV_CORE_RETURN: the returned value */
 } JbvCoreState;
 #define JBV_CORE_RETURN ((JbvStatus)0x52455400)   /* core.status: the method returned */
 /* One running method: the core state first (the x86 core's state pointer is the
- * activation), its frame, and where its locals and operand stack are. jbv_execute
- * keeps one on the C stack; the x86 core builds them on its own for calls. */
+ * activation), then its frame. Class and method are the frame's; the operand stack and
+ * its reference bits follow the locals. jbv_execute keeps one on the C stack; the x86
+ * core builds them on its own for calls. */
 typedef struct JbvActivation {
     JbvCoreState core;
     JbvFrame frame;
-    JbvClass *c;
-    JbvMethod *m;
-    int32_t *locals, *stack;
-    uint8_t *local_refs, *stack_refs;
     /* activations the x86 core made for a call (asm_frame): */
     struct JbvActivation *caller;
     uint32_t saved;           /* vm->used_slots to restore */
     uint32_t argbase;         /* the caller's sp after the call */
     uint8_t resume;           /* operand bytes of the invoke */
-    uint8_t result_kind;
     uint8_t asm_frame;        /* no C activation runs it (jbv_core_finish takes over) */
     void *ret;                /* the core's return address into its caller: a real call/ret pair, predicted */
 } JbvActivation;
@@ -257,11 +250,11 @@ JBV_LAYOUT(link, offsetof(JbvLink, slot) == 32 && offsetof(JbvLink, kind) == 36 
     offsetof(JbvLink, member) == 8 && offsetof(JbvLink, seen) == 12 && offsetof(JbvLink, target_owner) == 16 && offsetof(JbvLink, target) == 20);
 JBV_LAYOUT(links, offsetof(JbvLink, special_owner) == 24 && offsetof(JbvLink, special) == 28 && offsetof(JbvLink, trivial) == 43 &&
     offsetof(JbvLink, address) == 44 && offsetof(JbvLink, pic_seen) == 48 && offsetof(JbvLink, pic_owner) == 60 && offsetof(JbvLink, pic_target) == 72);
-JBV_LAYOUT(core2, offsetof(JbvCoreState, nursery) == 60 && offsetof(JbvCoreState, nursery_size) == 64 && offsetof(JbvCoreState, nursery_ref) == 68 &&
-    offsetof(JbvCoreState, nursery_size_ref) == 72 && offsetof(JbvCoreState, object_class) == 76 && offsetof(JbvCoreState, last_remembered) == 80);
-JBV_LAYOUT(activation, sizeof(JbvCoreState) == 88 && offsetof(JbvActivation, frame) == 88 && offsetof(JbvActivation, caller) == 144 &&
-    offsetof(JbvActivation, argbase) == 152 && offsetof(JbvActivation, resume) == 156 && offsetof(JbvActivation, result_kind) == 157 &&
-    offsetof(JbvActivation, asm_frame) == 158 && offsetof(JbvActivation, ret) == 160 && sizeof(JbvActivation) == 168 && offsetof(JbvMethod, max_locals) == 4 &&
+JBV_LAYOUT(core2, offsetof(JbvCoreState, nursery) == 36 && offsetof(JbvCoreState, nursery_size) == 40 && offsetof(JbvVM, last_remembered) == 2012 &&
+    offsetof(JbvVM, object_class) == 360 && offsetof(JbvMethod, return_char) == (JBV_PROFILE_FULL ? 50 : 46));
+JBV_LAYOUT(activation, sizeof(JbvCoreState) == 56 && offsetof(JbvActivation, frame) == 56 && offsetof(JbvActivation, caller) == 88 &&
+    offsetof(JbvActivation, saved) == 92 && offsetof(JbvActivation, argbase) == 96 && offsetof(JbvActivation, resume) == 100 &&
+    offsetof(JbvActivation, asm_frame) == 101 && offsetof(JbvActivation, ret) == 104 && sizeof(JbvActivation) == 112 && offsetof(JbvMethod, max_locals) == 4 &&
     JBV_NATIVE == 0x100 && JBV_SYNCHRONIZED == 0x20);
 JBV_LAYOUT(vm, offsetof(JbvVM, config.max_slots) == 12 && offsetof(JbvVM, config.max_depth) == 16 && offsetof(JbvVM, slots) == 336 &&
     offsetof(JbvVM, used_slots) == 340 && offsetof(JbvVM, depth) == 344 && offsetof(JbvVM, remaining) == 352 &&
@@ -274,15 +267,13 @@ JBV_LAYOUT(method, offsetof(JbvMethod, max_stack) == 2 && offsetof(JbvMethod, de
     offsetof(JbvMethod, code) == (JBV_PROFILE_FULL ? 28 : 24) && offsetof(JbvMethod, argument_slots) == (JBV_PROFILE_FULL ? 36 : 32) &&
     offsetof(JbvMethod, result_kind) == (JBV_PROFILE_FULL ? 38 : 34) && offsetof(JbvClass, pool) == 8 && offsetof(JbvFrame, base) == 20 &&
     offsetof(JbvFrame, previous) == 0 && offsetof(JbvFrame, owner) == 4 && offsetof(JbvFrame, method) == 8 && offsetof(JbvFrame, has_monitors) == 28 &&
-    offsetof(JbvActivation, c) == 120 && offsetof(JbvActivation, m) == 124 && offsetof(JbvActivation, locals) == 128 &&
-    offsetof(JbvActivation, stack) == 132 && offsetof(JbvActivation, local_refs) == 136 && offsetof(JbvActivation, stack_refs) == 140 &&
-    offsetof(JbvActivation, saved) == 148);
+    sizeof(JbvFrame) == 32);
 JBV_LAYOUT(klass, offsetof(JbvClass, component) == (JBV_PROFILE_FULL ? 72 : 68) && offsetof(JbvClass, flags) == (JBV_PROFILE_FULL ? 56 : 52) &&
     offsetof(JbvClass, init_state) == (JBV_PROFILE_FULL ? 82 : 78) && JBV_INTERFACE == 0x200 && JBV_ABSTRACT == 0x400);
 JBV_LAYOUT(frame, offsetof(JbvFrame, pc) == 12 && offsetof(JbvFrame, sp) == 16 && offsetof(JbvFrame, locals) == 24);
-JBV_LAYOUT(core, offsetof(JbvCoreState, vm) == 32 && offsetof(JbvCoreState, frame) == 36 && offsetof(JbvCoreState, status) == 40 &&
-    offsetof(JbvCoreState, handle_table) == 44 && offsetof(JbvCoreState, result) == 48 && offsetof(JbvCoreState, int_result) == 56 && JBV_INT + 1 == 1 && JBV_REF + 1 == 2 && JBV_LONG + 1 == 3 && JBV_DOUBLE + 1 == 6);
-JBV_LAYOUT(state, offsetof(JbvCoreState, sp) == 16 && offsetof(JbvCoreState, remaining) == 20 && offsetof(JbvCoreState, handles) == 24 && offsetof(JbvCoreState, pool) == 28);
+JBV_LAYOUT(core, offsetof(JbvCoreState, vm) == 28 && offsetof(JbvCoreState, status) == 32 &&
+    offsetof(JbvCoreState, result) == 48 && JBV_INT + 1 == 1 && JBV_REF + 1 == 2 && JBV_LONG + 1 == 3 && JBV_DOUBLE + 1 == 6);
+JBV_LAYOUT(state, offsetof(JbvCoreState, sp) == 16 && offsetof(JbvCoreState, handles) == 20 && offsetof(JbvCoreState, pool) == 24);
 JBV_LAYOUT(object, sizeof(JbvObject) == 4 && JBV_HANDLE_MASK == 0xffffffu && JBV_INT == 0 && JBV_REF == 1);
 #endif
 /* Big-endian immediates, inline: these run at every branch and wide operand. */
@@ -617,16 +608,12 @@ done:
 }
 #if JBV_X86_CORE
 JBV_GC static JbvStatus jbv_run(JbvVM *vm, JbvActivation *act, JbvStatus status, uint64_t *out);
-static void core_state(JbvVM *vm, JbvActivation *act) {
-    JbvMethod *m = act->m;
-    act->core.code = m->code; act->core.locals = act->locals; act->core.refs = act->local_refs;
+static void core_state(JbvVM *vm, JbvActivation *act) {   /* core.locals and core.refs are set */
+    act->core.code = act->frame.method->code;
     act->core.pc = 0; act->core.sp = act->frame.locals;
-    act->core.remaining = &vm->remaining; act->core.pool = act->c->pool;
-    act->core.vm = vm; act->core.frame = &act->frame; act->core.status = JBV_OK; act->core.handle_table = &vm->handles;
+    act->core.pool = act->frame.owner->pool;
+    act->core.vm = vm; act->core.status = JBV_OK;
     act->core.handles = vm->handles; act->core.nursery = vm->nursery; act->core.nursery_size = vm->nursery_size;
-    act->core.int_result = m->descriptor.data[m->descriptor.size - 1];
-    act->core.nursery_ref = &vm->nursery; act->core.nursery_size_ref = &vm->nursery_size; act->core.object_class = vm->object_class;
-    act->core.last_remembered = &vm->last_remembered;
 }
 /* Unlinks an activation the core made. */
 void jbv_core_leave(JbvActivation *act) {
@@ -656,11 +643,11 @@ JBV_GC JbvStatus jbv_core_finish(JbvActivation *act) {
  * status first unwinds to a handler in this method. The frame stays linked. */
 __declspec(safebuffers)
 JBV_GC static JbvStatus jbv_run(JbvVM *vm, JbvActivation *act, JbvStatus status, uint64_t *out) {
-    JbvClass *c = act->c;
-    JbvMethod *m = act->m;
+    JbvClass *c = act->frame.owner;
+    JbvMethod *m = act->frame.method;
     const uint8_t *code = m->code;
-    int32_t *locals = act->locals, *stack = act->stack;
-    uint8_t *local_refs = act->local_refs, *stack_refs = act->stack_refs;
+    int32_t *locals = act->core.locals, *stack = locals + act->frame.locals;
+    uint8_t *local_refs = act->core.refs, *stack_refs = local_refs + act->frame.locals;
     uint64_t value = 0;
     uint32_t i;
     /* pc and sp live in the core state: register copies of them would be spilled
@@ -1082,7 +1069,7 @@ JbvStatus jbv_execute(JbvVM *vm, JbvClass *c, JbvMethod *m,
         goto done;
     }
 run:
-    act.c = c; act.m = m; act.locals = locals; act.stack = stack; act.local_refs = local_refs; act.stack_refs = stack_refs;
+    act.core.locals = locals; act.core.refs = local_refs;
 #if JBV_X86_CORE
     act.asm_frame = 0;
     core_state(vm, &act);

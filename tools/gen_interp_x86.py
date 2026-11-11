@@ -15,16 +15,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONSTANT_SIZE, CONSTANT_BITS, CONSTANT_LINK = 24, 8, 16      # JbvConstant: size, bits, text.data
 LINK_SLOT, LINK_KIND, LINK_TYPE, LINK_FAST = 32, 36, 37, 38  # JbvLink
-STATE = dict(code=0, locals=4, refs=8, pc=12, sp=16, remaining=20, handles=24, pool=28, vm=32, frame=36, status=40, table=44, result=48, int_result=56, nursery=60, nursery_size=64, nursery_ref=68, nursery_size_ref=72, object_class=76, last_remembered=80)
+STATE = dict(code=0, locals=4, refs=8, pc=12, sp=16, handles=20, pool=24, vm=28, status=32, nursery=36, nursery_size=40, result=48)
 LINK_OWNER, LINK_MEMBER, LINK_SEEN, LINK_TARGET_OWNER, LINK_TARGET, LINK_READY, LINK_ARGC, LINK_RESULT = 0, 8, 12, 16, 20, 39, 40, 42
 FRAME_PC, FRAME_SP, FRAME_LOCALS = 12, 16, 24
-ACT_SIZE, ACT_CALLER, ACT_ARGBASE, ACT_RESUME, ACT_KIND, ACT_ASM, ACT_RET = 168, 144, 152, 156, 157, 158, 160   # JbvActivation
-ACT_C, ACT_M, ACT_LOCALS, ACT_STACK, ACT_LREFS, ACT_SREFS, ACT_SAVED, ACT_FRAME = 120, 124, 128, 132, 136, 140, 148, 88
+ACT_SIZE, ACT_CALLER, ACT_SAVED, ACT_ARGBASE, ACT_RESUME, ACT_ASM, ACT_RET, ACT_FRAME = 112, 88, 92, 96, 100, 101, 104, 56   # JbvActivation
 F_PREV, F_OWNER, F_METHOD, F_PC, F_SP, F_BASE, F_LOCALS, F_MON = 0, 4, 8, 12, 16, 20, 24, 28   # JbvFrame
 VM_MAX_SLOTS, VM_MAX_DEPTH, VM_SLOTS, VM_USED, VM_DEPTH, VM_REMAINING, VM_REFS, VM_FRAMES = 12, 16, 336, 340, 344, 352, 364, 368
 CORE_LIMIT = 0x4C494D00   # enter_run: over a limit, nothing linked
 VM_NURSERY, VM_NURSERY_TOP, VM_NURSERY_SIZE, VM_HEAP_BYTES, VM_HEAP_LIMIT, VM_CURSOR, VM_GENERATIONS, VM_OBJECT_COUNT, VM_HANDLES = 1984, 1988, 1992, 2036, 2040, 396, 380, 400, 376
-VM_CAPACITY, VM_USED_BITS, VM_YOUNG = 392, 2108, 2112
+VM_CAPACITY, VM_USED_BITS, VM_YOUNG, VM_LAST_REMEMBERED, VM_OBJECT_CLASS = 392, 2108, 2112, 2012, 360
 LINK_SPECIAL_OWNER, LINK_SPECIAL, LINK_TRIVIAL, LINK_ADDRESS, LINK_PIC_SEEN, LINK_PIC_OWNER, LINK_PIC_TARGET = 24, 28, 43, 44, 48, 60, 72
 
 handlers = {}   # opcode -> label
@@ -113,10 +112,10 @@ OFFSET = ['movzx edx, WORD PTR [esi]', 'xchg dl, dh', 'movsx edx, dx']
 cold = []   # rarely taken tails, emitted after the handlers
 def budget(label):   # edx = offset; backward branches cost one unit; exhausted: back to C
     cold.append('\n'.join([f'{label}_borrow:                ; the low word was 0: borrow from the high word, or stop',
-        f'    cmp DWORD PTR [ecx+4], 0', f'    je {label}_out', '    dec DWORD PTR [ecx+4]', f'    jmp {label}_back',
-        f'{label}_out:', '    mov DWORD PTR [ecx], 0', '    jmp exit_op', '']))
-    return ['test edx, edx', f'jg {label}', 'mov ecx, [esp]', f'mov ecx, [ecx+{STATE["remaining"]}]',
-            'sub DWORD PTR [ecx], 1', f'jc {label}_borrow', f'{label}_back:', f'{label}:']
+        f'    cmp DWORD PTR [ecx+{VM_REMAINING + 4}], 0', f'    je {label}_out', f'    dec DWORD PTR [ecx+{VM_REMAINING + 4}]', f'    jmp {label}_back',
+        f'{label}_out:', f'    mov DWORD PTR [ecx+{VM_REMAINING}], 0', '    jmp exit_op', '']))
+    return ['test edx, edx', f'jg {label}', 'mov ecx, [esp]', f'mov ecx, [ecx+{STATE["vm"]}]',
+            f'sub DWORD PTR [ecx+{VM_REMAINING}], 1', f'jc {label}_borrow', f'{label}_back:', f'{label}:']
 counter = [0]
 def branch(ops, name, test, jump_if_not, pops):
     counter[0] += 1
@@ -169,7 +168,7 @@ def barrier(owner, n):
             'mov eax, [edi+ebx*4-4]', 'and eax, 0FFFFFFh', f'mov edx, [edx+{S["handles"]}]', 'mov eax, [edx+eax*4]',
             'mov edx, [esp+4]', f'sub eax, [edx+{S["nursery"]}]', f'cmp eax, [edx+{S["nursery_size"]}]', f'jb wb_c_{n}',
             f'wb_young_{n}:', 'pop edx', f'jmp wb_ok_{n}',
-            f'wb_c_{n}:', f'mov eax, [edx+{S["last_remembered"]}]', 'mov eax, [eax]', 'pop edx', f'cmp eax, {owner}', f'je wb_ok_{n}',   # already remembered
+            f'wb_c_{n}:', f'mov eax, [edx+{S["vm"]}]', f'mov eax, [eax+{VM_LAST_REMEMBERED}]', 'pop edx', f'cmp eax, {owner}', f'je wb_ok_{n}',   # already remembered
             'push ecx', 'push edx'] + ([] if owner == 'edx' else [f'mov edx, {owner}']) + [
             'mov ecx, [esp+8]', f'mov ecx, [ecx+{S["vm"]}]', 'call @jbv_remember@8', 'pop edx', 'pop ecx', f'wb_ok_{n}:']   # jbv_remember(vm, owner)
 
@@ -198,14 +197,14 @@ handler([179], 'op_putstatic', lines(STATIC, [f'mov dx, WORD PTR [ecx+{LINK_KIND
 handler([83], 'op_aastore', lines(['mov ecx, [edi+ebx*4-12]', 'test ecx, ecx', 'jz exit_op'], deref('ecx'), [
     'mov edx, [edi+ebx*4-8]', 'cmp edx, [ecx-4]', 'jae exit_op', 'test eax, eax', 'jz aa_store',
     'push edx', 'mov edx, [esp+4]',                                                   # [esp] index; edx state
-    'mov eax, [ecx]', 'mov eax, [eax+CLASS_COMPONENT]', f'cmp eax, [edx+{STATE["object_class"]}]', 'je aa_typed',   # Object[]: any value
+    'mov eax, [ecx]', 'mov eax, [eax+CLASS_COMPONENT]', f'mov edx, [edx+{STATE["vm"]}]', f'cmp eax, [edx+{VM_OBJECT_CLASS}]', 'mov edx, [esp+4]', 'je aa_typed',   # Object[]: any value
     'push eax', 'mov eax, [edi+ebx*4-4]', 'and eax, 0FFFFFFh', f'mov edx, [edx+{STATE["handles"]}]', 'mov eax, [edx+eax*4]',
     'mov eax, [eax]', 'cmp eax, [esp]', 'pop eax', 'jne aa_c', 'mov edx, [esp+4]',      # exactly the component class
     'aa_typed:',                                                                       # write barrier: old array, young value
     'mov eax, ecx', f'sub eax, [edx+{STATE["nursery"]}]', f'cmp eax, [edx+{STATE["nursery_size"]}]', 'jb aa_ok',
     'mov eax, [edi+ebx*4-4]', 'and eax, 0FFFFFFh', 'push ecx', f'mov ecx, [edx+{STATE["handles"]}]', 'mov eax, [ecx+eax*4]', 'pop ecx',
     f'sub eax, [edx+{STATE["nursery"]}]', f'cmp eax, [edx+{STATE["nursery_size"]}]', 'jae aa_ok',
-    f'mov eax, [edx+{STATE["last_remembered"]}]', 'cmp ecx, [eax]', 'je aa_ok',
+    f'mov eax, [edx+{STATE["vm"]}]', f'cmp ecx, [eax+{VM_LAST_REMEMBERED}]', 'je aa_ok',
     'push ecx', 'mov eax, edx', 'mov edx, ecx', f'mov ecx, [eax+{STATE["vm"]}]', 'call @jbv_remember@8', 'pop ecx',
     'aa_ok:', 'pop edx',
     'aa_store:', 'mov eax, [edi+ebx*4-4]', 'mov [ecx+edx*4+4], eax', 'sub ebx, 3', 'mov eax, [edi+ebx*4-4]'], DISPATCH,
@@ -220,7 +219,7 @@ def call(size, n):
     """One call sequence per invoke opcode: ecx = link, edx = method, eax = owner."""
     S = STATE
     sync = ['mov eax, esi', 'dec eax', f'sub eax, [edx+{S["code"]}]', f'mov [edx+{S["pc"]}], eax',      # edx = state
-            f'mov edx, [edx+{S["frame"]}]', f'mov [edx+{FRAME_PC}], eax',
+            f'lea edx, [edx+{ACT_FRAME}]', f'mov [edx+{FRAME_PC}], eax',
             'mov eax, ebx', f'sub eax, [edx+{FRAME_LOCALS}]', f'mov [edx+{FRAME_SP}], eax']
     return [
         # plain bytecode callee: an activation on this stack, then dispatch in it
@@ -233,7 +232,7 @@ def call(size, n):
         f'cmp eax, {CORE_LIMIT}', f'je call_limit_{n}',
         'pop ecx', f'mov edx, [ecx+{ACT_CALLER}]',
         f'movq xmm0, QWORD PTR [ecx+{S["result"]}]', f'movq QWORD PTR [edx+{S["result"]}], xmm0',
-        f'mov ebx, [ecx+{ACT_ARGBASE}]', f'movzx ebp, BYTE PTR [ecx+{ACT_KIND}]', f'add esp, {ACT_SIZE}',
+        f'mov ebx, [ecx+{ACT_ARGBASE}]', f'mov ebp, [ecx+{ACT_FRAME + F_METHOD}]', 'movzx ebp, BYTE PTR [ebp+METHOD_RESULT]', f'add esp, {ACT_SIZE}',
         f'mov edi, [edx+{S["locals"]}]', f'mov esi, [edx+{S["code"]}]', f'add esi, [edx+{S["pc"]}]', 'inc esi',
         'test eax, eax', 'jnz frame_failed', f'add esi, {size}', 'mov ecx, ebp', f'mov ebp, [edx+{S["refs"]}]',
         f'jmp call_result_{n}',
@@ -265,9 +264,8 @@ def call(size, n):
         'test eax, eax', 'jnz call_failed', f'movzx ecx, BYTE PTR [ecx+{LINK_RESULT}]', f'add esi, {size}',
         # the result: ecx = result kind, edx = the caller (the call may have collected)
         f'call_result_{n}:',
-        f'mov eax, [edx+{S["table"]}]', 'mov eax, [eax]', f'mov [edx+{S["handles"]}], eax',
-        f'mov eax, [edx+{S["nursery_ref"]}]', 'mov eax, [eax]', f'mov [edx+{S["nursery"]}], eax',
-        f'mov eax, [edx+{S["nursery_size_ref"]}]', 'mov eax, [eax]', f'mov [edx+{S["nursery_size"]}], eax',
+        f'mov eax, [edx+{S["vm"]}]', 'push ecx', f'mov ecx, [eax+{VM_HANDLES}]', f'mov [edx+{S["handles"]}], ecx',
+        f'mov ecx, [eax+{VM_NURSERY}]', f'mov [edx+{S["nursery"]}], ecx', f'mov ecx, [eax+{VM_NURSERY_SIZE}]', f'mov [edx+{S["nursery_size"]}], ecx', 'pop ecx',
         'test ecx, ecx', f'jz fd_void_{n}', 'cmp cl, 3', f'je fd_wide_{n}', 'cmp cl, 6', f'je fd_wide_{n}',
         'cmp cl, 2', 'sete al', 'mov [ebp+ebx], al',
         f'mov eax, [edx+{S["result"]}]', 'mov [edi+ebx*4], eax', 'inc ebx', 'DISPATCH',
@@ -301,13 +299,12 @@ handler([183], 'op_invokespecial', lines(METHOD_LINK, [
 # new of a resolved, initialized, concrete class: jbv_new(vm, type, 0, &ref), which may collect
 def sync_frame():
     S = STATE
-    return ['mov edx, [esp]', 'mov eax, esi', 'dec eax', f'sub eax, [edx+{S["code"]}]', f'mov edx, [edx+{S["frame"]}]',
+    return ['mov edx, [esp]', 'mov eax, esi', 'dec eax', f'sub eax, [edx+{S["code"]}]', f'lea edx, [edx+{ACT_FRAME}]',
             f'mov [edx+{FRAME_PC}], eax', 'mov eax, ebx', f'sub eax, [edx+{FRAME_LOCALS}]', f'mov [edx+{FRAME_SP}], eax']
 def reload_after_call():   # edx = state
     S = STATE
-    return [f'mov eax, [edx+{S["table"]}]', 'mov eax, [eax]', f'mov [edx+{S["handles"]}], eax',
-            f'mov eax, [edx+{S["nursery_ref"]}]', 'mov eax, [eax]', f'mov [edx+{S["nursery"]}], eax',
-            f'mov eax, [edx+{S["nursery_size_ref"]}]', 'mov eax, [eax]', f'mov [edx+{S["nursery_size"]}], eax']
+    return [f'mov eax, [edx+{S["vm"]}]', 'push ecx', f'mov ecx, [eax+{VM_HANDLES}]', f'mov [edx+{S["handles"]}], ecx',
+        f'mov ecx, [eax+{VM_NURSERY}]', f'mov [edx+{S["nursery"]}], ecx', f'mov ecx, [eax+{VM_NURSERY_SIZE}]', f'mov [edx+{S["nursery_size"]}], ecx', 'pop ecx']
 handler([187], 'op_new', lines(['movzx ecx, WORD PTR [esi]', 'xchg cl, ch', f'imul ecx, ecx, {CONSTANT_SIZE}', 'mov edx, [esp]',
     f'add ecx, [edx+{STATE["pool"]}]', 'cmp BYTE PTR [ecx], 7', 'jne exit_op', f'mov ecx, [ecx+{CONSTANT_LINK}]', 'test ecx, ecx', 'jz exit_op',
     'cmp BYTE PTR [ecx+CLASS_INIT], 2', 'jne exit_op', 'test WORD PTR [ecx+CLASS_FLAGS], 0600h', 'jnz exit_op',
@@ -463,39 +460,33 @@ S = STATE
 body.append('\n'.join([
     'enter_run:                       ; eax = owner, edx = m, ecx = argbase; [esp] return address, [esp+4] the new activation',
     '    mov ebp, [esp+4]', f'    mov edi, [esp+{8 + ACT_SIZE}]          ; the caller',
-    f'    mov [ebp+{ACT_ARGBASE}], ecx', f'    mov [ebp+{ACT_C}], eax', f'    mov [ebp+{ACT_FRAME + F_OWNER}], eax',
+    f'    mov [ebp+{ACT_ARGBASE}], ecx', f'    mov [ebp+{ACT_FRAME + F_OWNER}], eax',
     '    mov eax, [eax+8]', f'    mov [ebp+{STATE["pool"]}], eax',
-    f'    mov [ebp+{ACT_M}], edx', f'    mov [ebp+{ACT_FRAME + F_METHOD}], edx',
+    f'    mov [ebp+{ACT_FRAME + F_METHOD}], edx',
     f'    add ecx, [edi+{ACT_FRAME + F_BASE}]', f'    mov [ebp+{ACT_FRAME + F_BASE}], ecx',   # base
     f'    mov eax, [edi+{STATE["vm"]}]', f'    mov [ebp+{STATE["vm"]}], eax',
     '    push ebx                         ; limits use only eax, ecx, edx, ebx (kept), ebp, edi',
     f'    mov ebx, [eax+{VM_DEPTH}]', f'    cmp ebx, [eax+{VM_MAX_DEPTH}]', '    jae enter_limit',
     '    movzx ebx, WORD PTR [edx+4]', f'    mov [ebp+{ACT_FRAME + F_LOCALS}], ebx', f'    mov [ebp+{STATE["sp"]}], ebx',
-    '    movzx ebx, WORD PTR [edx+2]', f'    add ebx, [ebp+{ACT_FRAME + F_LOCALS}]', '    add ebx, ecx',   # base + needed
+    '    movzx ebx, WORD PTR [edx+2]', f'    add ebx, [ebp+{ACT_FRAME + F_LOCALS}]', '    add ebx, ecx',   # base + needed (esi kept for limits)
     f'    cmp ebx, [eax+{VM_MAX_SLOTS}]', '    ja enter_limit',
     f'    sub DWORD PTR [eax+{VM_REMAINING}], 1', '    jc enter_borrow', 'enter_charged:', f'    inc DWORD PTR [eax+{VM_DEPTH}]',
     f'    mov edx, [eax+{VM_USED}]', f'    mov [ebp+{ACT_SAVED}], edx', f'    mov [eax+{VM_USED}], ebx',
-    '    pop ebx',
-    f'    mov edx, [eax+{VM_SLOTS}]', '    lea edx, [edx+ecx*4]', f'    mov [ebp+{STATE["locals"]}], edx', f'    mov [ebp+{ACT_LOCALS}], edx',
-    f'    mov esi, [ebp+{ACT_FRAME + F_LOCALS}]', '    lea edx, [edx+esi*4]', f'    mov [ebp+{ACT_STACK}], edx',
-    f'    mov edx, [eax+{VM_REFS}]', '    add edx, ecx', f'    mov [ebp+{STATE["refs"]}], edx', f'    mov [ebp+{ACT_LREFS}], edx',
-    '    lea ecx, [edx+esi]', f'    mov [ebp+{ACT_SREFS}], ecx',
-    f'    mov ecx, [ebp+{ACT_M}]', '    movzx ecx, WORD PTR [ecx+METHOD_ARGS]',   # uninitialized locals: not references
+    '    pop ebx', f'    mov esi, [ebp+{ACT_FRAME + F_LOCALS}]',
+    f'    mov edx, [eax+{VM_SLOTS}]', '    lea edx, [edx+ecx*4]', f'    mov [ebp+{STATE["locals"]}], edx',
+    f'    mov edx, [eax+{VM_REFS}]', '    add edx, ecx', f'    mov [ebp+{STATE["refs"]}], edx',
+    f'    mov ecx, [ebp+{ACT_FRAME + F_METHOD}]', '    movzx ecx, WORD PTR [ecx+METHOD_ARGS]',   # uninitialized locals: not references
     'zero_refs:', '    cmp ecx, esi', '    jae zero_done', '    mov BYTE PTR [edx+ecx], 0', '    inc ecx', '    jmp zero_refs', 'zero_done:',
     f'    mov ecx, [eax+{VM_FRAMES}]', f'    mov [ebp+{ACT_FRAME + F_PREV}], ecx', f'    lea ecx, [ebp+{ACT_FRAME}]', f'    mov [eax+{VM_FRAMES}], ecx',
-    f'    mov [ebp+{STATE["frame"]}], ecx', '    xor ecx, ecx',
+    '    xor ecx, ecx',
     f'    mov [ebp+{ACT_FRAME + F_PC}], ecx', f'    mov [ebp+{ACT_FRAME + F_SP}], ecx', f'    mov [ebp+{ACT_FRAME + F_MON}], ecx',
-    f'    mov [ebp+{STATE["pc"]}], ecx', f'    mov [ebp+{STATE["status"]}], ecx',
-    f'    mov esi, [ebp+{ACT_M}]', '    mov ecx, [esi+METHOD_CODE]', f'    mov [ebp+{STATE["code"]}], ecx',
-    '    mov ecx, [esi+16]', '    movzx edx, WORD PTR [esi+20]', '    mov cl, [ecx+edx-1]', f'    mov [ebp+{STATE["int_result"]}], cl',
-    '    mov cl, [esi+METHOD_RESULT]', f'    mov [ebp+{ACT_KIND}], cl', f'    mov BYTE PTR [ebp+{ACT_ASM}], 1', f'    mov [ebp+{ACT_CALLER}], edi',
-    f'    mov ecx, [edi+{STATE["remaining"]}]', f'    mov [ebp+{STATE["remaining"]}], ecx',
+    f'    mov [ebp+{STATE["status"]}], ecx',
+    f'    mov esi, [ebp+{ACT_FRAME + F_METHOD}]', '    mov esi, [esi+METHOD_CODE]', f'    mov [ebp+{STATE["code"]}], esi',
+    f'    mov BYTE PTR [ebp+{ACT_ASM}], 1', f'    mov [ebp+{ACT_CALLER}], edi',
     f'    mov ecx, [edi+{STATE["handles"]}]', f'    mov [ebp+{STATE["handles"]}], ecx',
-    f'    mov ecx, [edi+{STATE["table"]}]', f'    mov [ebp+{STATE["table"]}], ecx',
-    f'    movdqu xmm0, XMMWORD PTR [edi+{STATE["nursery"]}]', f'    movdqu XMMWORD PTR [ebp+{STATE["nursery"]}], xmm0',   # nursery..nursery_size_ref
-    f'    movq xmm0, QWORD PTR [edi+{STATE["object_class"]}]', f'    movq QWORD PTR [ebp+{STATE["object_class"]}], xmm0',  # object_class, last_remembered
+    f'    movq xmm0, QWORD PTR [edi+{STATE["nursery"]}]', f'    movq QWORD PTR [ebp+{STATE["nursery"]}], xmm0',   # nursery, nursery_size
     '    pop edx', f'    mov [ebp+{ACT_RET}], edx       ; [esp] = the activation; returns go back through ret',
-    f'    mov esi, [ebp+{STATE["code"]}]', f'    mov edi, [ebp+{STATE["locals"]}]', f'    mov ebx, [ebp+{STATE["sp"]}]',
+    f'    mov edi, [ebp+{STATE["locals"]}]', f'    mov ebx, [ebp+{STATE["sp"]}]',
     f'    mov ebp, [ebp+{STATE["refs"]}]', '    mov eax, [edi+ebx*4-4]', '    DISPATCH',
     'enter_borrow:                    ; the low word was 0: borrow from the high word, or stop',
     f'    cmp DWORD PTR [eax+{VM_REMAINING + 4}], 0', '    je enter_spent', f'    dec DWORD PTR [eax+{VM_REMAINING + 4}]', '    jmp enter_charged',
@@ -511,7 +502,7 @@ body.append('\n'.join([
     'frame_failed:                    ; the callee failed: the caller unwinds (edx = caller, esi past the invoke opcode)',
     f'    mov ebp, [edx+{S["refs"]}]', f'    mov [edx+{S["status"]}], eax', '    jmp exit_op',
     '']))
-handler([172], 'op_ireturn', lines(['mov edx, [esp]', f'mov cl, [edx+{STATE["int_result"]}]', "cmp cl, 'I'", 'je ir_go',   # narrow as the descriptor says
+handler([172], 'op_ireturn', lines(['mov edx, [esp]', f'mov ecx, [edx+{ACT_FRAME + F_METHOD}]', 'mov cl, [ecx+METHOD_RCHAR]', "cmp cl, 'I'", 'je ir_go',   # narrow as the descriptor says
     "cmp cl, 'Z'", 'jne @F', 'and eax, 1', 'jmp ir_go', '@@:', "cmp cl, 'B'", 'jne @F', 'movsx eax, al', 'jmp ir_go', '@@:',
     "cmp cl, 'C'", 'jne @F', 'movzx eax, ax', 'jmp ir_go', '@@:', "cmp cl, 'S'", 'jne exit_op', 'movsx eax, ax', 'ir_go:'], ret([])))
 handler([176], 'op_areturn', lines(ret([])))
@@ -519,9 +510,9 @@ handler([177], 'op_return', lines(ret(['xor eax, eax'])))
 
 out = ['; Generated by tools/gen_interp_x86.py; do not edit.', '; ' + __doc__.strip().splitlines()[0],
        '.686', '.xmm', '.model flat, C', 'option casemap:none', 'option noscoped                 ; handler labels are referenced by op_table', 'PUBLIC jbv_interpret_x86', 'EXTERN SYSCALL @jbv_execute@28:PROC   ; fastcall (/Gr), no C decoration', 'EXTERN SYSCALL @jbv_remember@8:PROC', 'EXTERN SYSCALL @jbv_new@16:PROC', 'EXTERN SYSCALL @jbv_core_leave@4:PROC', 'EXTERN SYSCALL @jbv_core_finish@4:PROC', '',
-       'IF JBV_PROFILE_FULL', 'CLASS_COMPONENT EQU 72', 'CLASS_FLAGS EQU 56', 'CLASS_INIT EQU 82', 'CLASS_SLOTS EQU 76', 'METHOD_ACCESSOR EQU 49',
+       'IF JBV_PROFILE_FULL', 'CLASS_COMPONENT EQU 72', 'CLASS_FLAGS EQU 56', 'CLASS_INIT EQU 82', 'CLASS_SLOTS EQU 76', 'METHOD_ACCESSOR EQU 49', 'METHOD_RCHAR EQU 50',
        'METHOD_CODE EQU 28', 'METHOD_ARGS EQU 36', 'METHOD_RESULT EQU 38',
-       'ELSE', 'CLASS_COMPONENT EQU 68', 'CLASS_FLAGS EQU 52', 'CLASS_INIT EQU 78', 'METHOD_CODE EQU 24', 'METHOD_ARGS EQU 32', 'METHOD_RESULT EQU 34', 'CLASS_SLOTS EQU 72', 'METHOD_ACCESSOR EQU 45', 'ENDIF', '',
+       'ELSE', 'CLASS_COMPONENT EQU 68', 'CLASS_FLAGS EQU 52', 'CLASS_INIT EQU 78', 'METHOD_CODE EQU 24', 'METHOD_ARGS EQU 32', 'METHOD_RESULT EQU 34', 'CLASS_SLOTS EQU 72', 'METHOD_ACCESSOR EQU 45', 'METHOD_RCHAR EQU 46', 'ENDIF', '',
        'DISPATCH_W MACRO', '    movzx ecx, BYTE PTR [esi]', '    inc esi', '    jmp DWORD PTR op_table_w[ecx*4]', 'ENDM', '',
        'DISPATCH MACRO', '    movzx ecx, BYTE PTR [esi]', '    inc esi', '    jmp DWORD PTR op_table[ecx*4]', 'ENDM', '',
        '.const', 'ALIGN 4', 'op_table LABEL DWORD']

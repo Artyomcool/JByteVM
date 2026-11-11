@@ -197,6 +197,7 @@ CLASS_FLAGS EQU 56
 CLASS_INIT EQU 82
 CLASS_SLOTS EQU 76
 METHOD_ACCESSOR EQU 49
+METHOD_RCHAR EQU 50
 METHOD_CODE EQU 28
 METHOD_ARGS EQU 36
 METHOD_RESULT EQU 38
@@ -209,6 +210,7 @@ METHOD_ARGS EQU 32
 METHOD_RESULT EQU 34
 CLASS_SLOTS EQU 72
 METHOD_ACCESSOR EQU 45
+METHOD_RCHAR EQU 46
 ENDIF
 
 DISPATCH_W MACRO
@@ -763,7 +765,7 @@ exit_op:                         ; esi is just past the opcode C has to run
     sub eax, [edx+0]
     mov [edx+12], eax
     mov [edx+16], ebx
-    cmp BYTE PTR [edx+158], 0
+    cmp BYTE PTR [edx+101], 0
     jne frame_in_c
     pop edx
     pop edi
@@ -865,7 +867,7 @@ op_ldc_18:
     movzx ecx, BYTE PTR [esi]
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     mov dl, [ecx]
     cmp dl, 3
     je @F
@@ -885,7 +887,7 @@ op_ldc_19:
     xchg cl, ch
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     mov dl, [ecx]
     cmp dl, 3
     je @F
@@ -1351,8 +1353,8 @@ op_if_153:
     test edx, edx
     jg br_go_1
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_1_borrow
 br_go_1_back:
 br_go_1:
@@ -1376,8 +1378,8 @@ op_if_154:
     test edx, edx
     jg br_go_2
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_2_borrow
 br_go_2_back:
 br_go_2:
@@ -1401,8 +1403,8 @@ op_if_155:
     test edx, edx
     jg br_go_3
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_3_borrow
 br_go_3_back:
 br_go_3:
@@ -1426,8 +1428,8 @@ op_if_156:
     test edx, edx
     jg br_go_4
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_4_borrow
 br_go_4_back:
 br_go_4:
@@ -1451,8 +1453,8 @@ op_if_157:
     test edx, edx
     jg br_go_5
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_5_borrow
 br_go_5_back:
 br_go_5:
@@ -1476,8 +1478,8 @@ op_if_158:
     test edx, edx
     jg br_go_6
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_6_borrow
 br_go_6_back:
 br_go_6:
@@ -1501,8 +1503,8 @@ op_ifcmp_159:
     test edx, edx
     jg br_go_7
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_7_borrow
 br_go_7_back:
 br_go_7:
@@ -1526,8 +1528,8 @@ op_ifcmp_160:
     test edx, edx
     jg br_go_8
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_8_borrow
 br_go_8_back:
 br_go_8:
@@ -1551,8 +1553,8 @@ op_ifcmp_161:
     test edx, edx
     jg br_go_9
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_9_borrow
 br_go_9_back:
 br_go_9:
@@ -1576,8 +1578,8 @@ op_ifcmp_162:
     test edx, edx
     jg br_go_10
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_10_borrow
 br_go_10_back:
 br_go_10:
@@ -1601,8 +1603,8 @@ op_ifcmp_163:
     test edx, edx
     jg br_go_11
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_11_borrow
 br_go_11_back:
 br_go_11:
@@ -1626,8 +1628,8 @@ op_ifcmp_164:
     test edx, edx
     jg br_go_12
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_12_borrow
 br_go_12_back:
 br_go_12:
@@ -1651,8 +1653,8 @@ op_ifcmp_165:
     test edx, edx
     jg br_go_13
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_13_borrow
 br_go_13_back:
 br_go_13:
@@ -1676,8 +1678,8 @@ op_ifcmp_166:
     test edx, edx
     jg br_go_14
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_14_borrow
 br_go_14_back:
 br_go_14:
@@ -1701,8 +1703,8 @@ op_ifnull:
     test edx, edx
     jg br_go_15
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_15_borrow
 br_go_15_back:
 br_go_15:
@@ -1726,8 +1728,8 @@ op_ifnonnull:
     test edx, edx
     jg br_go_16
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc br_go_16_borrow
 br_go_16_back:
 br_go_16:
@@ -1749,8 +1751,8 @@ op_goto:
     test edx, edx
     jg goto_go
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc goto_go_borrow
 goto_go_back:
 goto_go:
@@ -1785,8 +1787,8 @@ ts_go0:
     test edx, edx
     jg ts_go
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc ts_go_borrow
 ts_go_back:
 ts_go:
@@ -1838,8 +1840,8 @@ ls_go0:
     test edx, edx
     jg ls_go
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc ls_go_borrow
 ls_go_back:
 ls_go:
@@ -1855,7 +1857,7 @@ op_arraylength:
     mov ecx, eax
     and ecx, 0FFFFFFh
     mov edx, [esp]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov ecx, [edx+ecx*4]
     mov eax, [ecx-4]
     mov [edi+ebx*4-4], eax
@@ -1869,7 +1871,7 @@ op_xaload_46:
     jz exit_op
     and ecx, 0FFFFFFh
     mov edx, [esp]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov ecx, [edx+ecx*4]
     cmp eax, [ecx-4]
     jae exit_op
@@ -1886,7 +1888,7 @@ op_xaload_50:
     jz exit_op
     and ecx, 0FFFFFFh
     mov edx, [esp]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov ecx, [edx+ecx*4]
     cmp eax, [ecx-4]
     jae exit_op
@@ -1903,7 +1905,7 @@ op_xaload_51:
     jz exit_op
     and ecx, 0FFFFFFh
     mov edx, [esp]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov ecx, [edx+ecx*4]
     cmp eax, [ecx-4]
     jae exit_op
@@ -1920,7 +1922,7 @@ op_xaload_52:
     jz exit_op
     and ecx, 0FFFFFFh
     mov edx, [esp]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov ecx, [edx+ecx*4]
     cmp eax, [ecx-4]
     jae exit_op
@@ -1937,7 +1939,7 @@ op_xaload_53:
     jz exit_op
     and ecx, 0FFFFFFh
     mov edx, [esp]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov ecx, [edx+ecx*4]
     cmp eax, [ecx-4]
     jae exit_op
@@ -1954,7 +1956,7 @@ op_xastore_79:
     jz exit_op
     and ecx, 0FFFFFFh
     mov edx, [esp]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov ecx, [edx+ecx*4]
     mov edx, [edi+ebx*4-8]
     cmp edx, [ecx-4]
@@ -1971,7 +1973,7 @@ op_xastore_85:
     jz exit_op
     and ecx, 0FFFFFFh
     mov edx, [esp]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov ecx, [edx+ecx*4]
     mov edx, [edi+ebx*4-8]
     cmp edx, [ecx-4]
@@ -1988,7 +1990,7 @@ op_xastore_86:
     jz exit_op
     and ecx, 0FFFFFFh
     mov edx, [esp]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov ecx, [edx+ecx*4]
     mov edx, [edi+ebx*4-8]
     cmp edx, [ecx-4]
@@ -2004,7 +2006,7 @@ op_getfield:
     xchg cl, ch
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     mov ecx, [ecx+16]
     test ecx, ecx
     jz exit_op
@@ -2014,7 +2016,7 @@ op_getfield:
     jz exit_op
     and eax, 0FFFFFFh
     mov edx, [esp]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov eax, [edx+eax*4]
     mov edx, [ecx+32]
     mov eax, [eax+edx*4+4]
@@ -2030,7 +2032,7 @@ op_putfield:
     xchg cl, ch
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     mov ecx, [ecx+16]
     test ecx, ecx
     jz exit_op
@@ -2050,7 +2052,7 @@ put_go:
     jz put_null
     and edx, 0FFFFFFh
     mov eax, [esp+4]
-    mov eax, [eax+24]
+    mov eax, [eax+20]
     mov edx, [eax+edx*4]
     pop eax
     cmp al, 1
@@ -2061,30 +2063,30 @@ put_go:
     push edx
     mov eax, edx
     mov edx, [esp+4]
-    sub eax, [edx+60]
-    cmp eax, [edx+64]
+    sub eax, [edx+36]
+    cmp eax, [edx+40]
     jb wb_young_put
     mov eax, [edi+ebx*4-4]
     and eax, 0FFFFFFh
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov eax, [edx+eax*4]
     mov edx, [esp+4]
-    sub eax, [edx+60]
-    cmp eax, [edx+64]
+    sub eax, [edx+36]
+    cmp eax, [edx+40]
     jb wb_c_put
 wb_young_put:
     pop edx
     jmp wb_ok_put
 wb_c_put:
-    mov eax, [edx+80]
-    mov eax, [eax]
+    mov eax, [edx+28]
+    mov eax, [eax+2012]
     pop edx
     cmp eax, edx
     je wb_ok_put
     push ecx
     push edx
     mov ecx, [esp+8]
-    mov ecx, [ecx+32]
+    mov ecx, [ecx+28]
     call @jbv_remember@8
     pop edx
     pop ecx
@@ -2106,7 +2108,7 @@ op_getstatic:
     xchg cl, ch
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     mov ecx, [ecx+16]
     test ecx, ecx
     jz exit_op
@@ -2129,7 +2131,7 @@ op_putstatic:
     xchg cl, ch
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     mov ecx, [ecx+16]
     test ecx, ecx
     jz exit_op
@@ -2157,7 +2159,7 @@ op_aastore:
     jz exit_op
     and ecx, 0FFFFFFh
     mov edx, [esp]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov ecx, [edx+ecx*4]
     mov edx, [edi+ebx*4-8]
     cmp edx, [ecx-4]
@@ -2168,12 +2170,14 @@ op_aastore:
     mov edx, [esp+4]
     mov eax, [ecx]
     mov eax, [eax+CLASS_COMPONENT]
-    cmp eax, [edx+76]
+    mov edx, [edx+28]
+    cmp eax, [edx+360]
+    mov edx, [esp+4]
     je aa_typed
     push eax
     mov eax, [edi+ebx*4-4]
     and eax, 0FFFFFFh
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov eax, [edx+eax*4]
     mov eax, [eax]
     cmp eax, [esp]
@@ -2182,25 +2186,25 @@ op_aastore:
     mov edx, [esp+4]
 aa_typed:
     mov eax, ecx
-    sub eax, [edx+60]
-    cmp eax, [edx+64]
+    sub eax, [edx+36]
+    cmp eax, [edx+40]
     jb aa_ok
     mov eax, [edi+ebx*4-4]
     and eax, 0FFFFFFh
     push ecx
-    mov ecx, [edx+24]
+    mov ecx, [edx+20]
     mov eax, [ecx+eax*4]
     pop ecx
-    sub eax, [edx+60]
-    cmp eax, [edx+64]
+    sub eax, [edx+36]
+    cmp eax, [edx+40]
     jae aa_ok
-    mov eax, [edx+80]
-    cmp ecx, [eax]
+    mov eax, [edx+28]
+    cmp ecx, [eax+2012]
     je aa_ok
     push ecx
     mov eax, edx
     mov edx, ecx
-    mov ecx, [eax+32]
+    mov ecx, [eax+28]
     call @jbv_remember@8
     pop ecx
 aa_ok:
@@ -2216,7 +2220,7 @@ aa_c:
     jmp exit_op
 
 call_failed:                     ; eax = status, edx = state; esi just past the opcode
-    mov [edx+40], eax
+    mov [edx+32], eax
     jmp exit_op
 
 ALIGN 16
@@ -2225,7 +2229,7 @@ op_invokestatic:
     xchg cl, ch
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     mov ecx, [ecx+16]
     test ecx, ecx
     jz exit_op
@@ -2245,7 +2249,7 @@ acc_back_st:
     dec eax
     sub eax, [edx+0]
     mov [edx+12], eax
-    mov edx, [edx+36]
+    lea edx, [edx+56]
     mov [edx+12], eax
     mov eax, ebx
     sub eax, [edx+24]
@@ -2255,18 +2259,19 @@ acc_back_st:
     movzx ecx, WORD PTR [ecx+40]
     neg ecx
     add ecx, ebx
-    sub esp, 168
+    sub esp, 112
     push esp
     call enter_run
     cmp eax, 1279872256
     je call_limit_st
     pop ecx
-    mov edx, [ecx+144]
+    mov edx, [ecx+88]
     movq xmm0, QWORD PTR [ecx+48]
     movq QWORD PTR [edx+48], xmm0
-    mov ebx, [ecx+152]
-    movzx ebp, BYTE PTR [ecx+157]
-    add esp, 168
+    mov ebx, [ecx+96]
+    mov ebp, [ecx+64]
+    movzx ebp, BYTE PTR [ebp+METHOD_RESULT]
+    add esp, 112
     mov edi, [edx+4]
     mov esi, [edx+0]
     add esi, [edx+12]
@@ -2279,7 +2284,7 @@ acc_back_st:
     jmp call_result_st
 call_limit_st:
     pop eax
-    add esp, 168
+    add esp, 112
     jmp exit_op
 acc_st:
     push ecx
@@ -2299,7 +2304,7 @@ acc_st:
     mov eax, [edi+ebx*4-4]
     and eax, 0FFFFFFh
     mov edx, [esp+8]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov eax, [edx+eax*4]
     mov edx, [ecx+32]
     mov eax, [eax+edx*4+4]
@@ -2324,7 +2329,7 @@ acc_set_st:
     mov eax, [edi+ebx*4-8]
     and eax, 0FFFFFFh
     mov edx, [esp+8]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov eax, [edx+eax*4]
     mov edx, [ecx+32]
     mov ecx, [edi+ebx*4-4]
@@ -2346,7 +2351,7 @@ call_c_st:
     dec eax
     sub eax, [edx+0]
     mov [edx+12], eax
-    mov edx, [edx+36]
+    lea edx, [edx+56]
     mov [edx+12], eax
     mov eax, ebx
     sub eax, [edx+24]
@@ -2370,7 +2375,7 @@ call_c_st:
     push edx
     mov edx, [esp+28]
     mov ecx, [esp+32]
-    mov ecx, [ecx+32]
+    mov ecx, [ecx+28]
     call @jbv_execute@28
     pop ebx
     pop ecx
@@ -2381,15 +2386,15 @@ call_c_st:
     movzx ecx, BYTE PTR [ecx+42]
     add esi, 2
 call_result_st:
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
+    mov eax, [edx+28]
+    push ecx
+    mov ecx, [eax+376]
+    mov [edx+20], ecx
+    mov ecx, [eax+1984]
+    mov [edx+36], ecx
+    mov ecx, [eax+1992]
+    mov [edx+40], ecx
+    pop ecx
     test ecx, ecx
     jz fd_void_st
     cmp cl, 3
@@ -2421,7 +2426,7 @@ op_invoke_182:
     xchg cl, ch
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     mov ecx, [ecx+16]
     test ecx, ecx
     jz exit_op
@@ -2447,7 +2452,7 @@ inv_182_pic:
     jz exit_op
     and eax, 0FFFFFFh
     mov edx, [esp]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov eax, [edx+eax*4]
     mov eax, [eax]
     cmp eax, [ecx+12]
@@ -2488,7 +2493,7 @@ acc_back_182:
     dec eax
     sub eax, [edx+0]
     mov [edx+12], eax
-    mov edx, [edx+36]
+    lea edx, [edx+56]
     mov [edx+12], eax
     mov eax, ebx
     sub eax, [edx+24]
@@ -2498,18 +2503,19 @@ acc_back_182:
     movzx ecx, WORD PTR [ecx+40]
     neg ecx
     add ecx, ebx
-    sub esp, 168
+    sub esp, 112
     push esp
     call enter_run
     cmp eax, 1279872256
     je call_limit_182
     pop ecx
-    mov edx, [ecx+144]
+    mov edx, [ecx+88]
     movq xmm0, QWORD PTR [ecx+48]
     movq QWORD PTR [edx+48], xmm0
-    mov ebx, [ecx+152]
-    movzx ebp, BYTE PTR [ecx+157]
-    add esp, 168
+    mov ebx, [ecx+96]
+    mov ebp, [ecx+64]
+    movzx ebp, BYTE PTR [ebp+METHOD_RESULT]
+    add esp, 112
     mov edi, [edx+4]
     mov esi, [edx+0]
     add esi, [edx+12]
@@ -2522,7 +2528,7 @@ acc_back_182:
     jmp call_result_182
 call_limit_182:
     pop eax
-    add esp, 168
+    add esp, 112
     jmp exit_op
 acc_182:
     push ecx
@@ -2542,7 +2548,7 @@ acc_182:
     mov eax, [edi+ebx*4-4]
     and eax, 0FFFFFFh
     mov edx, [esp+8]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov eax, [edx+eax*4]
     mov edx, [ecx+32]
     mov eax, [eax+edx*4+4]
@@ -2567,7 +2573,7 @@ acc_set_182:
     mov eax, [edi+ebx*4-8]
     and eax, 0FFFFFFh
     mov edx, [esp+8]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov eax, [edx+eax*4]
     mov edx, [ecx+32]
     mov ecx, [edi+ebx*4-4]
@@ -2589,7 +2595,7 @@ call_c_182:
     dec eax
     sub eax, [edx+0]
     mov [edx+12], eax
-    mov edx, [edx+36]
+    lea edx, [edx+56]
     mov [edx+12], eax
     mov eax, ebx
     sub eax, [edx+24]
@@ -2613,7 +2619,7 @@ call_c_182:
     push edx
     mov edx, [esp+28]
     mov ecx, [esp+32]
-    mov ecx, [ecx+32]
+    mov ecx, [ecx+28]
     call @jbv_execute@28
     pop ebx
     pop ecx
@@ -2624,15 +2630,15 @@ call_c_182:
     movzx ecx, BYTE PTR [ecx+42]
     add esi, 2
 call_result_182:
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
+    mov eax, [edx+28]
+    push ecx
+    mov ecx, [eax+376]
+    mov [edx+20], ecx
+    mov ecx, [eax+1984]
+    mov [edx+36], ecx
+    mov ecx, [eax+1992]
+    mov [edx+40], ecx
+    pop ecx
     test ecx, ecx
     jz fd_void_182
     cmp cl, 3
@@ -2664,7 +2670,7 @@ op_invoke_185:
     xchg cl, ch
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     mov ecx, [ecx+16]
     test ecx, ecx
     jz exit_op
@@ -2690,7 +2696,7 @@ inv_185_pic:
     jz exit_op
     and eax, 0FFFFFFh
     mov edx, [esp]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov eax, [edx+eax*4]
     mov eax, [eax]
     cmp eax, [ecx+12]
@@ -2731,7 +2737,7 @@ acc_back_185:
     dec eax
     sub eax, [edx+0]
     mov [edx+12], eax
-    mov edx, [edx+36]
+    lea edx, [edx+56]
     mov [edx+12], eax
     mov eax, ebx
     sub eax, [edx+24]
@@ -2741,18 +2747,19 @@ acc_back_185:
     movzx ecx, WORD PTR [ecx+40]
     neg ecx
     add ecx, ebx
-    sub esp, 168
+    sub esp, 112
     push esp
     call enter_run
     cmp eax, 1279872256
     je call_limit_185
     pop ecx
-    mov edx, [ecx+144]
+    mov edx, [ecx+88]
     movq xmm0, QWORD PTR [ecx+48]
     movq QWORD PTR [edx+48], xmm0
-    mov ebx, [ecx+152]
-    movzx ebp, BYTE PTR [ecx+157]
-    add esp, 168
+    mov ebx, [ecx+96]
+    mov ebp, [ecx+64]
+    movzx ebp, BYTE PTR [ebp+METHOD_RESULT]
+    add esp, 112
     mov edi, [edx+4]
     mov esi, [edx+0]
     add esi, [edx+12]
@@ -2765,7 +2772,7 @@ acc_back_185:
     jmp call_result_185
 call_limit_185:
     pop eax
-    add esp, 168
+    add esp, 112
     jmp exit_op
 acc_185:
     push ecx
@@ -2785,7 +2792,7 @@ acc_185:
     mov eax, [edi+ebx*4-4]
     and eax, 0FFFFFFh
     mov edx, [esp+8]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov eax, [edx+eax*4]
     mov edx, [ecx+32]
     mov eax, [eax+edx*4+4]
@@ -2810,7 +2817,7 @@ acc_set_185:
     mov eax, [edi+ebx*4-8]
     and eax, 0FFFFFFh
     mov edx, [esp+8]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov eax, [edx+eax*4]
     mov edx, [ecx+32]
     mov ecx, [edi+ebx*4-4]
@@ -2832,7 +2839,7 @@ call_c_185:
     dec eax
     sub eax, [edx+0]
     mov [edx+12], eax
-    mov edx, [edx+36]
+    lea edx, [edx+56]
     mov [edx+12], eax
     mov eax, ebx
     sub eax, [edx+24]
@@ -2856,7 +2863,7 @@ call_c_185:
     push edx
     mov edx, [esp+28]
     mov ecx, [esp+32]
-    mov ecx, [ecx+32]
+    mov ecx, [ecx+28]
     call @jbv_execute@28
     pop ebx
     pop ecx
@@ -2867,15 +2874,15 @@ call_c_185:
     movzx ecx, BYTE PTR [ecx+42]
     add esi, 4
 call_result_185:
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
+    mov eax, [edx+28]
+    push ecx
+    mov ecx, [eax+376]
+    mov [edx+20], ecx
+    mov ecx, [eax+1984]
+    mov [edx+36], ecx
+    mov ecx, [eax+1992]
+    mov [edx+40], ecx
+    pop ecx
     test ecx, ecx
     jz fd_void_185
     cmp cl, 3
@@ -2907,7 +2914,7 @@ op_invokespecial:
     xchg cl, ch
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     mov ecx, [ecx+16]
     test ecx, ecx
     jz exit_op
@@ -2940,7 +2947,7 @@ acc_back_sp:
     dec eax
     sub eax, [edx+0]
     mov [edx+12], eax
-    mov edx, [edx+36]
+    lea edx, [edx+56]
     mov [edx+12], eax
     mov eax, ebx
     sub eax, [edx+24]
@@ -2950,18 +2957,19 @@ acc_back_sp:
     movzx ecx, WORD PTR [ecx+40]
     neg ecx
     add ecx, ebx
-    sub esp, 168
+    sub esp, 112
     push esp
     call enter_run
     cmp eax, 1279872256
     je call_limit_sp
     pop ecx
-    mov edx, [ecx+144]
+    mov edx, [ecx+88]
     movq xmm0, QWORD PTR [ecx+48]
     movq QWORD PTR [edx+48], xmm0
-    mov ebx, [ecx+152]
-    movzx ebp, BYTE PTR [ecx+157]
-    add esp, 168
+    mov ebx, [ecx+96]
+    mov ebp, [ecx+64]
+    movzx ebp, BYTE PTR [ebp+METHOD_RESULT]
+    add esp, 112
     mov edi, [edx+4]
     mov esi, [edx+0]
     add esi, [edx+12]
@@ -2974,7 +2982,7 @@ acc_back_sp:
     jmp call_result_sp
 call_limit_sp:
     pop eax
-    add esp, 168
+    add esp, 112
     jmp exit_op
 acc_sp:
     push ecx
@@ -2994,7 +3002,7 @@ acc_sp:
     mov eax, [edi+ebx*4-4]
     and eax, 0FFFFFFh
     mov edx, [esp+8]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov eax, [edx+eax*4]
     mov edx, [ecx+32]
     mov eax, [eax+edx*4+4]
@@ -3019,7 +3027,7 @@ acc_set_sp:
     mov eax, [edi+ebx*4-8]
     and eax, 0FFFFFFh
     mov edx, [esp+8]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov eax, [edx+eax*4]
     mov edx, [ecx+32]
     mov ecx, [edi+ebx*4-4]
@@ -3041,7 +3049,7 @@ call_c_sp:
     dec eax
     sub eax, [edx+0]
     mov [edx+12], eax
-    mov edx, [edx+36]
+    lea edx, [edx+56]
     mov [edx+12], eax
     mov eax, ebx
     sub eax, [edx+24]
@@ -3065,7 +3073,7 @@ call_c_sp:
     push edx
     mov edx, [esp+28]
     mov ecx, [esp+32]
-    mov ecx, [ecx+32]
+    mov ecx, [ecx+28]
     call @jbv_execute@28
     pop ebx
     pop ecx
@@ -3076,15 +3084,15 @@ call_c_sp:
     movzx ecx, BYTE PTR [ecx+42]
     add esi, 2
 call_result_sp:
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
+    mov eax, [edx+28]
+    push ecx
+    mov ecx, [eax+376]
+    mov [edx+20], ecx
+    mov ecx, [eax+1984]
+    mov [edx+36], ecx
+    mov ecx, [eax+1992]
+    mov [edx+40], ecx
+    pop ecx
     test ecx, ecx
     jz fd_void_sp
     cmp cl, 3
@@ -3116,7 +3124,7 @@ op_new:
     xchg cl, ch
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     cmp BYTE PTR [ecx], 7
     jne exit_op
     mov ecx, [ecx+16]
@@ -3128,7 +3136,7 @@ op_new:
     jnz exit_op
     IF JBV_GC_STRESS EQ 0
     mov edx, [esp]
-    mov edx, [edx+32]
+    mov edx, [edx+28]
     mov eax, [edx+400]
     cmp eax, [edx+392]
     jae new_c
@@ -3201,7 +3209,7 @@ new_c:
     mov eax, esi
     dec eax
     sub eax, [edx+0]
-    mov edx, [edx+36]
+    lea edx, [edx+56]
     mov [edx+12], eax
     mov eax, ebx
     sub eax, [edx+24]
@@ -3211,20 +3219,20 @@ new_c:
     lea eax, [ecx+48]
     push eax
     push 0
-    mov ecx, [ecx+32]
+    mov ecx, [ecx+28]
     call @jbv_new@16
     mov edx, [esp]
     test eax, eax
     jnz call_failed
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
+    mov eax, [edx+28]
+    push ecx
+    mov ecx, [eax+376]
+    mov [edx+20], ecx
+    mov ecx, [eax+1984]
+    mov [edx+36], ecx
+    mov ecx, [eax+1992]
+    mov [edx+40], ecx
+    pop ecx
     mov eax, [edx+48]
     mov [edi+ebx*4], eax
     mov BYTE PTR [ebp+ebx], 1
@@ -3238,7 +3246,7 @@ op_this_getfield:
     xchg cl, ch
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     mov ecx, [ecx+16]
     test ecx, ecx
     jz exit_op
@@ -3249,7 +3257,7 @@ op_this_getfield:
     jz exit_op
     and eax, 0FFFFFFh
     mov edx, [esp]
-    mov edx, [edx+24]
+    mov edx, [edx+20]
     mov eax, [edx+eax*4]
     mov edx, [ecx+32]
     mov eax, [eax+edx*4+4]
@@ -3268,8 +3276,8 @@ op_iinc_goto:
     test edx, edx
     jg iinc_goto_go
     mov ecx, [esp]
-    mov ecx, [ecx+20]
-    sub DWORD PTR [ecx], 1
+    mov ecx, [ecx+28]
+    sub DWORD PTR [ecx+352], 1
     jc iinc_goto_go_borrow
 iinc_goto_go_back:
 iinc_goto_go:
@@ -3288,7 +3296,7 @@ op_checkcast:
     xchg cl, ch
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     cmp BYTE PTR [ecx], 7
     jne exit_op
     mov ecx, [ecx+16]
@@ -3300,7 +3308,7 @@ op_checkcast:
     and edx, 0FFFFFFh
     push ecx
     mov ecx, [esp+4]
-    mov ecx, [ecx+24]
+    mov ecx, [ecx+20]
     mov edx, [ecx+edx*4]
     pop ecx
     mov edx, [edx]
@@ -3316,7 +3324,7 @@ op_instanceof:
     xchg cl, ch
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     cmp BYTE PTR [ecx], 7
     jne exit_op
     mov ecx, [ecx+16]
@@ -3328,7 +3336,7 @@ op_instanceof:
     and edx, 0FFFFFFh
     push ecx
     mov ecx, [esp+4]
-    mov ecx, [ecx+24]
+    mov ecx, [ecx+20]
     mov edx, [ecx+edx*4]
     pop ecx
     mov edx, [edx]
@@ -3671,7 +3679,7 @@ op_ldc2_w:
     xchg cl, ch
     imul ecx, ecx, 24
     mov edx, [esp]
-    add ecx, [edx+28]
+    add ecx, [edx+24]
     mov dl, [ecx]
     cmp dl, 5
     je @F
@@ -4253,27 +4261,25 @@ op_l2d:
 
 enter_run:                       ; eax = owner, edx = m, ecx = argbase; [esp] return address, [esp+4] the new activation
     mov ebp, [esp+4]
-    mov edi, [esp+176]          ; the caller
-    mov [ebp+152], ecx
-    mov [ebp+120], eax
-    mov [ebp+92], eax
+    mov edi, [esp+120]          ; the caller
+    mov [ebp+96], ecx
+    mov [ebp+60], eax
     mov eax, [eax+8]
+    mov [ebp+24], eax
+    mov [ebp+64], edx
+    add ecx, [edi+76]
+    mov [ebp+76], ecx
+    mov eax, [edi+28]
     mov [ebp+28], eax
-    mov [ebp+124], edx
-    mov [ebp+96], edx
-    add ecx, [edi+108]
-    mov [ebp+108], ecx
-    mov eax, [edi+32]
-    mov [ebp+32], eax
     push ebx                         ; limits use only eax, ecx, edx, ebx (kept), ebp, edi
     mov ebx, [eax+344]
     cmp ebx, [eax+16]
     jae enter_limit
     movzx ebx, WORD PTR [edx+4]
-    mov [ebp+112], ebx
+    mov [ebp+80], ebx
     mov [ebp+16], ebx
     movzx ebx, WORD PTR [edx+2]
-    add ebx, [ebp+112]
+    add ebx, [ebp+80]
     add ebx, ecx
     cmp ebx, [eax+12]
     ja enter_limit
@@ -4282,23 +4288,17 @@ enter_run:                       ; eax = owner, edx = m, ecx = argbase; [esp] re
 enter_charged:
     inc DWORD PTR [eax+344]
     mov edx, [eax+340]
-    mov [ebp+148], edx
+    mov [ebp+92], edx
     mov [eax+340], ebx
     pop ebx
+    mov esi, [ebp+80]
     mov edx, [eax+336]
     lea edx, [edx+ecx*4]
     mov [ebp+4], edx
-    mov [ebp+128], edx
-    mov esi, [ebp+112]
-    lea edx, [edx+esi*4]
-    mov [ebp+132], edx
     mov edx, [eax+364]
     add edx, ecx
     mov [ebp+8], edx
-    mov [ebp+136], edx
-    lea ecx, [edx+esi]
-    mov [ebp+140], ecx
-    mov ecx, [ebp+124]
+    mov ecx, [ebp+64]
     movzx ecx, WORD PTR [ecx+METHOD_ARGS]
 zero_refs:
     cmp ecx, esi
@@ -4308,40 +4308,25 @@ zero_refs:
     jmp zero_refs
 zero_done:
     mov ecx, [eax+368]
-    mov [ebp+88], ecx
-    lea ecx, [ebp+88]
+    mov [ebp+56], ecx
+    lea ecx, [ebp+56]
     mov [eax+368], ecx
-    mov [ebp+36], ecx
     xor ecx, ecx
-    mov [ebp+100], ecx
-    mov [ebp+104], ecx
-    mov [ebp+116], ecx
-    mov [ebp+12], ecx
-    mov [ebp+40], ecx
-    mov esi, [ebp+124]
-    mov ecx, [esi+METHOD_CODE]
-    mov [ebp+0], ecx
-    mov ecx, [esi+16]
-    movzx edx, WORD PTR [esi+20]
-    mov cl, [ecx+edx-1]
-    mov [ebp+56], cl
-    mov cl, [esi+METHOD_RESULT]
-    mov [ebp+157], cl
-    mov BYTE PTR [ebp+158], 1
-    mov [ebp+144], edi
+    mov [ebp+68], ecx
+    mov [ebp+72], ecx
+    mov [ebp+84], ecx
+    mov [ebp+32], ecx
+    mov esi, [ebp+64]
+    mov esi, [esi+METHOD_CODE]
+    mov [ebp+0], esi
+    mov BYTE PTR [ebp+101], 1
+    mov [ebp+88], edi
     mov ecx, [edi+20]
     mov [ebp+20], ecx
-    mov ecx, [edi+24]
-    mov [ebp+24], ecx
-    mov ecx, [edi+44]
-    mov [ebp+44], ecx
-    movdqu xmm0, XMMWORD PTR [edi+60]
-    movdqu XMMWORD PTR [ebp+60], xmm0
-    movq xmm0, QWORD PTR [edi+76]
-    movq QWORD PTR [ebp+76], xmm0
+    movq xmm0, QWORD PTR [edi+36]
+    movq QWORD PTR [ebp+36], xmm0
     pop edx
-    mov [ebp+160], edx       ; [esp] = the activation; returns go back through ret
-    mov esi, [ebp+0]
+    mov [ebp+104], edx       ; [esp] = the activation; returns go back through ret
     mov edi, [ebp+4]
     mov ebx, [ebp+16]
     mov ebp, [ebp+8]
@@ -4359,12 +4344,12 @@ enter_limit:
     mov eax, 1279872256
     ret
 ret_core:                        ; edx = a core activation that returned: unlink it
-    cmp BYTE PTR [edx+116], 0
+    cmp BYTE PTR [edx+84], 0
     jne leave_in_c
-    mov eax, [edx+32]
-    mov ecx, [edx+88]
+    mov eax, [edx+28]
+    mov ecx, [edx+56]
     mov [eax+368], ecx
-    mov ecx, [edx+148]
+    mov ecx, [edx+92]
     mov [eax+340], ecx
     dec DWORD PTR [eax+344]
     xor eax, eax
@@ -4375,17 +4360,18 @@ leave_in_c:
     xor eax, eax
 core_return:                     ; eax = status: back to the call site
     mov edx, [esp]
-    push DWORD PTR [edx+160]
+    push DWORD PTR [edx+104]
     ret
 frame_failed:                    ; the callee failed: the caller unwinds (edx = caller, esi past the invoke opcode)
     mov ebp, [edx+8]
-    mov [edx+40], eax
+    mov [edx+32], eax
     jmp exit_op
 
 ALIGN 16
 op_ireturn:
     mov edx, [esp]
-    mov cl, [edx+56]
+    mov ecx, [edx+64]
+    mov cl, [ecx+METHOD_RCHAR]
     cmp cl, 'I'
     je ir_go
     cmp cl, 'Z'
@@ -4410,9 +4396,9 @@ ir_go:
     mov edx, [esp]
     movd xmm0, eax
     movq QWORD PTR [edx+48], xmm0
-    cmp BYTE PTR [edx+158], 0
+    cmp BYTE PTR [edx+101], 0
     jne ret_core
-    mov DWORD PTR [edx+40], 1380275200
+    mov DWORD PTR [edx+32], 1380275200
     jmp exit_op
 
 ALIGN 16
@@ -4420,9 +4406,9 @@ op_areturn:
     mov edx, [esp]
     movd xmm0, eax
     movq QWORD PTR [edx+48], xmm0
-    cmp BYTE PTR [edx+158], 0
+    cmp BYTE PTR [edx+101], 0
     jne ret_core
-    mov DWORD PTR [edx+40], 1380275200
+    mov DWORD PTR [edx+32], 1380275200
     jmp exit_op
 
 ALIGN 16
@@ -4431,189 +4417,189 @@ op_return:
     mov edx, [esp]
     movd xmm0, eax
     movq QWORD PTR [edx+48], xmm0
-    cmp BYTE PTR [edx+158], 0
+    cmp BYTE PTR [edx+101], 0
     jne ret_core
-    mov DWORD PTR [edx+40], 1380275200
+    mov DWORD PTR [edx+32], 1380275200
     jmp exit_op
 
 br_go_1_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_1_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_1_back
 br_go_1_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_2_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_2_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_2_back
 br_go_2_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_3_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_3_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_3_back
 br_go_3_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_4_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_4_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_4_back
 br_go_4_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_5_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_5_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_5_back
 br_go_5_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_6_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_6_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_6_back
 br_go_6_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_7_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_7_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_7_back
 br_go_7_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_8_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_8_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_8_back
 br_go_8_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_9_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_9_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_9_back
 br_go_9_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_10_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_10_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_10_back
 br_go_10_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_11_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_11_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_11_back
 br_go_11_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_12_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_12_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_12_back
 br_go_12_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_13_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_13_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_13_back
 br_go_13_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_14_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_14_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_14_back
 br_go_14_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_15_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_15_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_15_back
 br_go_15_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 br_go_16_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je br_go_16_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp br_go_16_back
 br_go_16_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 goto_go_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je goto_go_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp goto_go_back
 goto_go_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 ts_go_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je ts_go_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp ts_go_back
 ts_go_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 ls_go_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je ls_go_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp ls_go_back
 ls_go_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 iinc_goto_go_borrow:                ; the low word was 0: borrow from the high word, or stop
-    cmp DWORD PTR [ecx+4], 0
+    cmp DWORD PTR [ecx+356], 0
     je iinc_goto_go_out
-    dec DWORD PTR [ecx+4]
+    dec DWORD PTR [ecx+356]
     jmp iinc_goto_go_back
 iinc_goto_go_out:
-    mov DWORD PTR [ecx], 0
+    mov DWORD PTR [ecx+352], 0
     jmp exit_op
 
 jbv_interpret_x86 ENDP
