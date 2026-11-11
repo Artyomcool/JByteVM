@@ -8,7 +8,7 @@ JbvStatus jbv_string_view(JbvVM *vm, int32_t ref, JbvTextView *out) {
     out->data = 0; out->length = 0;
     if (!jbv_data(s)[0]) return JBV_OK;
     status = jbv_object(vm, jbv_data(s)[0], &a);
-    if (status == JBV_OK) { out->data = jbv_chars(a); out->length = a->length; }
+    if (status == JBV_OK) { out->data = jbv_chars(a); out->length = jbv_length(a); }
     return status;
 }
 static JbvStatus char_array(JbvVM *vm, uint32_t length, int32_t *ref, uint16_t **data) {
@@ -72,14 +72,13 @@ JbvStatus jbv_string_intern(JbvVM *vm, int32_t ref, int32_t *out) {
     JbvStatus status = jbv_string_view(vm, ref, &text);
     if (status != JBV_OK) return status;
     for (i = 1; i <= vm->handle_capacity; ++i) {
-        JbvHandle *h = &vm->handles[i];
-        if (!h->object || !h->object->interned) continue;
-        (void)jbv_string_view(vm, (int32_t)((h->generation << 16) | i), &other);
+        if (!jbv_bit(vm->interned, i)) continue;
+        (void)jbv_string_view(vm, (int32_t)jbv_handle_ref(vm, i), &other);
         if (text.length != other.length) continue;
         for (j = 0; j < text.length && text.data[j] == other.data[j]; ++j) {}
-        if (j == text.length) { *out = (int32_t)((h->generation << 16) | i); return JBV_OK; }
+        if (j == text.length) { *out = (int32_t)jbv_handle_ref(vm, i); return JBV_OK; }
     }
-    (void)jbv_object(vm, ref, &o); o->interned = 1; *out = ref; return JBV_OK;
+    (void)o; i = (uint32_t)ref & JBV_HANDLE_MASK; vm->interned[i >> 5] |= 1u << (i & 31); *out = ref; return JBV_OK;
 }
 JbvStatus jbv_object_text(JbvVM *vm, int32_t ref, int32_t *out) {
     JbvMethodId id;
@@ -129,7 +128,7 @@ static JbvStatus array_view(JbvVM *vm, int32_t ref, JbvTextView *view) {
     JbvStatus status = jbv_object(vm, ref, &o);
     if (status != JBV_OK) return status;
     if (o->type->array_kind != 'C') return JBV_CLASS_CAST;
-    view->data = jbv_chars(o); view->length = o->length; return JBV_OK;
+    view->data = jbv_chars(o); view->length = jbv_length(o); return JBV_OK;
 }
 static JbvStatus sequence_string(JbvVM *vm, int32_t ref, int sliced, int32_t start, int32_t end, int32_t *out) {
     JbvObject *o;

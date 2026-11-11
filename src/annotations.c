@@ -25,10 +25,10 @@ static JbvStatus clone_array(JbvVM *vm, int32_t value, int32_t *out) {
     size_t i;
     if(status!=JBV_OK)return status;
     *out=value;if(!o->type->array_kind)return JBV_OK;
-    status=jbv_new(vm,o->type,(int32_t)o->length,out);
+    status=jbv_new(vm,o->type,o->type->array_kind?(int32_t)jbv_length(o):0,out);
     if(status!=JBV_OK)return status;
     (void)jbv_object(vm,*out,&copy);
-    for(i=0;i<o->bytes-sizeof(*o);++i)((volatile uint8_t *)(copy+1))[i]=((const uint8_t *)(o+1))[i];
+    for(i=0;i<jbv_object_bytes(o);++i)((volatile uint8_t *)(copy+1))[i]=((const uint8_t *)(o+1))[i];
     return JBV_OK;
 }
 static JbvStatus JBV_CALL element(JbvVM *vm, void *user, const int32_t *a, uint16_t count, uint64_t *out) {

@@ -610,7 +610,7 @@ resume:
             if (status != JBV_OK) goto finish;
             kind = array->type->array_kind;
             a = stack[sp - offset + 1];
-            if (a < 0 || (uint32_t)a >= array->length) FAIL(JBV_ARRAY_BOUNDS);
+            if (a < 0 || (uint32_t)a >= jbv_length(array)) FAIL(JBV_ARRAY_BOUNDS);
             tag = jbv_kind(kind);
             if (store) {
                 if (kind == 'L') {
@@ -635,7 +635,7 @@ resume:
             JbvObject *array;
             status = jbv_object(vm, stack[sp - 1], &array);
             if (status != JBV_OK) goto finish;
-            stack[sp - 1] = (int32_t)array->length; stack_refs[sp - 1] = 0;
+            stack[sp - 1] = (int32_t)jbv_length(array); stack_refs[sp - 1] = 0;
             break;
         }
         case 191:

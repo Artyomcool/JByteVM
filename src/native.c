@@ -303,7 +303,7 @@ static JbvStatus array_range(JbvVM *vm, int32_t ref, uint32_t start, uint32_t co
     status = jbv_object(vm, ref, out);
     if (status != JBV_OK) return status;
     if (!(*out)->type->array_kind) return JBV_BAD_ARGUMENT;
-    if (start > (*out)->length || count > (*out)->length - start) return JBV_ARRAY_BOUNDS;
+    if (start > jbv_length(*out) || count > jbv_length(*out) - start) return JBV_ARRAY_BOUNDS;
     return JBV_OK;
 }
 
@@ -313,7 +313,7 @@ JBV_API JbvStatus JBV_CALL jbv_array_info(JbvVM *vm, JbvRef ref, uint32_t *lengt
     if (!length) return JBV_BAD_ARGUMENT;
     status = array_range(vm, ref, 0, 0, &array);
     if (status != JBV_OK) return status;
-    *length = array->length;
+    *length = jbv_length(array);
     if (kind) *kind = (char)array->type->array_kind;
     return JBV_OK;
 }

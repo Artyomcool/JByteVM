@@ -102,12 +102,12 @@ static JbvStatus parameters_match(JbvVM *vm, JbvText d, JbvObject *params, int *
         uint32_t begin = pos;
         JbvClass *c = 0; JbvText t;
         JbvStatus status;
-        if (!params || i == params->length) return JBV_OK;
+        if (!params || i == jbv_length(params)) return JBV_OK;
         (void)jbv_descriptor_type(d, &pos, &width); t.data = d.data+begin; t.size = (uint16_t)(pos-begin);
         status = jbv_type_class(vm, t, &c); if (status != JBV_OK) return status;
         if (c != jbv_mirror_type(vm, jbv_data(params)[i++])) return JBV_OK;
     }
-    *match = i == (params ? params->length : 0); return JBV_OK;
+    *match = i == (params ? jbv_length(params) : 0); return JBV_OK;
 }
 /* Generic signatures are parsed in Java: jbv.runtime.Generics.ofClass(Class,int). */
 static JbvStatus generics(JbvVM *vm, int32_t mirror, uint32_t what, uint64_t *out) {
@@ -315,12 +315,12 @@ static JbvStatus invoke(JbvVM *vm, Member m, JbvObject *member, int32_t receiver
     if (used) { slots[0]=receiver;refs[0]=1; }
     while (d.data[pos] != ')') {
         JbvText t; uint32_t begin = pos;
-        if (!args || i == args->length) { status=JBV_BAD_ARGUMENT;goto done; }
+        if (!args || i == jbv_length(args)) { status=JBV_BAD_ARGUMENT;goto done; }
         (void)jbv_descriptor_type(d,&pos,&width);t.data=d.data+begin;t.size=(uint16_t)(pos-begin);
         status=convert(vm,jbv_data(args)[i++],t,&bits);if(status!=JBV_OK)goto done;
         refs[used]=(uint8_t)jbv_reference_type(t);jbv_put_bits(slots+used,bits,jbv_kind(t.data[0]));used+=width;
     }
-    if (i != (args ? args->length : 0)) { status=JBV_BAD_ARGUMENT;goto done; }
+    if (i != (args ? jbv_length(args) : 0)) { status=JBV_BAD_ARGUMENT;goto done; }
     /* Initialization errors are not target exceptions and must not be wrapped. */
     if (m.kind == 2 || (method->flags & JBV_STATIC)) { status=jbv_initialize(vm,m.owner);if(status!=JBV_OK)goto done; }
     if (m.kind == 2) {
@@ -371,7 +371,7 @@ static JbvStatus reflect_array(JbvVM *vm, const int32_t *a, int32_t *out) {
     if (a[3] == 0 || a[3] == 1) {
         c=jbv_mirror_type(vm,a[0]);if(!c)return JBV_NULL_REFERENCE;
         if(c->primitive=='V')return JBV_BAD_ARGUMENT;
-        if(a[3]==1){status=jbv_object(vm,a[2],&dims);if(status!=JBV_OK)return status;dimensions=dims->length;if(!dimensions||dimensions>255)return JBV_BAD_ARGUMENT;}
+        if(a[3]==1){status=jbv_object(vm,a[2],&dims);if(status!=JBV_OK)return status;dimensions=jbv_length(dims);if(!dimensions||dimensions>255)return JBV_BAD_ARGUMENT;}
         else {dims=0;dimensions=1;}
         for(i=0;i<c->name.size&&c->name.data[i]=='[';++i){}
         if(dimensions+i>255)return JBV_BAD_ARGUMENT;
@@ -381,8 +381,8 @@ static JbvStatus reflect_array(JbvVM *vm, const int32_t *a, int32_t *out) {
     status=jbv_object(vm,a[0],&o);if(status!=JBV_OK)return status;
     c=o->type;code=c->array_kind;if(!code)return JBV_BAD_ARGUMENT;
     if((a[3]<0||a[3]>4)&&code=='L')return JBV_BAD_ARGUMENT;
-    if(a[3]==2)return jbv_box(vm,'I',o->length,out);
-    if(a[1]<0||(uint32_t)a[1]>=o->length)return JBV_ARRAY_BOUNDS;
+    if(a[3]==2)return jbv_box(vm,'I',jbv_length(o),out);
+    if(a[1]<0||(uint32_t)a[1]>=jbv_length(o))return JBV_ARRAY_BOUNDS;
     if(a[3]==3||a[3]>4){bits=jbv_array_get(o,(uint32_t)a[1],code);if(code=='L'){*out=(int32_t)bits;return JBV_OK;}return jbv_box(vm,code,bits,out);}
     if(code=='L'){
         JbvObject *value;

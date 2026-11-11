@@ -146,7 +146,7 @@ static JbvStatus invoke_handle(JbvVM *vm, int32_t ref, int32_t array_ref, int32_
         if (collect && (kind&128) && i+1 == parameters) {
             JbvClass *array_type;
             JbvObject *tail = 0;
-            uint32_t j, remaining = array->length-argc;
+            uint32_t j, remaining = jbv_length(array)-argc;
             JbvText component = {type.data+1,(uint16_t)(type.size-1)};
             status = jbv_type_class(vm, type, &array_type);
             if (status == JBV_OK) status = jbv_new(vm, array_type, (int32_t)remaining, &varargs_ref);
@@ -159,14 +159,14 @@ static JbvStatus invoke_handle(JbvVM *vm, int32_t ref, int32_t array_ref, int32_
             }
             argument = varargs_ref;
         } else {
-            if (argc >= array->length) { status = JBV_BAD_ARGUMENT; goto wrong_type; }
+            if (argc >= jbv_length(array)) { status = JBV_BAD_ARGUMENT; goto wrong_type; }
             argument = jbv_data(array)[argc++];
         }
         status = jbv_from_object(vm, argument, type, &bits);
         if (status != JBV_OK) goto done;
         refs[used] = (uint8_t)jbv_reference_type(type); jbv_put_bits(slots+used, bits, jbv_kind(type.data[0])); used += width;
     }
-    if (argc != array->length) { status = JBV_BAD_ARGUMENT; goto wrong_type; }
+    if (argc != jbv_length(array)) { status = JBV_BAD_ARGUMENT; goto wrong_type; }
     kind &= 127;
     if (kind == 1 || kind == 3 || kind == 5 || kind == 7 || kind == 9) {
         status = jbv_object(vm, slots[0], &receiver); if (status != JBV_OK) goto done;

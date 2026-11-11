@@ -162,6 +162,9 @@ JbvStatus jbv_link(JbvVM *vm, JbvClass *c, uint32_t depth) {
     c->instance_slots = c->super->instance_slots;
     for (i = 0; i < c->field_count; ++i)
         if (!(c->fields[i].flags & JBV_STATIC)) {
+            JbvText d = c->fields[i].descriptor;
+            if (!jbv_reference_type(d) && (d.size != 1 || !jbv_kind(d.data[0]) && d.data[0] != 'I' && d.data[0] != 'Z' && d.data[0] != 'B' && d.data[0] != 'C' && d.data[0] != 'S'))
+                { status = JBV_UNSUPPORTED_FEATURE; goto fail; }
             c->fields[i].slot = c->instance_slots;
             c->instance_slots += jbv_width(jbv_kind(c->fields[i].descriptor.data[0]));
         }
@@ -244,12 +247,16 @@ JbvField *jbv_lookup_field(JbvClass **owner, JbvText name, JbvText descriptor) {
     return 0;
 }
 
+/* ---- References: ref = generation << 24 | handle index; handles hold object pointers. ---- */
+uint32_t jbv_handle_ref(JbvVM *vm, uint32_t index) { return (uint32_t)vm->generations[index] << JBV_HANDLE_BITS | index; }
 JbvStatus jbv_object(JbvVM *vm, int32_t ref, JbvObject **out) {
-    uint32_t index = (uint32_t)ref & 65535u;
+    uint32_t index = (uint32_t)ref & JBV_HANDLE_MASK;
+    uintptr_t entry;
     if (!ref) return JBV_NULL_REFERENCE;
-    if (ref < 0 || !index || index > vm->handle_capacity || !vm->handles[index].object ||
-        vm->handles[index].generation != (uint32_t)ref >> 16) return JBV_BAD_REFERENCE;
-    *out = vm->handles[index].object;
+    if (ref < 0 || !index || index > vm->handle_capacity) return JBV_BAD_REFERENCE;
+    entry = vm->handles[index];
+    if (!entry || (entry & 1) || vm->generations[index] != (uint32_t)ref >> JBV_HANDLE_BITS) return JBV_BAD_REFERENCE;
+    *out = (JbvObject *)entry;
     return JBV_OK;
 }
 JbvStatus jbv_check_reference(JbvVM *vm, int32_t ref, JbvText descriptor) {
@@ -266,167 +273,244 @@ JbvStatus jbv_check_reference(JbvVM *vm, int32_t ref, JbvText descriptor) {
     if (status != JBV_OK) return status;
     return jbv_assignable(object->type, type) ? JBV_OK : JBV_CLASS_CAST;
 }
+/* Pins (host/native retains) are rare and short-lived: a small unsorted table. */
+static JbvPin *find_pin(JbvVM *vm, uint32_t index) {
+    uint32_t i;
+    for (i = vm->pin_count; i--;) if (vm->pins[i].index == index) return &vm->pins[i];
+    return 0;
+}
 JBV_API JbvStatus JBV_CALL jbv_retain(JbvVM *vm, JbvRef ref) {
     JbvObject *object;
     JbvStatus status;
-    JbvHandle *entry;
+    JbvPin *pin;
     if (!vm) return JBV_BAD_ARGUMENT;
     if (!ref) return JBV_OK;
     status = jbv_object(vm, ref, &object);
     if (status != JBV_OK) return status;
-    entry = &vm->handles[(uint32_t)ref & 65535u];
-    if (entry->pins == UINT32_MAX) return JBV_LIMIT_EXCEEDED;
-    ++entry->pins;
+    pin = find_pin(vm, (uint32_t)ref & JBV_HANDLE_MASK);
+    if (pin) { if (pin->count == UINT32_MAX) return JBV_LIMIT_EXCEEDED; ++pin->count; return JBV_OK; }
+    if (vm->pin_count == vm->pin_capacity) {
+        uint32_t capacity = vm->pin_capacity ? vm->pin_capacity * 2 : 16, i;
+        JbvPin *pins = (JbvPin *)jbv_alloc(vm, capacity * sizeof(*pins));
+        if (!pins) return JBV_OUT_OF_MEMORY;
+        for (i = 0; i < vm->pin_count; ++i) pins[i] = vm->pins[i];
+        jbv_free(vm, vm->pins); vm->pins = pins; vm->pin_capacity = capacity;
+    }
+    vm->pins[vm->pin_count].index = (uint32_t)ref & JBV_HANDLE_MASK; vm->pins[vm->pin_count++].count = 1;
     return JBV_OK;
 }
 JBV_API JbvStatus JBV_CALL jbv_release(JbvVM *vm, JbvRef ref) {
     JbvObject *object;
     JbvStatus status;
-    JbvHandle *entry;
+    JbvPin *pin;
     if (!vm) return JBV_BAD_ARGUMENT;
     if (!ref) return JBV_OK;
     status = jbv_object(vm, ref, &object);
     if (status != JBV_OK) return status;
-    entry = &vm->handles[(uint32_t)ref & 65535u];
-    if (!entry->pins) return JBV_BAD_REFERENCE;
-    --entry->pins;
+    pin = find_pin(vm, (uint32_t)ref & JBV_HANDLE_MASK);
+    if (!pin) return JBV_BAD_REFERENCE;
+    if (!--pin->count) *pin = vm->pins[--vm->pin_count];
     return JBV_OK;
 }
 
-static void mark(JbvVM *vm, int32_t ref, uint32_t *queue) {
-    JbvObject *object;
-    if (jbv_object(vm, ref, &object) != JBV_OK || object->mark) return;
-    object->mark = 1;
-    object->gc_next = *queue;
-    *queue = (uint32_t)ref & 65535u;
+/* ---- Heap blocks: small sizes come from chunks with per-size free lists (no per-object
+ * allocator header); larger blocks are host allocations. Blocks are JBV_ALIGN multiples. ---- */
+#define JBV_SMALL 512u
+static void *block_alloc(JbvVM *vm, size_t size) {
+    void **list, *p;
+    size_t i;
+    if (size > JBV_SMALL) return jbv_alloc(vm, size);
+    list = &vm->free_blocks[size / JBV_ALIGN];
+    if (*list) {
+        p = *list; *list = *(void **)p;
+        for (i = 0; i < size / sizeof(int32_t); ++i) ((int32_t *)p)[i] = 0;
+        return p;
+    }
+    if ((size_t)(vm->bump_end - vm->bump) < size) {
+        size_t chunk = vm->chunk_size ? vm->chunk_size : 2048, rest = (size_t)(vm->bump_end - vm->bump);
+        void **block = (void **)jbv_alloc(vm, chunk);
+        if (!block) { chunk = JBV_ALIGN + size; block = (void **)jbv_alloc(vm, chunk); }   /* tight budget: exact chunk */
+        if (!block) return 0;
+        if (rest >= JBV_ALIGN) { *(void **)vm->bump = vm->free_blocks[rest / JBV_ALIGN]; vm->free_blocks[rest / JBV_ALIGN] = vm->bump; }
+        *block = vm->chunks; vm->chunks = block;
+        vm->bump = (uint8_t *)block + JBV_ALIGN; vm->bump_end = (uint8_t *)block + chunk;
+        if (chunk >= vm->chunk_size && chunk < 65536) vm->chunk_size = chunk * 2;
+    }
+    p = vm->bump; vm->bump += size;
+    return p;
 }
+static void block_free(JbvVM *vm, void *p, size_t size) {
+    if (size > JBV_SMALL) { jbv_free(vm, p); return; }
+    *(void **)p = vm->free_blocks[size / JBV_ALIGN]; vm->free_blocks[size / JBV_ALIGN] = p;
+}
+static size_t align_size(size_t n) { return (n + JBV_ALIGN - 1) & ~(size_t)(JBV_ALIGN - 1); }
+size_t jbv_object_bytes(const JbvObject *object) {
+    const JbvClass *type = object->type;
+    if (!type->array_kind) return (size_t)type->instance_slots * sizeof(int32_t);
+    return (size_t)jbv_length(object) * jbv_element_bytes(type->array_kind);
+}
+/* Whole block: [array length word] header payload, rounded to JBV_ALIGN. */
+static size_t block_size(const JbvObject *object) {
+    return align_size((object->type->array_kind ? JBV_ALIGN : 0) + sizeof(*object) + jbv_object_bytes(object));
+}
+static void *block_start(JbvObject *object) { return (uint8_t *)object - (object->type->array_kind ? JBV_ALIGN : 0); }
+
+/* ---- Mark-sweep GC. Marking uses a fixed stack; on overflow, marked objects are rescanned. ---- */
+static int needs_scan(const JbvClass *type) {
+    const JbvClass *c;
+    uint16_t i;
+    if (type->array_kind) return type->array_kind == 'L';
+    for (c = type; c; c = c->super)
+        for (i = 0; i < c->field_count; ++i)
+            if (!(c->fields[i].flags & JBV_STATIC) && jbv_reference_type(c->fields[i].descriptor)) return 1;
+    return 0;
+}
+static void mark(JbvVM *vm, int32_t ref) {
+    JbvObject *object;
+    uint32_t index = (uint32_t)ref & JBV_HANDLE_MASK;
+    if (jbv_object(vm, ref, &object) != JBV_OK || jbv_bit(vm->marks, index)) return;
+    vm->marks[index >> 5] |= 1u << (index & 31);
+    if (!needs_scan(object->type)) return;
+    if (vm->mark_top < sizeof(vm->mark_stack) / sizeof(vm->mark_stack[0])) vm->mark_stack[vm->mark_top++] = index;
+    else vm->mark_overflow = 1;
+}
+static void scan(JbvVM *vm, JbvObject *object) {
+    int32_t *data = jbv_data(object);
+    const JbvClass *c;
+    uint32_t i;
+    if (object->type->array_kind == 'L') { for (i = jbv_length(object); i--;) mark(vm, data[i]); return; }
+    for (c = object->type; c; c = c->super)
+        for (i = 0; i < c->field_count; ++i)
+            if (!(c->fields[i].flags & JBV_STATIC) && jbv_reference_type(c->fields[i].descriptor))
+                mark(vm, data[c->fields[i].slot]);
+}
+static void drain(JbvVM *vm) { while (vm->mark_top) scan(vm, (JbvObject *)vm->handles[vm->mark_stack[--vm->mark_top]]); }
 JBV_API JbvStatus JBV_CALL jbv_collect(JbvVM *vm) {
-    uint32_t i, queue = 0;
+    uint32_t i;
     JbvClass *c;
     JbvFrame *frame;
     if (!vm) return JBV_BAD_ARGUMENT;
     ++vm->collections;
-    mark(vm, vm->exception, &queue);
-    for (i = 1; i <= vm->handle_capacity; ++i) {
-        JbvHandle *entry = &vm->handles[i];
-        if (entry->object && (entry->pins || entry->object->monitor_depth)) mark(vm, (int32_t)((entry->generation << 16) | i), &queue);
-    }
+    if (!vm->marks) return JBV_OK;   /* nothing allocated yet */
+    for (i = 0; i <= vm->handle_capacity >> 5; ++i) vm->marks[i] = 0;
+    vm->mark_top = 0; vm->mark_overflow = 0;
+    mark(vm, vm->exception);
+    for (i = 0; i < vm->pin_count; ++i) mark(vm, (int32_t)jbv_handle_ref(vm, vm->pins[i].index));
+    for (i = 0; i < vm->monitor_capacity; ++i) if (vm->monitors[i].ref) mark(vm, vm->monitors[i].ref);
     for (frame = vm->frames; frame; frame = frame->previous) {
         uint32_t end = frame->base + frame->locals + *frame->sp;
         for (i = frame->base; i < end; ++i)
-            if (vm->slot_refs[i] == JBV_REF) mark(vm, vm->slots[i], &queue);
+            if (vm->slot_refs[i] == JBV_REF) mark(vm, vm->slots[i]);
     }
     for (c = vm->classes; c; c = c->next) {
-        mark(vm, c->mirror, &queue);
+        mark(vm, c->mirror);
         for (i = 1; i < c->pool_size; ++i) {
             JbvConstant *p = &c->pool[i];
-            if (p->tag == 8 || p->tag == 15 || p->tag == 16)
-                mark(vm, jbv_i32(p->bits), &queue);
+            if (p->tag == 8 || p->tag == 15 || p->tag == 16) mark(vm, jbv_i32(p->bits));
         }
         for (i = 0; i < c->field_count; ++i)
-            if ((c->fields[i].flags & JBV_STATIC) && jbv_reference_type(c->fields[i].descriptor))
-                mark(vm, c->fields[i].value, &queue);
+            if ((c->fields[i].flags & JBV_STATIC) && jbv_reference_type(c->fields[i].descriptor)) mark(vm, c->fields[i].value);
+        drain(vm);
     }
-    while (queue) {
-        JbvObject *object = vm->handles[queue].object;
-        int32_t *data = jbv_data(object);
-        queue = object->gc_next;
-        if (object->type->array_kind == 'L') {
-            for (i = 0; i < object->length; ++i) mark(vm, data[i], &queue);
-        } else if (!object->type->array_kind) {
-            for (c = object->type; c; c = c->super)
-                for (i = 0; i < c->field_count; ++i)
-                    if (!(c->fields[i].flags & JBV_STATIC) && jbv_reference_type(c->fields[i].descriptor))
-                        mark(vm, data[c->fields[i].slot], &queue);
-        }
+    drain(vm);
+    while (vm->mark_overflow) {      /* rare: rescan every marked object until nothing new is marked */
+        vm->mark_overflow = 0;
+        for (i = 1; i <= vm->handle_capacity; ++i)
+            if (jbv_bit(vm->marks, i) && !(vm->handles[i] & 1) && vm->handles[i]) { scan(vm, (JbvObject *)vm->handles[i]); drain(vm); }
     }
     for (i = 1; i <= vm->handle_capacity; ++i) {
-        JbvHandle *entry = &vm->handles[i];
-        if (!entry->object) continue;
-        if (entry->object->mark) { entry->object->mark = 0; continue; }
-        vm->heap_bytes -= entry->object->bytes;
-        --vm->object_count;
-        jbv_free(vm, entry->object); entry->object = 0;
-        if (entry->generation < 32767) {
-            ++entry->generation;
-            entry->next_free = vm->free_handle; vm->free_handle = i;
-        } /* Retire a slot rather than wrap and resurrect a stale handle. */
+        JbvObject *object = (JbvObject *)vm->handles[i];
+        size_t size;
+        if (!object || ((uintptr_t)object & 1) || jbv_bit(vm->marks, i)) continue;
+        size = block_size(object);
+        vm->heap_bytes -= size; --vm->object_count;
+        block_free(vm, block_start(object), size);
+        vm->interned[i >> 5] &= ~(1u << (i & 31));
+        /* Generations wrap (1..127): a stale ref is detected unless its slot was reused 127 times. */
+        vm->generations[i] = (uint8_t)(vm->generations[i] == 127 ? 1 : vm->generations[i] + 1);
+        vm->handles[i] = (uintptr_t)vm->free_handle << 1 | 1; vm->free_handle = i;
     }
     return JBV_OK;
 }
 static JbvStatus grow_handles(JbvVM *vm) {
-    uint32_t capacity = vm->handle_capacity ? vm->handle_capacity * 2 : 64, i;
-    JbvHandle *entries;
-    if (capacity > 65535) capacity = 65535;
-    if (capacity == vm->handle_capacity) return JBV_OUT_OF_MEMORY;
-    entries = (JbvHandle *)jbv_alloc(vm, (size_t)(capacity + 1) * sizeof(*entries));
-    if (!entries) return JBV_OUT_OF_MEMORY;
-    for (i = 1; i <= vm->handle_capacity; ++i) entries[i] = vm->handles[i];
-    for (; i <= capacity; ++i) {
-        entries[i].generation = 1;
-        entries[i].next_free = i == capacity ? vm->free_handle : i + 1;
+    uint32_t old = vm->handle_capacity, capacity = old ? old * 2 : 255, words, i;
+    uintptr_t *handles;
+    uint8_t *generations;
+    uint32_t *marks, *interned;
+    if (capacity > JBV_HANDLE_MASK) capacity = JBV_HANDLE_MASK;
+    if (capacity == old) return JBV_OUT_OF_MEMORY;
+    words = (capacity >> 5) + 1;
+    handles = (uintptr_t *)jbv_alloc(vm, (size_t)(capacity + 1) * sizeof(*handles));
+    generations = (uint8_t *)jbv_alloc(vm, (size_t)capacity + 1);
+    marks = (uint32_t *)jbv_alloc(vm, (size_t)words * sizeof(*marks));
+    interned = (uint32_t *)jbv_alloc(vm, (size_t)words * sizeof(*interned));
+    if (!handles || !generations || !marks || !interned) {
+        jbv_free(vm, handles); jbv_free(vm, generations); jbv_free(vm, marks); jbv_free(vm, interned);
+        return JBV_OUT_OF_MEMORY;
     }
-    jbv_free(vm, vm->handles);
-    vm->handles = entries;
-    vm->free_handle = vm->handle_capacity + 1;
+    for (i = 1; i <= old; ++i) { handles[i] = vm->handles[i]; generations[i] = vm->generations[i]; }
+    for (i = 0; old && i <= old >> 5; ++i) { marks[i] = vm->marks[i]; interned[i] = vm->interned[i]; }
+    for (i = old + 1; i <= capacity; ++i) { generations[i] = 1; handles[i] = (uintptr_t)(i == capacity ? vm->free_handle : i + 1) << 1 | 1; }
+    jbv_free(vm, vm->handles); jbv_free(vm, vm->generations); jbv_free(vm, vm->marks); jbv_free(vm, vm->interned);
+    vm->handles = handles; vm->generations = generations; vm->marks = marks; vm->interned = interned;
+    vm->free_handle = old + 1;
     vm->handle_capacity = capacity;
     return JBV_OK;
 }
 JbvStatus jbv_new(JbvVM *vm, JbvClass *type, int32_t length, int32_t *ref) {
     JbvObject *object;
     JbvStatus status;
-    JbvClass *c;
-    uint32_t count, index;
-    size_t bytes;
+    uint32_t index;
+    uint64_t payload;
+    size_t bytes, prefix = 0;
+    uint8_t *block;
     if (type->array_kind) {
         if (length < 0) return JBV_NEGATIVE_ARRAY_SIZE;
-        count = (uint32_t)length;
-        if (jbv_element_bytes(type->array_kind) < 4) count = (uint32_t)(((uint64_t)count * jbv_element_bytes(type->array_kind) + 3u) / 4u);
-        if (type->array_kind == 'J' || type->array_kind == 'D') {
-            if (count > UINT32_MAX / 2) return JBV_OUT_OF_MEMORY;
-            count *= 2;
-        }
+        payload = (uint64_t)(uint32_t)length * jbv_element_bytes(type->array_kind);
+        prefix = JBV_ALIGN;
     } else {
-        uint16_t i;
         if (type->flags & (JBV_INTERFACE | JBV_ABSTRACT)) return JBV_LINKAGE_ERROR;
-        count = type->instance_slots;
-        for (c = type; c; c = c->super)
-            for (i = 0; i < c->field_count; ++i) {
-                JbvText d = c->fields[i].descriptor;
-                if (!(c->fields[i].flags & JBV_STATIC) && !jbv_reference_type(d) &&
-                    !(d.size == 1 && (d.data[0] == 'I' || d.data[0] == 'Z' || d.data[0] == 'B' || d.data[0] == 'C' || d.data[0] == 'S' || d.data[0] == 'J' || d.data[0] == 'F' || d.data[0] == 'D')))
-                    return JBV_UNSUPPORTED_FEATURE;
-            }
+        payload = (uint64_t)type->instance_slots * sizeof(int32_t);
     }
-    if (count > (SIZE_MAX - sizeof(*object)) / sizeof(int32_t)) return JBV_OUT_OF_MEMORY;
-    bytes = sizeof(*object) + (size_t)count * sizeof(int32_t);
+    if (payload > SIZE_MAX / 2) return JBV_OUT_OF_MEMORY;
+    bytes = align_size(prefix + sizeof(*object) + (size_t)payload);
     if (bytes > vm->heap_limit) return JBV_OUT_OF_MEMORY;
-    if (vm->heap_bytes > vm->heap_limit || bytes > vm->heap_limit - vm->heap_bytes || !vm->free_handle) (void)jbv_collect(vm);
+    if (vm->heap_bytes > vm->heap_limit || bytes > vm->heap_limit - vm->heap_bytes || !vm->free_handle) {
+        (void)jbv_collect(vm);
+        /* Grow the handle table early when it stays mostly live, so collections stay amortized. */
+        if (vm->handle_capacity - vm->object_count < vm->handle_capacity / 4 && vm->handle_capacity < JBV_HANDLE_MASK) (void)grow_handles(vm);
+    }
     if (vm->heap_bytes > vm->heap_limit || bytes > vm->heap_limit - vm->heap_bytes) return JBV_OUT_OF_MEMORY;
     if (!vm->free_handle) {
         status = grow_handles(vm);
         if (status != JBV_OK) return status;
     }
-    object = (JbvObject *)jbv_alloc(vm, bytes);
-    if (!object) {
+    block = (uint8_t *)block_alloc(vm, bytes);
+    if (!block) {
         (void)jbv_collect(vm);
-        object = (JbvObject *)jbv_alloc(vm, bytes);
-        if (!object) return JBV_OUT_OF_MEMORY;
+        block = (uint8_t *)block_alloc(vm, bytes);
+        if (!block) return JBV_OUT_OF_MEMORY;
     }
-    object->type = type; object->length = type->array_kind ? (uint32_t)length : count; object->bytes = bytes;
+    if (prefix) *(uint32_t *)(block + prefix - sizeof(uint32_t)) = (uint32_t)length;
+    object = (JbvObject *)(block + prefix);
+    object->type = type;
     index = vm->free_handle;
-    vm->free_handle = vm->handles[index].next_free;
-    vm->handles[index].object = object;
+    vm->free_handle = (uint32_t)(vm->handles[index] >> 1);
+    vm->handles[index] = (uintptr_t)object;
     vm->heap_bytes += bytes; ++vm->object_count;
-    *ref = (int32_t)((vm->handles[index].generation << 16) | index);
+    *ref = (int32_t)jbv_handle_ref(vm, index);
     return JBV_OK;
 }
 void jbv_free_heap(JbvVM *vm) {
     uint32_t i;
+    void *chunk;
     for (i = 1; i <= vm->handle_capacity; ++i) {
-        jbv_free(vm, vm->handles[i].object);
+        JbvObject *object = (JbvObject *)vm->handles[i];
+        if (object && !((uintptr_t)object & 1) && block_size(object) > JBV_SMALL) jbv_free(vm, block_start(object));
     }
-    jbv_free(vm, vm->handles);
+    while ((chunk = vm->chunks) != 0) { vm->chunks = *(void **)chunk; jbv_free(vm, chunk); }
+    jbv_free(vm, vm->handles); jbv_free(vm, vm->generations); jbv_free(vm, vm->marks); jbv_free(vm, vm->interned);
+    jbv_free(vm, vm->pins);
 }
 JbvStatus jbv_multi_array(JbvVM *vm, JbvClass *type, const int32_t *sizes, uint8_t dimensions, int32_t *ref) {
     JbvStatus status;
@@ -442,7 +526,7 @@ JbvStatus jbv_multi_array(JbvVM *vm, JbvClass *type, const int32_t *sizes, uint8
     if (status != JBV_OK) { --vm->depth; return status; }
     status = jbv_object(vm, parent, &object);
     if (status == JBV_OK && dimensions > 1)
-        for (i = 0; i < object->length; ++i) {
+        for (i = 0; i < jbv_length(object); ++i) {
             int32_t child = 0;
             status = jbv_multi_array(vm, type->component, sizes + 1, dimensions - 1, &child);
             if (status != JBV_OK) break;

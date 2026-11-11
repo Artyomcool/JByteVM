@@ -217,10 +217,10 @@ static JbvStatus JBV_CALL library_native(JbvVM *vm, void *user, const int32_t *a
         size_t i, bytes;
         if (!jbv_assignable(o->type, jbv_find_class(vm, jbv_text("java/lang/Cloneable"))))
             return jbv_throw_named(vm, "java/lang/CloneNotSupportedException", 0, JBV_EXCEPTION);
-        status = jbv_new(vm, o->type, (int32_t)o->length, &ref);
+        status = jbv_new(vm, o->type, o->type->array_kind ? (int32_t)jbv_length(o) : 0, &ref);
         if (status != JBV_OK) return status;
         (void)jbv_object(vm, ref, &other);
-        bytes = o->bytes - sizeof(*o);
+        bytes = jbv_object_bytes(o);
         for (i = 0; i < bytes; ++i) ((volatile uint8_t *)(other+1))[i] = ((uint8_t *)(o+1))[i];
         *out = (uint32_t)ref; return JBV_OK;
     }

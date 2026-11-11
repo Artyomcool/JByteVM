@@ -97,7 +97,7 @@ static JbvStatus JBV_CALL exception_native(JbvVM *vm, void *user, const int32_t 
     if (fields[2]) {
         status = jbv_object(vm, fields[2], &old);
         if (status != JBV_OK) return status;
-        length = old->length;
+        length = jbv_length(old);
     }
     status = jbv_exception_class(vm, jbv_text(L "Throwable"), &throwable);
     if (status == JBV_OK) status = jbv_array_class(vm, throwable, 'L', &array_type);

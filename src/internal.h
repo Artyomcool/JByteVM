@@ -68,23 +68,20 @@ typedef struct JbvClass {
     uint8_t link_state, array_kind;
     uint8_t init_state; /* 0=uninitialized, 1=in progress, 2=done, 3=failed */
     uint8_t builtin, primitive;
-    uint16_t monitor_depth;
     int32_t mirror;
     JbvStatus init_error;
 } JbvClass;
 typedef struct JbvObject {
+    /* One-word header (single-threaded VM, non-moving GC): just the class.
+     * Mark bits, intern membership, pins and monitors live in side tables;
+     * arrays keep their length in the word just before the header.
+     * int32 fields/elements follow this header (zero initialized). */
     JbvClass *type;
-    uint32_t length, gc_next;
-    size_t bytes;
-    uint8_t mark;
-    uint8_t interned; /* Weak intern membership; literals are rooted by their CP. */
-    uint16_t monitor_depth;
-    /* int32 fields/elements follow this header (zero initialized). */
 } JbvObject;
-typedef struct JbvHandle {
-    JbvObject *object;
-    uint32_t generation, pins, next_free;
-} JbvHandle;
+#define JBV_ALIGN sizeof(void *)          /* heap block granularity */
+#define JBV_HANDLE_BITS 24u                /* ref = generation << 24 | handle index */
+#define JBV_HANDLE_MASK ((1u << JBV_HANDLE_BITS) - 1u)
+typedef struct JbvPin { uint32_t index, count; } JbvPin;
 typedef struct JbvFrame {
     struct JbvFrame *previous;
     JbvClass *owner;
@@ -96,7 +93,8 @@ typedef struct JbvFrame {
 } JbvFrame;
 
 typedef struct JbvFPEnv { uint32_t control,status,tag,ip,cs,data,ds,mxcsr; } JbvFPEnv;
-typedef struct JbvMonitor { uint16_t *counter; JbvFrame *frame; } JbvMonitor;
+/* One entry per acquisition; the depth of a monitor is its number of entries. */
+typedef struct JbvMonitor { int32_t ref; const JbvClass *type; JbvFrame *frame; } JbvMonitor;
 typedef struct JbvNativeFrame {
     struct JbvNativeFrame *previous;
     void *user;
@@ -112,8 +110,18 @@ struct JbvVM {
     uint8_t *slot_refs; /* GC reference bits (0/1), not operand verification tags. */
     JbvFrame *frames;
     JbvNativeFrame *native_frame;
-    JbvHandle *handles;
+    uintptr_t *handles;       /* object pointer, or (next free index << 1) | 1 */
+    uint8_t *generations;     /* per handle, 1..127, bumped when the slot is freed */
+    uint32_t *marks, *interned; /* per-handle bitmaps: GC mark, weak intern membership */
     uint32_t handle_capacity, free_handle, object_count;
+    JbvPin *pins;             /* host/native retain counts; few at a time */
+    uint32_t pin_count, pin_capacity;
+    uint8_t *bump, *bump_end; /* small-block heap: chunks, bump pointer, size-class free lists */
+    void *chunks;
+    size_t chunk_size;
+    void *free_blocks[512 / JBV_ALIGN + 1];
+    uint32_t mark_stack[256], mark_top;
+    uint8_t mark_overflow;
     size_t heap_bytes, heap_limit;
     uint64_t collections;
     int32_t exception;
@@ -203,6 +211,11 @@ uint8_t jbv_kind(uint8_t descriptor);
 #define JBV_INLINE static inline
 #endif
 JBV_INLINE int32_t *jbv_data(JbvObject *object) { return (int32_t *)(object + 1); }
+/* Arrays only: the element count stored in front of the header. */
+JBV_INLINE uint32_t jbv_length(const JbvObject *array) { return ((const uint32_t *)array)[-1]; }
+JBV_INLINE int jbv_bit(const uint32_t *bits, uint32_t i) { return (int)(bits[i >> 5] >> (i & 31)) & 1; }
+uint32_t jbv_handle_ref(JbvVM *vm, uint32_t index);
+size_t jbv_object_bytes(const JbvObject *object); /* payload after the header */
 JBV_INLINE uint16_t *jbv_chars(JbvObject *object) { return (uint16_t *)(object + 1); }
 /* Preserve the modulo-2^32 result without an out-of-line call at every
  * integer operation. Both supported Windows ABIs use two's complement. */

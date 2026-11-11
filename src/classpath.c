@@ -14,8 +14,8 @@ static JbvStatus arraycopy(JbvVM *vm, const int32_t *a) {
     status = jbv_object(vm, a[0], &from); if (status != JBV_OK) return status;
     status = jbv_object(vm, a[2], &to); if (status != JBV_OK) return status;
     if (!from->type->array_kind || from->type->array_kind != to->type->array_kind) return JBV_ARRAY_STORE;
-    if (a[1] < 0 || a[3] < 0 || a[4] < 0 || (uint32_t)a[1] > from->length || (uint32_t)a[3] > to->length ||
-        (uint32_t)a[4] > from->length - (uint32_t)a[1] || (uint32_t)a[4] > to->length - (uint32_t)a[3]) return JBV_ARRAY_BOUNDS;
+    if (a[1] < 0 || a[3] < 0 || a[4] < 0 || (uint32_t)a[1] > jbv_length(from) || (uint32_t)a[3] > jbv_length(to) ||
+        (uint32_t)a[4] > jbv_length(from) - (uint32_t)a[1] || (uint32_t)a[4] > jbv_length(to) - (uint32_t)a[3]) return JBV_ARRAY_BOUNDS;
     width = jbv_element_bytes(from->type->array_kind);
     if (width < 4) {   /* packed boolean/byte/char/short: copy bytes, backwards on overlap */
         uint8_t *s = (uint8_t *)(from + 1) + (uint32_t)a[1] * width, *d = (uint8_t *)(to + 1) + (uint32_t)a[3] * width;
