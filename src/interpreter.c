@@ -628,6 +628,8 @@ JBV_GC JbvStatus jbv_core_finish(JbvActivation *act) {
     act->core.status = JBV_OK; act->asm_frame = 0;
     status = jbv_run(act->core.vm, act, status, &act->core.result);
     jbv_core_leave(act);
+    /* the caller in the core takes the table and young region from here */
+    act->core.handles = act->core.vm->handles; act->core.nursery = act->core.vm->nursery; act->core.nursery_size = act->core.vm->nursery_size;
     return status;
 }
 #endif

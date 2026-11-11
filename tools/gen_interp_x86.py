@@ -231,11 +231,13 @@ def call(size, n):
         'call enter_run',                                                                     # eax = status; [esp] = callee
         f'cmp eax, {CORE_LIMIT}', f'je call_limit_{n}',
         'pop ecx', f'mov edx, [ecx+{ACT_CALLER}]',
-        f'movq xmm0, QWORD PTR [ecx+{S["result"]}]', f'movq QWORD PTR [edx+{S["result"]}], xmm0',
+        f'movq xmm0, QWORD PTR [ecx+{S["result"]}]',
+        f'mov esi, [ecx+{S["handles"]}]', f'mov [edx+{S["handles"]}], esi',
+        f'movq xmm1, QWORD PTR [ecx+{S["nursery"]}]', f'movq QWORD PTR [edx+{S["nursery"]}], xmm1',
         f'mov ebx, [ecx+{ACT_ARGBASE}]', f'mov ebp, [ecx+{ACT_FRAME + F_METHOD}]', 'movzx ebp, BYTE PTR [ebp+METHOD_RESULT]', f'add esp, {ACT_SIZE}',
         f'mov edi, [edx+{S["locals"]}]', f'mov esi, [edx+{S["code"]}]', f'add esi, [edx+{S["pc"]}]', 'inc esi',
         'test eax, eax', 'jnz frame_failed', f'add esi, {size}', 'mov ecx, ebp', f'mov ebp, [edx+{S["refs"]}]',
-        f'jmp call_result_{n}',
+        f'jmp call_kind_{n}',
         f'call_limit_{n}:', 'pop eax', f'add esp, {ACT_SIZE}', 'jmp exit_op',               # limits: C reports them (esi, ebx kept)
         # accessors, inline once the field is resolved: getter (receiver -> value), int setter
         f'acc_{n}:', 'push ecx', 'push eax', 'mov ecx, [edx+METHOD_CODE]',
@@ -266,10 +268,12 @@ def call(size, n):
         f'call_result_{n}:',
         f'mov eax, [edx+{S["vm"]}]', 'push ecx', f'mov ecx, [eax+{VM_HANDLES}]', f'mov [edx+{S["handles"]}], ecx',
         f'mov ecx, [eax+{VM_NURSERY}]', f'mov [edx+{S["nursery"]}], ecx', f'mov ecx, [eax+{VM_NURSERY_SIZE}]', f'mov [edx+{S["nursery_size"]}], ecx', 'pop ecx',
+        f'movq xmm0, QWORD PTR [edx+{S["result"]}]',
+        f'call_kind_{n}:',                                                                    # xmm0 = the result
         'test ecx, ecx', f'jz fd_void_{n}', 'cmp cl, 3', f'je fd_wide_{n}', 'cmp cl, 6', f'je fd_wide_{n}',
         'cmp cl, 2', 'sete al', 'mov [ebp+ebx], al',
-        f'mov eax, [edx+{S["result"]}]', 'mov [edi+ebx*4], eax', 'inc ebx', 'DISPATCH',
-        f'fd_wide_{n}:', f'movq xmm0, QWORD PTR [edx+{S["result"]}]', 'movq QWORD PTR [edi+ebx*4], xmm0',
+        'movd eax, xmm0', 'mov [edi+ebx*4], eax', 'inc ebx', 'DISPATCH',
+        f'fd_wide_{n}:', 'movq QWORD PTR [edi+ebx*4], xmm0',
         'mov BYTE PTR [ebp+ebx], 0', 'mov BYTE PTR [ebp+ebx+1], 0', 'add ebx, 2', 'mov eax, [edi+ebx*4-4]', 'DISPATCH',
         f'fd_void_{n}:', 'mov eax, [edi+ebx*4-4]', 'DISPATCH']
 body.append('call_failed:                     ; eax = status, edx = state; esi just past the opcode\n'

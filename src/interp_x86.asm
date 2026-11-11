@@ -2267,7 +2267,10 @@ acc_back_st:
     pop ecx
     mov edx, [ecx+88]
     movq xmm0, QWORD PTR [ecx+48]
-    movq QWORD PTR [edx+48], xmm0
+    mov esi, [ecx+20]
+    mov [edx+20], esi
+    movq xmm1, QWORD PTR [ecx+36]
+    movq QWORD PTR [edx+36], xmm1
     mov ebx, [ecx+96]
     mov ebp, [ecx+64]
     movzx ebp, BYTE PTR [ebp+METHOD_RESULT]
@@ -2281,7 +2284,7 @@ acc_back_st:
     add esi, 2
     mov ecx, ebp
     mov ebp, [edx+8]
-    jmp call_result_st
+    jmp call_kind_st
 call_limit_st:
     pop eax
     add esp, 112
@@ -2395,6 +2398,8 @@ call_result_st:
     mov ecx, [eax+1992]
     mov [edx+40], ecx
     pop ecx
+    movq xmm0, QWORD PTR [edx+48]
+call_kind_st:
     test ecx, ecx
     jz fd_void_st
     cmp cl, 3
@@ -2404,12 +2409,11 @@ call_result_st:
     cmp cl, 2
     sete al
     mov [ebp+ebx], al
-    mov eax, [edx+48]
+    movd eax, xmm0
     mov [edi+ebx*4], eax
     inc ebx
     DISPATCH
 fd_wide_st:
-    movq xmm0, QWORD PTR [edx+48]
     movq QWORD PTR [edi+ebx*4], xmm0
     mov BYTE PTR [ebp+ebx], 0
     mov BYTE PTR [ebp+ebx+1], 0
@@ -2511,7 +2515,10 @@ acc_back_182:
     pop ecx
     mov edx, [ecx+88]
     movq xmm0, QWORD PTR [ecx+48]
-    movq QWORD PTR [edx+48], xmm0
+    mov esi, [ecx+20]
+    mov [edx+20], esi
+    movq xmm1, QWORD PTR [ecx+36]
+    movq QWORD PTR [edx+36], xmm1
     mov ebx, [ecx+96]
     mov ebp, [ecx+64]
     movzx ebp, BYTE PTR [ebp+METHOD_RESULT]
@@ -2525,7 +2532,7 @@ acc_back_182:
     add esi, 2
     mov ecx, ebp
     mov ebp, [edx+8]
-    jmp call_result_182
+    jmp call_kind_182
 call_limit_182:
     pop eax
     add esp, 112
@@ -2639,6 +2646,8 @@ call_result_182:
     mov ecx, [eax+1992]
     mov [edx+40], ecx
     pop ecx
+    movq xmm0, QWORD PTR [edx+48]
+call_kind_182:
     test ecx, ecx
     jz fd_void_182
     cmp cl, 3
@@ -2648,12 +2657,11 @@ call_result_182:
     cmp cl, 2
     sete al
     mov [ebp+ebx], al
-    mov eax, [edx+48]
+    movd eax, xmm0
     mov [edi+ebx*4], eax
     inc ebx
     DISPATCH
 fd_wide_182:
-    movq xmm0, QWORD PTR [edx+48]
     movq QWORD PTR [edi+ebx*4], xmm0
     mov BYTE PTR [ebp+ebx], 0
     mov BYTE PTR [ebp+ebx+1], 0
@@ -2755,7 +2763,10 @@ acc_back_185:
     pop ecx
     mov edx, [ecx+88]
     movq xmm0, QWORD PTR [ecx+48]
-    movq QWORD PTR [edx+48], xmm0
+    mov esi, [ecx+20]
+    mov [edx+20], esi
+    movq xmm1, QWORD PTR [ecx+36]
+    movq QWORD PTR [edx+36], xmm1
     mov ebx, [ecx+96]
     mov ebp, [ecx+64]
     movzx ebp, BYTE PTR [ebp+METHOD_RESULT]
@@ -2769,7 +2780,7 @@ acc_back_185:
     add esi, 4
     mov ecx, ebp
     mov ebp, [edx+8]
-    jmp call_result_185
+    jmp call_kind_185
 call_limit_185:
     pop eax
     add esp, 112
@@ -2883,6 +2894,8 @@ call_result_185:
     mov ecx, [eax+1992]
     mov [edx+40], ecx
     pop ecx
+    movq xmm0, QWORD PTR [edx+48]
+call_kind_185:
     test ecx, ecx
     jz fd_void_185
     cmp cl, 3
@@ -2892,12 +2905,11 @@ call_result_185:
     cmp cl, 2
     sete al
     mov [ebp+ebx], al
-    mov eax, [edx+48]
+    movd eax, xmm0
     mov [edi+ebx*4], eax
     inc ebx
     DISPATCH
 fd_wide_185:
-    movq xmm0, QWORD PTR [edx+48]
     movq QWORD PTR [edi+ebx*4], xmm0
     mov BYTE PTR [ebp+ebx], 0
     mov BYTE PTR [ebp+ebx+1], 0
@@ -2965,7 +2977,10 @@ acc_back_sp:
     pop ecx
     mov edx, [ecx+88]
     movq xmm0, QWORD PTR [ecx+48]
-    movq QWORD PTR [edx+48], xmm0
+    mov esi, [ecx+20]
+    mov [edx+20], esi
+    movq xmm1, QWORD PTR [ecx+36]
+    movq QWORD PTR [edx+36], xmm1
     mov ebx, [ecx+96]
     mov ebp, [ecx+64]
     movzx ebp, BYTE PTR [ebp+METHOD_RESULT]
@@ -2979,7 +2994,7 @@ acc_back_sp:
     add esi, 2
     mov ecx, ebp
     mov ebp, [edx+8]
-    jmp call_result_sp
+    jmp call_kind_sp
 call_limit_sp:
     pop eax
     add esp, 112
@@ -3093,6 +3108,8 @@ call_result_sp:
     mov ecx, [eax+1992]
     mov [edx+40], ecx
     pop ecx
+    movq xmm0, QWORD PTR [edx+48]
+call_kind_sp:
     test ecx, ecx
     jz fd_void_sp
     cmp cl, 3
@@ -3102,12 +3119,11 @@ call_result_sp:
     cmp cl, 2
     sete al
     mov [ebp+ebx], al
-    mov eax, [edx+48]
+    movd eax, xmm0
     mov [edi+ebx*4], eax
     inc ebx
     DISPATCH
 fd_wide_sp:
-    movq xmm0, QWORD PTR [edx+48]
     movq QWORD PTR [edi+ebx*4], xmm0
     mov BYTE PTR [ebp+ebx], 0
     mov BYTE PTR [ebp+ebx+1], 0
