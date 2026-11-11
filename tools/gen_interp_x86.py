@@ -23,7 +23,8 @@ ACT_C, ACT_M, ACT_LOCALS, ACT_STACK, ACT_LREFS, ACT_SREFS, ACT_SAVED, ACT_FRAME 
 F_PREV, F_OWNER, F_METHOD, F_PC, F_SP, F_BASE, F_LOCALS, F_MON = 0, 4, 8, 12, 16, 20, 24, 28   # JbvFrame
 VM_MAX_SLOTS, VM_MAX_DEPTH, VM_SLOTS, VM_USED, VM_DEPTH, VM_REMAINING, VM_REFS, VM_FRAMES = 12, 16, 336, 340, 344, 352, 364, 368
 CORE_LIMIT = 0x4C494D00   # enter_run: over a limit, nothing linked
-VM_NURSERY, VM_NURSERY_TOP, VM_NURSERY_SIZE, VM_HEAP_BYTES, VM_HEAP_LIMIT, VM_FREE_HANDLE, VM_GENERATIONS, VM_OBJECT_COUNT, VM_HANDLES = 1984, 1988, 1992, 2036, 2040, 396, 380, 400, 376
+VM_NURSERY, VM_NURSERY_TOP, VM_NURSERY_SIZE, VM_HEAP_BYTES, VM_HEAP_LIMIT, VM_CURSOR, VM_GENERATIONS, VM_OBJECT_COUNT, VM_HANDLES = 1984, 1988, 1992, 2036, 2040, 396, 380, 400, 376
+VM_CAPACITY, VM_USED_BITS, VM_YOUNG = 392, 2108, 2112
 LINK_SPECIAL_OWNER, LINK_SPECIAL, LINK_TRIVIAL, LINK_ADDRESS, LINK_PIC_SEEN, LINK_PIC_OWNER, LINK_PIC_TARGET = 24, 28, 43, 44, 48, 60, 72
 
 handlers = {}   # opcode -> label
@@ -293,18 +294,22 @@ def reload_after_call():   # edx = state
 handler([187], 'op_new', lines(['movzx ecx, WORD PTR [esi]', 'xchg cl, ch', f'imul ecx, ecx, {CONSTANT_SIZE}', 'mov edx, [esp]',
     f'add ecx, [edx+{STATE["pool"]}]', 'cmp BYTE PTR [ecx], 7', 'jne exit_op', f'mov ecx, [ecx+{CONSTANT_LINK}]', 'test ecx, ecx', 'jz exit_op',
     'cmp BYTE PTR [ecx+CLASS_INIT], 2', 'jne exit_op', 'test WORD PTR [ecx+CLASS_FLAGS], 0600h', 'jnz exit_op',
-    'IF JBV_GC_STRESS EQ 0',   # a plain object in the pre-zeroed young region, a free handle
-    'mov edx, [esp]', f'mov edx, [edx+{STATE["vm"]}]', f'cmp DWORD PTR [edx+{VM_FREE_HANDLE}], 0', 'je new_c',
+    'IF JBV_GC_STRESS EQ 0',   # a plain object in the pre-zeroed young region, a free handle at the cursor
+    'mov edx, [esp]', f'mov edx, [edx+{STATE["vm"]}]',
+    f'mov eax, [edx+{VM_OBJECT_COUNT}]', f'cmp eax, [edx+{VM_CAPACITY}]', 'jae new_c',   # a handle is free (and the bitmaps exist)
     'mov eax, [ecx+CLASS_SLOTS]', 'lea eax, [eax*4+8]', 'cmp eax, 516', 'ja new_c',
-    'push esi', 'push ebx', f'mov esi, [edx+{VM_NURSERY}]', f'add esi, [edx+{VM_NURSERY_SIZE}]', f'sub esi, [edx+{VM_NURSERY_TOP}]',
+    'push esi', 'push ebx', 'push ecx', 'push eax',                                   # bytes, class, ebx, esi
+    f'mov esi, [edx+{VM_NURSERY}]', f'add esi, [edx+{VM_NURSERY_SIZE}]', f'sub esi, [edx+{VM_NURSERY_TOP}]',
     'cmp esi, eax', 'jb new_c_pop', f'mov esi, [edx+{VM_HEAP_LIMIT}]', f'sub esi, [edx+{VM_HEAP_BYTES}]', 'jb new_c_pop', 'cmp esi, eax', 'jb new_c_pop',
-    f'add [edx+{VM_HEAP_BYTES}], eax', f'mov esi, [edx+{VM_NURSERY_TOP}]', f'add [edx+{VM_NURSERY_TOP}], eax',
-    'mov [esi+4], ecx', f'mov eax, [edx+{VM_FREE_HANDLE}]', f'mov ecx, [edx+{VM_HANDLES}]',
-    'mov ebx, [ecx+eax*4]', 'shr ebx, 1', f'mov [edx+{VM_FREE_HANDLE}], ebx', 'lea ebx, [esi+4]', 'mov [ecx+eax*4], ebx',
-    f'inc DWORD PTR [edx+{VM_OBJECT_COUNT}]', 'lea ebx, [eax+eax]', 'mov [esi], ebx',
-    f'mov ecx, [edx+{VM_GENERATIONS}]', 'movzx ecx, BYTE PTR [ecx+eax]', 'shl ecx, 24', 'or eax, ecx',
+    f'mov esi, [edx+{VM_USED_BITS}]', f'mov ebx, [edx+{VM_CURSOR}]', 'mov eax, [esi+ebx*4]', 'not eax', 'bsf ecx, eax', 'jz new_c_pop',   # else C searches on
+    'mov eax, 1', 'shl eax, cl', 'or [esi+ebx*4], eax', f'mov esi, [edx+{VM_YOUNG}]', 'or [esi+ebx*4], eax',
+    'shl ebx, 5', 'or ebx, ecx', f'inc DWORD PTR [edx+{VM_OBJECT_COUNT}]',                # ebx = handle index
+    f'mov ecx, [edx+{VM_GENERATIONS}]', 'movzx eax, BYTE PTR [ecx+ebx]', 'inc eax', 'cmp eax, 128', 'jb @F', 'mov eax, 1', '@@:',
+    'mov [ecx+ebx], al', 'shl eax, 24', 'or eax, ebx',                                    # eax = the reference
+    'pop ecx', f'add [edx+{VM_HEAP_BYTES}], ecx', f'mov esi, [edx+{VM_NURSERY_TOP}]', f'add [edx+{VM_NURSERY_TOP}], ecx',
+    'pop ecx', 'mov [esi+4], ecx', 'lea ecx, [esi+4]', f'mov esi, [edx+{VM_HANDLES}]', 'mov [esi+ebx*4], ecx',
     'pop ebx', 'pop esi', 'mov [edi+ebx*4], eax', 'mov BYTE PTR [ebp+ebx], 1', 'inc ebx', 'add esi, 2', 'DISPATCH',
-    'new_c_pop:', 'pop ebx', 'pop esi', 'new_c:', 'ENDIF'],
+    'new_c_pop:', 'pop eax', 'pop ecx', 'pop ebx', 'pop esi', 'new_c:', 'ENDIF'],
     sync_frame(), ['mov edx, ecx', 'mov ecx, [esp]', f'lea eax, [ecx+{STATE["result"]}]', 'push eax', 'push 0',
     f'mov ecx, [ecx+{STATE["vm"]}]', 'call @jbv_new@16', 'mov edx, [esp]', 'test eax, eax', 'jnz call_failed'], reload_after_call(),
     [f'mov eax, [edx+{STATE["result"]}]', 'mov [edi+ebx*4], eax', 'mov BYTE PTR [ebp+ebx], 1', 'inc ebx', 'add esi, 2'], DISPATCH))

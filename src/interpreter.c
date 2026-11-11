@@ -266,6 +266,10 @@ JBV_LAYOUT(activation, sizeof(JbvCoreState) == 88 && offsetof(JbvActivation, fra
 JBV_LAYOUT(vm, offsetof(JbvVM, config.max_slots) == 12 && offsetof(JbvVM, config.max_depth) == 16 && offsetof(JbvVM, slots) == 336 &&
     offsetof(JbvVM, used_slots) == 340 && offsetof(JbvVM, depth) == 344 && offsetof(JbvVM, remaining) == 352 &&
     offsetof(JbvVM, slot_refs) == 364 && offsetof(JbvVM, frames) == 368);
+JBV_LAYOUT(vm_alloc, offsetof(JbvVM, nursery) == 1984 && offsetof(JbvVM, nursery_top) == 1988 && offsetof(JbvVM, nursery_size) == 1992 &&
+    offsetof(JbvVM, heap_bytes) == 2036 && offsetof(JbvVM, heap_limit) == 2040 && offsetof(JbvVM, handle_cursor) == 396 &&
+    offsetof(JbvVM, generations) == 380 && offsetof(JbvVM, object_count) == 400 && offsetof(JbvVM, handles) == 376 &&
+    offsetof(JbvVM, handle_capacity) == 392 && offsetof(JbvVM, used) == 2108 && offsetof(JbvVM, young) == 2112);
 JBV_LAYOUT(method, offsetof(JbvMethod, max_stack) == 2 && offsetof(JbvMethod, descriptor) == 16 && offsetof(JbvText, size) == 4 &&
     offsetof(JbvMethod, code) == (JBV_PROFILE_FULL ? 28 : 24) && offsetof(JbvMethod, argument_slots) == (JBV_PROFILE_FULL ? 36 : 32) &&
     offsetof(JbvMethod, result_kind) == (JBV_PROFILE_FULL ? 38 : 34) && offsetof(JbvClass, pool) == 8 && offsetof(JbvFrame, base) == 20 &&

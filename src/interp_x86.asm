@@ -3014,14 +3014,17 @@ op_new:
     IF JBV_GC_STRESS EQ 0
     mov edx, [esp]
     mov edx, [edx+32]
-    cmp DWORD PTR [edx+396], 0
-    je new_c
+    mov eax, [edx+400]
+    cmp eax, [edx+392]
+    jae new_c
     mov eax, [ecx+CLASS_SLOTS]
     lea eax, [eax*4+8]
     cmp eax, 516
     ja new_c
     push esi
     push ebx
+    push ecx
+    push eax
     mov esi, [edx+1984]
     add esi, [edx+1992]
     sub esi, [edx+1988]
@@ -3032,24 +3035,39 @@ op_new:
     jb new_c_pop
     cmp esi, eax
     jb new_c_pop
-    add [edx+2036], eax
-    mov esi, [edx+1988]
-    add [edx+1988], eax
-    mov [esi+4], ecx
-    mov eax, [edx+396]
-    mov ecx, [edx+376]
-    mov ebx, [ecx+eax*4]
-    shr ebx, 1
-    mov [edx+396], ebx
-    lea ebx, [esi+4]
-    mov [ecx+eax*4], ebx
+    mov esi, [edx+2108]
+    mov ebx, [edx+396]
+    mov eax, [esi+ebx*4]
+    not eax
+    bsf ecx, eax
+    jz new_c_pop
+    mov eax, 1
+    shl eax, cl
+    or [esi+ebx*4], eax
+    mov esi, [edx+2112]
+    or [esi+ebx*4], eax
+    shl ebx, 5
+    or ebx, ecx
     inc DWORD PTR [edx+400]
-    lea ebx, [eax+eax]
-    mov [esi], ebx
     mov ecx, [edx+380]
-    movzx ecx, BYTE PTR [ecx+eax]
-    shl ecx, 24
-    or eax, ecx
+    movzx eax, BYTE PTR [ecx+ebx]
+    inc eax
+    cmp eax, 128
+    jb @F
+    mov eax, 1
+@@:
+    mov [ecx+ebx], al
+    shl eax, 24
+    or eax, ebx
+    pop ecx
+    add [edx+2036], ecx
+    mov esi, [edx+1988]
+    add [edx+1988], ecx
+    pop ecx
+    mov [esi+4], ecx
+    lea ecx, [esi+4]
+    mov esi, [edx+376]
+    mov [esi+ebx*4], ecx
     pop ebx
     pop esi
     mov [edi+ebx*4], eax
@@ -3058,6 +3076,8 @@ op_new:
     add esi, 2
     DISPATCH
 new_c_pop:
+    pop eax
+    pop ecx
     pop ebx
     pop esi
 new_c:

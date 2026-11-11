@@ -149,7 +149,7 @@ struct JbvVM {
     uintptr_t *handles;       /* object pointer, or (next free index << 1) | 1 */
     uint8_t *generations;     /* per handle, 1..127, bumped when the slot is freed */
     uint32_t *marks, *interned; /* per-handle bitmaps: GC mark, weak intern membership */
-    uint32_t handle_capacity, free_handle, object_count;
+    uint32_t handle_capacity, handle_cursor, object_count;   /* cursor: the bitmap word where allocation looks first */
     JbvPin *pins;             /* host/native retain counts; few at a time */
     uint32_t pin_count, pin_capacity;
     uint8_t *bump, *bump_end; /* small-block heap: chunks, bump pointer, size-class free lists */
@@ -179,6 +179,7 @@ struct JbvVM {
     JbvMonitor *monitors;
     uint32_t monitor_capacity;
     JbvArchive library, app; /* Built-in class library and the application JAR. */
+    uint32_t *used, *young;   /* per-handle bitmaps: allocated (0 and the tail always set), young object */
 };
 
 void *jbv_alloc(JbvVM *vm, size_t bytes);
