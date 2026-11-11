@@ -58,7 +58,7 @@ JbvStatus jbv_box(JbvVM *vm, uint8_t code, uint64_t bits, int32_t *out) {
         if (jbv_text_is(method->name, "valueOf") && method->descriptor.data[1] == code && method->descriptor.data[2] == ')') {
             jbv_put_bits(args, bits, jbv_kind(code));
             status = jbv_initialize(vm, type);
-            if (status == JBV_OK) status = jbv_execute(vm, type, method, args, 0, (uint16_t)jbv_width(jbv_kind(code)), &result);
+            if (status == JBV_OK) status = JBV_CALL_OUT(vm, jbv_execute(vm, type, method, args, 0, (uint16_t)jbv_width(jbv_kind(code)), &result));
             if (status == JBV_OK) *out = (int32_t)result;
             return status;
         }

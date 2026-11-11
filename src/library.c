@@ -315,11 +315,12 @@ static JbvStatus JBV_CALL java_native(JbvVM *vm, void *user, const int32_t *a, u
         if (!h || !(h->flags & JBV_STATIC)) return JBV_LINKAGE_ERROR;
         m->lines = (const uint8_t *)(uintptr_t)h;
     }
-    if (!init) return jbv_execute(vm, helper, h, a, 0, count, out);
-    status = jbv_object(vm, a[0], &self);
-    if (status == JBV_OK) status = jbv_execute(vm, helper, h, a + 1, 0, (uint16_t)(count - 1), out);
+    /* Arguments are refs in the native frame; no raw pointer is held across the call. */
+    if (!init) return JBV_SAFE_CALL(vm, jbv_execute(vm, helper, h, a, 0, count, out));
+    status = JBV_SAFE_CALL(vm, jbv_execute(vm, helper, h, a + 1, 0, (uint16_t)(count - 1), out));
+    if (status == JBV_OK) status = jbv_object(vm, a[0], &self);
     if (status == JBV_OK) status = jbv_object(vm, (int32_t)(uint32_t)*out, &made);
-    if (status == JBV_OK) for (i = 0; i < self->type->instance_slots; ++i) jbv_data(self)[i] = jbv_data(made)[i];
+    if (status == JBV_OK) for (i = 0; i < self->type->instance_slots; ++i) { jbv_data(self)[i] = jbv_data(made)[i]; jbv_barrier_checked(vm, self, jbv_data(self)[i]); }
     *out = 0;
     return status;
 }

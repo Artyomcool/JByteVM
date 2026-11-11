@@ -121,7 +121,7 @@ static JbvStatus generics(JbvVM *vm, int32_t mirror, uint32_t what, uint64_t *ou
     m = jbv_find_method(g, jbv_text("ofClass"), jbv_text("(Ljava/lang/Class;I)Ljava/lang/Object;"));
     if (!m) return JBV_LINKAGE_ERROR;
     args[0] = mirror; args[1] = (int32_t)what;
-    return jbv_execute(vm, g, m, args, refs, 2, out);
+    return JBV_CALL_OUT(vm, jbv_execute(vm, g, m, args, refs, 2, out));
 }
 JbvStatus jbv_reflect_class(JbvVM *vm, uint32_t op, const int32_t *a, uint64_t *out) {
     JbvClass *c = 0;
@@ -332,7 +332,8 @@ static JbvStatus invoke(JbvVM *vm, Member m, JbvObject *member, int32_t receiver
         method=jbv_virtual_method(&actual,m.owner,method);m.owner=actual;
     }
     if (!method || (method->flags & JBV_ABSTRACT)) status=error(vm,"java/lang/AbstractMethodError");
-    else status=jbv_execute(vm,m.owner,method,slots,refs,(uint16_t)used,&bits);
+    /* Only refs (in slots) and metadata survive this call: objects may move inside it. */
+    else status=JBV_SAFE_CALL(vm, jbv_execute(vm,m.owner,method,slots,refs,(uint16_t)used,&bits));
     if(status!=JBV_OK) {
         if(vm->exception) status=jbv_throw_named(vm,R "InvocationTargetException",vm->exception,JBV_EXCEPTION);
         goto done;
@@ -346,7 +347,7 @@ done:
 }
 static JbvStatus field(JbvVM *vm, Member m, JbvObject *member, const int32_t *a, int32_t *out) {
     JbvField *f=(JbvField *)m.target;
-    JbvObject *o;
+    JbvObject *o = 0;
     int32_t *location;
     uint64_t bits;
     JbvStatus status=access(vm,m,member,a[1],0);
@@ -356,7 +357,7 @@ static JbvStatus field(JbvVM *vm, Member m, JbvObject *member, const int32_t *a,
     if(f->flags & JBV_STATIC){status=jbv_initialize(vm,m.owner);location=&f->value;}
     else {(void)jbv_object(vm,a[1],&o);location=jbv_data(o)+f->slot;}
     if(status!=JBV_OK)return status;
-    if(a[3] <= 1 && a[3] != 0){status=convert(vm,a[2],f->descriptor,&bits);if(status==JBV_OK)jbv_put_bits(location,bits,jbv_kind(f->descriptor.data[0]));return status;}
+    if(a[3] <= 1 && a[3] != 0){status=convert(vm,a[2],f->descriptor,&bits);if(status==JBV_OK){jbv_put_bits(location,bits,jbv_kind(f->descriptor.data[0]));if(!(f->flags&JBV_STATIC))jbv_barrier_checked(vm,o,location[0]);}return status;}
     bits=jbv_slot_bits(location,jbv_kind(f->descriptor.data[0]));
     if(jbv_reference_type(f->descriptor)){*out=(int32_t)bits;return JBV_OK;}
     return jbv_box(vm,f->descriptor.data[0],bits,out);
@@ -389,7 +390,7 @@ static JbvStatus reflect_array(JbvVM *vm, const int32_t *a, int32_t *out) {
         if(a[2]){status=jbv_object(vm,a[2],&value);if(status!=JBV_OK)return status;if(!jbv_assignable(value->type,c->component))return JBV_BAD_ARGUMENT;}
         bits=(uint32_t)a[2];
     }else{JbvText t={&code,1};status=convert(vm,a[2],t,&bits);if(status!=JBV_OK)return status;}
-    jbv_array_set(o,(uint32_t)a[1],code,bits);return JBV_OK;
+    jbv_array_set(o,(uint32_t)a[1],code,bits);if(code=='L')jbv_barrier_checked(vm,o,(int32_t)(uint32_t)bits);return JBV_OK;
 }
 JbvStatus JBV_CALL jbv_reflect_native(JbvVM *vm, void *user, const int32_t *a, uint16_t count, uint64_t *out) {
     uint32_t op=(uint32_t)(uintptr_t)user;

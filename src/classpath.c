@@ -38,6 +38,7 @@ static JbvStatus arraycopy(JbvVM *vm, const int32_t *a) {
     } else if (from == to && a[3] > a[1]) {
         i = (uint32_t)a[4] * width; while (i--) dst[i] = src[i];
     } else for (i = 0; i < (uint32_t)a[4] * width; ++i) dst[i] = src[i];
+    if (from->type->array_kind == 'L') for (i = 0; i < (uint32_t)a[4]; ++i) jbv_barrier_checked(vm, to, dst[i]);
     return JBV_OK;
 }
 static uint64_t integral_round(uint64_t bits, int mode) {

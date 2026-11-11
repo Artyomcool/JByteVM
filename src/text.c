@@ -195,7 +195,7 @@ static JbvStatus builder_buffer(JbvVM *vm, JbvObject *o, uint32_t minimum, JbvTe
     status = char_array(vm, n, &ref, &data);
     if (status != JBV_OK) return status;
     for (i = 0; i < (uint32_t)fields[1]; ++i) data[i] = view->data[i];
-    fields[0] = ref; view->data = data; view->length = n;
+    fields[0] = ref; jbv_barrier_checked(vm, (JbvObject *)fields - 1, ref); view->data = data; view->length = n;
     return JBV_OK;
 }
 static JbvStatus builder_call(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *a, uint16_t count, int32_t *out) {
@@ -216,7 +216,7 @@ static JbvStatus builder_call(JbvVM *vm, uint32_t op, uint8_t kind, const int32_
         status = char_array(vm, length, &ref, &text.data);
         if (status != JBV_OK) return status;
         for (i = 0; i < length; ++i) text.data[i] = buffer.data[i];
-        fields[0] = ref; return JBV_OK;
+        fields[0] = ref; jbv_barrier_checked(vm, (JbvObject *)fields - 1, ref); return JBV_OK;
     case A_DELETE: case A_DELETE_CHAR:
         start = a[1]; end = op == A_DELETE_CHAR ? start : a[2];
         if (start < 0 || (uint32_t)start > length || end < start || (op == A_DELETE_CHAR && (uint32_t)start == length)) return string_bounds(vm);
@@ -283,7 +283,7 @@ static JbvStatus builder_call(JbvVM *vm, uint32_t op, uint8_t kind, const int32_
             if (capacity < 0) return JBV_NEGATIVE_ARRAY_SIZE;
             /* Constructor capacity is exact, unlike ensureCapacity growth. */
             status = char_array(vm, (uint32_t)capacity, &ref, &buffer.data);
-            if (status == JBV_OK) { fields[0] = ref; fields[1] = 0; }
+            if (status == JBV_OK) { fields[0] = ref; fields[1] = 0; jbv_barrier_checked(vm, (JbvObject *)fields - 1, ref); }
             return status;
         }
         if (!a[1]) return JBV_NULL_REFERENCE;
@@ -425,7 +425,7 @@ JbvStatus jbv_text_native(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *a
         if (kind == 'L') {
             status = jbv_string_view(vm, a[1], &other);
             if (status != JBV_OK) return status;
-            (void)jbv_object(vm, a[1], &o); jbv_data(s)[0] = jbv_data(o)[0]; break;
+            (void)jbv_object(vm, a[1], &o); jbv_data(s)[0] = jbv_data(o)[0]; jbv_barrier_checked(vm, s, jbv_data(s)[0]); break;
         }
         status = array_view(vm, a[1], &other);
         if (status != JBV_OK) return status;
@@ -434,7 +434,7 @@ JbvStatus jbv_text_native(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *a
         status = char_array(vm, (uint32_t)end, &result, &data);
         if (status != JBV_OK) return status;
         for (i = 0; i < (uint32_t)end; ++i) data[i] = other.data[start+i];
-        jbv_data(s)[0] = result; result = 0; break;
+        jbv_data(s)[0] = result; jbv_barrier_checked(vm, s, result); result = 0; break;
     case S_LENGTH: result = (int32_t)text.length; break;
     case S_EMPTY: result = text.length == 0; break;
     case S_TEXT: result = a[0]; break;

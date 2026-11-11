@@ -179,11 +179,12 @@ static JbvStatus invoke_handle(JbvVM *vm, int32_t ref, int32_t array_ref, int32_
         else { (void)jbv_object(vm, slots[0], &receiver); location = jbv_data(receiver)+field->slot; }
         if (status != JBV_OK) goto done;
         if (kind == 1 || kind == 2) bits = jbv_slot_bits(location, jbv_kind(field->descriptor.data[0]));
-        else jbv_put_bits(location, jbv_slot_bits(slots+(kind == 3), jbv_kind(field->descriptor.data[0])), jbv_kind(field->descriptor.data[0]));
+        else { jbv_put_bits(location, jbv_slot_bits(slots+(kind == 3), jbv_kind(field->descriptor.data[0])), jbv_kind(field->descriptor.data[0]));
+            if (receiver) jbv_barrier_checked(vm, receiver, location[0]); }
     } else {
         if (!method || (method->flags & JBV_ABSTRACT)) { status = jbv_throw_named(vm, "java/lang/AbstractMethodError", 0, JBV_LINKAGE_ERROR); goto done; }
         if (method->flags & JBV_STATIC) status = jbv_initialize(vm, owner);
-        if (status == JBV_OK) status = jbv_execute(vm, owner, method, slots, refs, (uint16_t)used, &bits);
+        if (status == JBV_OK) status = JBV_CALL_OUT(vm, jbv_execute(vm, owner, method, slots, refs, (uint16_t)used, &bits));
         if (status != JBV_OK) goto done;
         if (kind == 8) bits = (uint32_t)receiver_ref;
     }

@@ -73,20 +73,21 @@ static JbvStatus JBV_CALL exception_native(JbvVM *vm, void *user, const int32_t 
     if (throwable && throwable->instance_slots > 3 && id <= E_OPTIONS) {
         JbvMethod *ctor = jbv_find_method(throwable, jbv_text("<init>"), jbv_text(methods[id].descriptor));
         uint64_t ignored;
-        return ctor ? jbv_execute(vm, throwable, ctor, a, 0, count, &ignored) : JBV_NOT_FOUND;
+        return ctor ? JBV_CALL_OUT(vm, jbv_execute(vm, throwable, ctor, a, 0, count, &ignored)) : JBV_NOT_FOUND;
     }
     switch (id) {
     case E_INIT: case E_MESSAGE: case E_CAUSE_INIT: case E_BOTH: case E_OPTIONS:
         fields[0] = id == E_MESSAGE || id == E_BOTH || id == E_OPTIONS ? a[1] : 0;
         fields[1] = id == E_CAUSE_INIT ? a[1] : id == E_BOTH || id == E_OPTIONS ? a[2] : a[0];
         fields[2] = 0;
+        jbv_barrier_checked(vm, object, fields[0]); jbv_barrier_checked(vm, object, fields[1]);
         return JBV_OK;
     case E_GET_MESSAGE: *out = fields[0]; return JBV_OK;
     case E_GET_CAUSE: *out = fields[1] == a[0] ? 0 : fields[1]; return JBV_OK;
     case E_INIT_CAUSE:
         if (fields[1] != a[0]) return JBV_ILLEGAL_STATE; /* IllegalStateException */
         if (a[1] == a[0]) return JBV_BAD_ARGUMENT;
-        fields[1] = a[1]; *out = a[0]; return JBV_OK;
+        fields[1] = a[1]; jbv_barrier_checked(vm, object, a[1]); *out = a[0]; return JBV_OK;
     case E_ADD_SUPPRESSED:
         if (!a[1]) return JBV_NULL_REFERENCE;
         if (a[1] == a[0]) return JBV_BAD_ARGUMENT;
@@ -105,7 +106,7 @@ static JbvStatus JBV_CALL exception_native(JbvVM *vm, void *user, const int32_t 
     if (status == JBV_OK) status = jbv_object(vm, ref, &array);
     if (status != JBV_OK) return status;
     for (i = 0; i < length; ++i) jbv_data(array)[i] = jbv_data(old)[i];
-    if (id == E_ADD_SUPPRESSED) { jbv_data(array)[length] = a[1]; fields[2] = ref; }
+    if (id == E_ADD_SUPPRESSED) { jbv_data(array)[length] = a[1]; jbv_barrier_checked(vm, array, a[1]); fields[2] = ref; jbv_barrier_checked(vm, object, ref); }
     else *out = ref;
     return JBV_OK;
 }

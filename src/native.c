@@ -292,6 +292,7 @@ JBV_API JbvStatus JBV_CALL jbv_set_field(JbvVM *vm, const JbvFieldId *id, JbvRef
     if (status == JBV_OK) {
         if (kind == JBV_INT) value = (uint32_t)jbv_narrow(ref, f->descriptor.data[0]);
         jbv_put_bits(location, value, kind);
+        if (kind == JBV_REF && receiver) { JbvObject *owner; if (jbv_object(vm, receiver, &owner) == JBV_OK) jbv_barrier_checked(vm, owner, ref); }
     }
     if (kind == JBV_REF) (void)jbv_release(vm, ref);
     return status;
@@ -375,7 +376,7 @@ JBV_API JbvStatus JBV_CALL jbv_array_write(JbvVM *vm, JbvRef ref, uint32_t start
             if (!jbv_assignable(object->type, array->type->component)) return JBV_ARRAY_STORE;
         }
     }
-    for (i = 0; i < count; ++i) data[i] = jbv_i32((uint32_t)values[i]);
+    for (i = 0; i < count; ++i) { data[i] = jbv_i32((uint32_t)values[i]); jbv_barrier_checked(vm, array, data[i]); }
     (void)type; (void)width;
     return JBV_OK;
 }

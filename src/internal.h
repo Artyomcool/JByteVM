@@ -121,7 +121,19 @@ struct JbvVM {
     size_t chunk_size;
     void *free_blocks[512 / JBV_ALIGN + 1];
     uint32_t mark_stack[256], mark_top;
-    uint8_t mark_overflow;
+    uint8_t mark_overflow, promote_failed;
+    JbvObject *scanning;      /* object being scanned (remembered-set rebuild) */
+    uint8_t *nursery, *nursery_top; /* young generation: one bump region */
+    size_t nursery_size;
+    uint8_t nursery_disabled;
+    void **remembered;        /* old objects that may reference young ones (write barrier) */
+    uint32_t remembered_count, remembered_capacity;
+    uint8_t remembered_overflow;
+    void **recent;            /* old objects allocated since the last minor collection */
+    uint32_t recent_count, recent_capacity;
+    uint8_t safepoint;        /* set by bytecode allocation: objects may move */
+    uint32_t unsafe;          /* C code below may hold raw object pointers: no moving */
+    uint32_t stress;
     size_t heap_bytes, heap_limit;
     uint64_t collections;
     int32_t exception;
@@ -216,6 +228,20 @@ JBV_INLINE uint32_t jbv_length(const JbvObject *array) { return ((const uint32_t
 JBV_INLINE int jbv_bit(const uint32_t *bits, uint32_t i) { return (int)(bits[i >> 5] >> (i & 31)) & 1; }
 uint32_t jbv_handle_ref(JbvVM *vm, uint32_t index);
 size_t jbv_object_bytes(const JbvObject *object); /* payload after the header */
+/* Write barrier for storing reference `value` into `owner` (fields, array elements). */
+void jbv_remember(JbvVM *vm, JbvObject *owner);
+void jbv_barrier_checked(JbvVM *vm, JbvObject *owner, int32_t value);   /* value may be invalid */
+JBV_INLINE void jbv_barrier(JbvVM *vm, JbvObject *owner, int32_t value) {
+    if (value && (uintptr_t)owner - (uintptr_t)vm->nursery >= vm->nursery_size &&
+        vm->handles[(uint32_t)value & JBV_HANDLE_MASK] - (uintptr_t)vm->nursery < vm->nursery_size) jbv_remember(vm, owner);
+}
+/* Calls from C into Java while C may hold raw object pointers: objects must not move. */
+#define JBV_CALL_OUT(vm, expression) (++(vm)->unsafe, jbv_call_out_done((vm), (expression)))
+JBV_INLINE JbvStatus jbv_call_out_done(JbvVM *vm, JbvStatus status) { --vm->unsafe; return status; }
+/* A built-in native that keeps no raw object pointers across this Java call lifts its
+ * own no-moving mark for the call's duration (objects may move inside). */
+#define JBV_SAFE_CALL(vm, expression) (--(vm)->unsafe, jbv_safe_call_done((vm), (expression)))
+JBV_INLINE JbvStatus jbv_safe_call_done(JbvVM *vm, JbvStatus status) { ++vm->unsafe; return status; }
 JBV_INLINE uint16_t *jbv_chars(JbvObject *object) { return (uint16_t *)(object + 1); }
 /* Preserve the modulo-2^32 result without an out-of-line call at every
  * integer operation. Both supported Windows ABIs use two's complement. */
