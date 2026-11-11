@@ -5,6 +5,8 @@ public final class Method extends Executable {
  public Object getDefaultValue(){return Reflection.info(this,4); }
  public String getName(){return name();}
  public Class<?> getReturnType(){return type();}
+ public Type getGenericReturnType(){return (Type)jbv.runtime.Generics.member(this,1);}
+ @SuppressWarnings("unchecked") public TypeVariable<Method>[] getTypeParameters(){return (TypeVariable<Method>[])jbv.runtime.Generics.member(this,4);}
  public boolean isBridge(){return (getModifiers()&0x40)!=0;}
  public boolean isDefault(){return getDeclaringClass().isInterface()&&(getModifiers()&(Modifier.ABSTRACT|Modifier.STATIC|Modifier.PRIVATE))==0;}
  public Object invoke(Object receiver,Object... args) throws IllegalAccessException,InvocationTargetException {try{return Reflection.invoke(this,receiver,args);}catch(InstantiationException impossible){throw new AssertionError(impossible);}}

@@ -72,6 +72,7 @@ def main():
         run([jdk / "bin/javac.exe", "--release", "25", "-g:none", "-XDstringConcat=inline", "-d", original, *sorted((ROOT / "tests/lambda").glob("*.java"))])
         run([jdk / "bin/java.exe", ROOT / "tools/LowerLambdas.java", original, ROOT / "build/lambda-lowered"])
     run([jdk / "bin/javac.exe", "--release", "25", "-g:none", "-XDstringConcat=inline", "-d", classes, ROOT / "tests/java/Strings.java"])
+    run([jdk / "bin/javac.exe", "--release", "25", "-g:none", "-parameters", "-XDstringConcat=inline", "-d", classes, ROOT / "tests/java/GenericValues.java"])
     # An explicit compiler experiment, not a supported Java language option.
     inline = ROOT / "build/concat-inline"
     inline.mkdir(parents=True, exist_ok=True)
@@ -105,7 +106,7 @@ def main():
         actual_size = run([python, "-c", "import struct; print(struct.calcsize('P'))"], capture_output=True, text=True).stdout.strip()
         if actual_size != str(pointer_size):
             raise SystemExit(f"{python} does not match the {args.arch} target; pass --test-python PATH.")
-        suites = ["test_vm.py", "test_numbers.py", "test_native.py", "test_strings.py", "test_library.py", "test_collections.py", "test_access.py", "test_dynamic.py", "test_reflection.py", "test_diagnostics.py", "test_lambdas.py", "test_prepare.py"]
+        suites = ["test_vm.py", "test_numbers.py", "test_native.py", "test_strings.py", "test_library.py", "test_collections.py", "test_access.py", "test_dynamic.py", "test_reflection.py", "test_diagnostics.py", "test_lambdas.py", "test_util.py", "test_generics.py", "test_prepare.py"]
         if args.profile != "full":
             suites = ["test_vm.py", "test_numbers.py", "test_native.py", "test_access.py"]
             if args.profile == "text": suites.append("test_strings.py")

@@ -6,6 +6,7 @@ public final class Field extends AccessibleObject implements Member {
  public String getName(){return name();}
  public int getModifiers(){return flags();}
  public Class<?> getType(){return type();}
+ public Type getGenericType(){return (Type)jbv.runtime.Generics.member(this,0);}
  public boolean isSynthetic(){return (getModifiers()&0x1000)!=0;}
  public boolean isEnumConstant(){return (getModifiers()&0x4000)!=0;}
  public Object get(Object receiver)throws IllegalAccessException{return Reflection.field(this,receiver,null,0);}

@@ -202,11 +202,17 @@ javac на диске остаётся пригодным для стандар�
 | Группа | Реализовано |
 |---|---|
 | Числа | signed/unsigned parsing и вывод, сравнение, bitCount/rotate/reverse, raw IEEE bits; десятичный/hex разбор float/double с округлением |
-| Math | abs/min/max, sqrt, floor/ceil/rint/round, signum/copySign, nextUp/Down/After, ulp/scalb/getExponent, toDegrees/toRadians, exact integer arithmetic, floor/ceil div/mod |
+| Math | abs/min/max, sqrt, floor/ceil/rint/round, signum/copySign, nextUp/Down/After, ulp/scalb/getExponent, toDegrees/toRadians, exact integer arithmetic, floor/ceil div/mod, random |
+| StrictMath | sin/cos/tan, asin/acos/atan/atan2, exp/log/log10/log1p/expm1, pow, cbrt, hypot, sinh/cosh/tanh — порт fdlibm 5.3 (лицензия Sun), бит в бит как StrictMath HotSpot. `Math` делегирует сюда, поэтому результаты одинаковы на любой машине; HotSpot-интринсики Math могут отличаться на 1 ulp |
 | Последовательности | Iterable/Iterator/ListIterator, Collection/SequencedCollection/List, AbstractCollection/List, ArrayList, подкреплённые исходным списком subList/reversed, sort/replaceAll/removeIf |
 | Ассоциативные коллекции | Map/Set, AbstractMap/Set, HashMap/HashSet, null, коллизии, представления keySet/values/entrySet, изменяемые Entry и fail-fast итераторы |
 | Фабрики | List/Set/Map.of, copyOf, Map.entry/ofEntries, SimpleEntry/SimpleImmutableEntry |
-| Функции | Используемые коллекциями и лямбдами Function/BiFunction/Consumer/BiConsumer/Predicate/Supplier, операторы и часть примитивных специализаций, Comparator, Objects |
+| Arrays | sort (примитивы — heapsort, объекты — стабильная сортировка, диапазоны, Comparator), binarySearch, fill, copyOf/copyOfRange, equals/hashCode/toString, deepEquals/deepHashCode/deepToString, setAll, asList |
+| Collections | sort, binarySearch, reverse/shuffle/swap/rotate/fill/copy/replaceAll, min/max, frequency/disjoint/addAll, indexOfSubList, reverseOrder, empty*/singleton*/nCopies, unmodifiable Collection/List/Set/Map |
+| Random | LCG java.util.Random с теми же последовательностями, что в JDK: nextInt/Long/Double/Float/Boolean/Gaussian/Bytes, nextInt(origin,bound); конструктор без seed нужны часы хозяина |
+| Функции | Используемые коллекциями и лямбдами Function/BiFunction/Consumer/BiConsumer/Predicate/Supplier/Runnable, операторы и часть примитивных специализаций, Comparator (comparing*/thenComparing*/nullsFirst/Last), Objects |
+| Generics в рефлексии | Type, ParameterizedType, TypeVariable, WildcardType, GenericArrayType; Class.getGenericSuperclass/Interfaces/getTypeParameters/getTypeName, Field.getGenericType, Method/Constructor getGeneric*Types, getTypeParameters, getParameters (имена — при компиляции с `-parameters`). Сигнатуры разбираются по запросу, без кэша |
+| Исключения IO | java.io.IOException/UncheckedIOException, InterruptedException, TypeNotPresentException (без самого IO) |
 | System | arraycopy с overlap/type/bounds/частичной reference-копией, identityHashCode, gc, lineSeparator, часы и PrintStream через хозяина |
 
 `jbv_set_host_services` задаёт часы и текстовый вывод, не добавляя DLL-импортов.
@@ -487,15 +493,17 @@ Windows x86, MSVC 19.44, Release /O1, без упаковки исполняем
 
 | Runtime | Байты | КиБ |
 |---|---:|---:|
-| full, со всей встроенной библиотекой (JAR, один поток) | **129 024** | **126,0** |
+| full, со всей встроенной библиотекой (JAR, один поток) | **158 720** | **155,0** |
+| full до Arrays/Collections/StrictMath/generics | 129 024 | 126,0 |
 | full, JAR с отдельной записью на класс | 178 176 | 174,0 |
 | full, несжатые class-файлы | 259 584 | 253,5 |
 | text | **57 856** | **56,5** |
 | core | **38 912** | **38,0** |
 | Базовая DLL до версии 0.8 | 46 592 | 45,5 |
 
-В full встроен JAR 47 238 байт: 122 класса (176 381 байт class-файлов) в одной
-записи. Распаковщик DEFLATE и чтение ZIP занимают около 2,5 КиБ кода; внешние классы библиотеки и runtime DLL-зависимости не нужны.
+В full встроен JAR 75 826 байт: все классы библиотеки (261 386 байт class-файлов)
+в одной записи. Из прироста над 126 КиБ: StrictMath ~9 КиБ, Arrays, Collections и
+разбор generics — по ~5 КиБ. Распаковщик DEFLATE и чтение ZIP занимают около 2,5 КиБ кода; внешние классы библиотеки и runtime DLL-зависимости не нужны.
 Цель меньше 256 КиБ соблюдена. Цель **32 КиБ пока не достигнута**:
 core превышает её на 6144 байта, из них около 3 КиБ — распаковщик JAR приложения.
 Типизированный x86 ABI-переходник занимает около 96 байт по linker map.

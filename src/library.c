@@ -43,7 +43,9 @@ static const MethodSpec class_methods[] = {
     K("getDeclaredConstructor","([" CLS ")Ljava/lang/reflect/Constructor;",C_REFLECT,14),
     K("getConstructor","([" CLS ")Ljava/lang/reflect/Constructor;",C_REFLECT,15),
     K("isAnnotation","()Z",C_REFLECT,16), K("isSynthetic","()Z",C_REFLECT,17),
-    K("isEnum","()Z",C_REFLECT,18), K("getClassLoader","()Ljava/lang/ClassLoader;",C_REFLECT,19), K("getDeclaredAnnotations","()[Ljava/lang/annotation/Annotation;",C_REFLECT,20)
+    K("isEnum","()Z",C_REFLECT,18), K("getClassLoader","()Ljava/lang/ClassLoader;",C_REFLECT,19), K("getDeclaredAnnotations","()[Ljava/lang/annotation/Annotation;",C_REFLECT,20),
+    K("getGenericSuperclass","()Ljava/lang/reflect/Type;",C_REFLECT,22), K("getGenericInterfaces","()[Ljava/lang/reflect/Type;",C_REFLECT,23),
+    K("getTypeParameters","()[Ljava/lang/reflect/TypeVariable;",C_REFLECT,24), K("getTypeName","()" STR,C_REFLECT,25)
 #endif
 };
 static const MethodSpec string_methods[] = {
@@ -309,8 +311,11 @@ JbvStatus jbv_library_class(JbvVM *vm, JbvText name, JbvClass **out) {
     }
 #if JBV_PROFILE_FULL
     if (id == B_CLASS) {
-        status = jbv_resolve_class(vm, jbv_text("java/lang/reflect/AnnotatedElement"), &interfaces[count++]);
-        if (status != JBV_OK) return status;
+        static const char *const faces[] = {"java/lang/reflect/AnnotatedElement","java/lang/reflect/GenericDeclaration","java/lang/reflect/Type"};
+        for (i = 0; i < 3; ++i) {
+            status = jbv_resolve_class(vm, jbv_text(faces[i]), &interfaces[count++]);
+            if (status != JBV_OK) return status;
+        }
     }
 #endif
     c = (JbvClass *)jbv_alloc(vm, sizeof(*c));

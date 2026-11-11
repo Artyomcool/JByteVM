@@ -109,6 +109,20 @@ static JbvStatus parameters_match(JbvVM *vm, JbvText d, JbvObject *params, int *
     }
     *match = i == (params ? params->length : 0); return JBV_OK;
 }
+/* Generic signatures are parsed in Java: jbv.runtime.Generics.ofClass(Class,int). */
+static JbvStatus generics(JbvVM *vm, int32_t mirror, uint32_t what, uint64_t *out) {
+    static const uint8_t refs[2] = {1, 0};
+    int32_t args[2];
+    JbvClass *g;
+    JbvMethod *m;
+    JbvStatus status = jbv_resolve_class(vm, jbv_text("jbv/runtime/Generics"), &g);
+    if (status == JBV_OK) status = jbv_initialize(vm, g);
+    if (status != JBV_OK) return status;
+    m = jbv_find_method(g, jbv_text("ofClass"), jbv_text("(Ljava/lang/Class;I)Ljava/lang/Object;"));
+    if (!m) return JBV_LINKAGE_ERROR;
+    args[0] = mirror; args[1] = (int32_t)what;
+    return jbv_execute(vm, g, m, args, refs, 2, out);
+}
 JbvStatus jbv_reflect_class(JbvVM *vm, uint32_t op, const int32_t *a, uint64_t *out) {
     JbvClass *c = 0;
     JbvStatus status = JBV_OK;
@@ -132,6 +146,14 @@ JbvStatus jbv_reflect_class(JbvVM *vm, uint32_t op, const int32_t *a, uint64_t *
         if (status == JBV_OK) status = jbv_mirror(vm, c, &ref);
     } else {
         c = jbv_mirror_type(vm, a[0]); if (!c) return JBV_NULL_REFERENCE;
+        if (op == 21) {
+            const uint8_t *p = c->array_kind || c->primitive ? 0 : jbv_attribute(c, c->attributes, "Signature");
+            if (!p) return JBV_OK;
+            status = jbv_string_mutf(vm, c->pool[jbv_u16(p)].text, &ref);
+            if (status == JBV_OK) *out = (uint32_t)ref;
+            return status;
+        }
+        if (op >= 22) return generics(vm, a[0], op - 22, out);
         if (op == 0) {
             const uint8_t *inner = jbv_attribute(c, c->attributes, "InnerClasses");
             uint16_t f = c->flags & ~0x20;
@@ -238,6 +260,22 @@ static JbvStatus info(JbvVM *vm, Member m, uint32_t op, int32_t *ref) {
     if (op == 4) { const uint8_t *value=jbv_attribute(m.owner,attributes(m),"AnnotationDefault");*ref=0;return value?jbv_annotation_value(vm,m.owner,&value,jbv_return_type(d),ref):JBV_OK; }
     if (op == 0) return jbv_string_mutf(vm, name(m), ref);
     if (op == 1) { status = jbv_type_class(vm, m.kind ? jbv_return_type(d) : d, &c); return status == JBV_OK ? jbv_mirror(vm,c,ref) : status; }
+    if (op == 5) { p = jbv_attribute(m.owner,attributes(m),"Signature"); *ref = 0; return p ? jbv_string_mutf(vm,m.owner->pool[jbv_u16(p)].text,ref) : JBV_OK; }
+    if (op == 6 || op == 7) { /* MethodParameters: names (null if absent) or access flags. */
+        p = jbv_attribute(m.owner,attributes(m),"MethodParameters"); *ref = 0;
+        if (!p) return JBV_OK;
+        count = *p;
+        if (op == 7) {
+            status = jbv_array_class(vm,0,'I',&c);
+            if (status == JBV_OK) status = jbv_new(vm,c,(int32_t)count,ref);
+            if (status == JBV_OK) { (void)jbv_object(vm,*ref,&o); for (i = 0; i < count; ++i) jbv_data(o)[i] = jbv_u16(p+3+4*i); }
+            return status;
+        }
+        status = array(vm,"java/lang/String",count,ref,&o); if (status != JBV_OK) return status;
+        (void)jbv_retain(vm,*ref);
+        for (i = 0; i < count && status == JBV_OK; ++i) if (jbv_u16(p+1+4*i)) status = jbv_string_mutf(vm,m.owner->pool[jbv_u16(p+1+4*i)].text,&jbv_data(o)[i]);
+        (void)jbv_release(vm,*ref); return status;
+    }
     if (op == 3) { p = jbv_attribute(m.owner,attributes(m),"Exceptions"); count = p ? jbv_u16(p) : 0; }
     else while (d.data[pos] != ')') { (void)jbv_descriptor_type(d,&pos,&width); ++count; }
     status = array(vm,"java/lang/Class",count,ref,&o); if (status != JBV_OK) return status;
@@ -355,6 +393,7 @@ JbvStatus JBV_CALL jbv_reflect_native(JbvVM *vm, void *user, const int32_t *a, u
     JbvObject *o;
     int32_t ref=0;
     (void)count;*out=0;
+    if(op==8)return jbv_reflect_class(vm,21,a,out);
     if(op==5)status=reflect_array(vm,a,&ref);
     else if(op==6){uint64_t bits;status=jbv_unbox(vm,a[0],(uint8_t)a[1],0,&bits);if(status==JBV_CLASS_CAST||status==JBV_NULL_REFERENCE)status=JBV_BAD_ARGUMENT;if(status==JBV_OK)status=jbv_box(vm,(uint8_t)a[1],bits,&ref);}
     else {

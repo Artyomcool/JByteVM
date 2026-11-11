@@ -79,4 +79,26 @@ public final class Math {
     public static long floorDivExact(long a,long b) { if(a==Long.MIN_VALUE&&b==-1)throw new ArithmeticException(); return floorDiv(a,b); }
     public static int ceilDivExact(int a,int b) { if(a==Integer.MIN_VALUE&&b==-1)throw new ArithmeticException(); return ceilDiv(a,b); }
     public static long ceilDivExact(long a,long b) { if(a==Long.MIN_VALUE&&b==-1)throw new ArithmeticException(); return ceilDiv(a,b); }
+
+    // Transcendental functions are StrictMath (fdlibm): identical results on every machine.
+    public static double sin(double a) { return StrictMath.sin(a); }
+    public static double cos(double a) { return StrictMath.cos(a); }
+    public static double tan(double a) { return StrictMath.tan(a); }
+    public static double asin(double a) { return StrictMath.asin(a); }
+    public static double acos(double a) { return StrictMath.acos(a); }
+    public static double atan(double a) { return StrictMath.atan(a); }
+    public static double exp(double a) { return StrictMath.exp(a); }
+    public static double log(double a) { return StrictMath.log(a); }
+    public static double log10(double a) { return StrictMath.log10(a); }
+    public static double log1p(double a) { return StrictMath.log1p(a); }
+    public static double expm1(double a) { return StrictMath.expm1(a); }
+    public static double cbrt(double a) { return StrictMath.cbrt(a); }
+    public static double sinh(double a) { return StrictMath.sinh(a); }
+    public static double cosh(double a) { return StrictMath.cosh(a); }
+    public static double tanh(double a) { return StrictMath.tanh(a); }
+    public static double atan2(double y,double x) { return StrictMath.atan2(y,x); }
+    public static double pow(double a,double b) { return StrictMath.pow(a,b); }
+    public static double hypot(double a,double b) { return StrictMath.hypot(a,b); }
+    private static java.util.Random random;
+    public static double random() { if(random==null)random=new java.util.Random(); return random.nextDouble(); }
 }

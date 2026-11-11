@@ -11,4 +11,5 @@ public final class Reflection {
  public static native boolean access(AccessibleObject member,Object receiver);
  public static native Object array(Object array,int index,Object value,int op);
  public static native Object convert(Object value,int code);
+ public static native String classSignature(Class<?> type);
 }

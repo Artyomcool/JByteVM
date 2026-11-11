@@ -21,6 +21,8 @@ def generate():
         'IntUnaryOperator':'int applyAsInt(int value);',
         'IntBinaryOperator':'int applyAsInt(int a,int b);',
         'LongUnaryOperator':'long applyAsLong(long value);',
+        'IntToLongFunction':'long applyAsLong(int value);',
+        'IntToDoubleFunction':'double applyAsDouble(int value);',
         'DoubleUnaryOperator':'double applyAsDouble(double value);',
         'ToIntFunction<T>':'int applyAsInt(T value);',
         'ToLongFunction<T>':'long applyAsLong(T value);',

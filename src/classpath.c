@@ -128,7 +128,7 @@ JbvStatus jbv_classpath_load(JbvVM *vm, JbvText name, JbvClass **out) {
         }
     if (jbv_text_is(name, "jbv/runtime/Reflection"))
         for (i = 0; i < c->method_count; ++i) if (c->methods[i].flags & JBV_NATIVE) {
-            static const char *const names[] = {"info","flags","invoke","field","access","array","convert","annotations"};
+            static const char *const names[] = {"info","flags","invoke","field","access","array","convert","annotations","classSignature"};
             for (j = 0; j < sizeof(names)/sizeof(names[0]); ++j) if (jbv_text_is(c->methods[i].name, names[j])) break;
             if (j == sizeof(names)/sizeof(names[0])) return JBV_LINKAGE_ERROR;
             c->methods[i].native_slots = jbv_reflect_native; c->methods[i].native_user = (void *)(uintptr_t)j; c->methods[i].intrinsic = 4;
