@@ -47,8 +47,6 @@ if(MSVC)
     # The inflater keeps byte arrays on the stack; its own bounds checks replace
     # /GS, whose failure handler would import KERNEL32 from the CRT.
     set_source_files_properties(src/jar.c PROPERTIES COMPILE_OPTIONS "/GS-")
-    # The interpreter loop is the one place where speed beats size (~1.5 KiB for ~1.2x).
-    set_source_files_properties(src/interpreter.c PROPERTIES COMPILE_OPTIONS "/O2")
     # Allocator callbacks belong to the embedding application. The DLL has no
     # CRT startup or global constructors. The native bridge needs no OS imports.
     target_link_options(jbytevm PRIVATE /NODEFAULTLIB /NOENTRY /INCREMENTAL:NO /OPT:REF /OPT:ICF /MAP)

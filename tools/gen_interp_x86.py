@@ -23,6 +23,7 @@ ACT_C, ACT_M, ACT_LOCALS, ACT_STACK, ACT_LREFS, ACT_SREFS, ACT_SAVED, ACT_FRAME 
 F_PREV, F_OWNER, F_METHOD, F_PC, F_SP, F_BASE, F_LOCALS, F_MON = 0, 4, 8, 12, 16, 20, 24, 28   # JbvFrame
 VM_MAX_SLOTS, VM_MAX_DEPTH, VM_SLOTS, VM_USED, VM_DEPTH, VM_REMAINING, VM_REFS, VM_FRAMES = 12, 16, 336, 340, 344, 352, 364, 368
 CORE_LIMIT = 0x4C494D00   # enter_run: over a limit, nothing linked
+VM_NURSERY, VM_NURSERY_TOP, VM_NURSERY_SIZE, VM_HEAP_BYTES, VM_HEAP_LIMIT, VM_FREE_HANDLE, VM_GENERATIONS, VM_OBJECT_COUNT, VM_HANDLES = 1984, 1988, 1992, 2036, 2040, 396, 380, 400, 376
 LINK_SPECIAL_OWNER, LINK_SPECIAL, LINK_TRIVIAL, LINK_ADDRESS, LINK_PIC_SEEN, LINK_PIC_OWNER, LINK_PIC_TARGET = 24, 28, 43, 44, 48, 60, 72
 
 handlers = {}   # opcode -> label
@@ -200,15 +201,17 @@ handler([83], 'op_aastore', lines(['mov ecx, [edi+ebx*4-12]', 'test ecx, ecx', '
 # ecx vm, edx class; m, args, refs, count, result on the stack, popped by the callee).
 METHOD_LINK = ['movzx ecx, WORD PTR [esi]', 'xchg cl, ch', f'imul ecx, ecx, {CONSTANT_SIZE}', 'mov edx, [esp]',
                f'add ecx, [edx+{STATE["pool"]}]', f'mov ecx, [ecx+{CONSTANT_LINK}]', 'test ecx, ecx', 'jz exit_op']
-def call(owner, method, size, n):
+def call(size, n):
+    """One call sequence per invoke opcode: ecx = link, edx = method, eax = owner."""
     S = STATE
+    sync = ['mov eax, esi', 'dec eax', f'sub eax, [edx+{S["code"]}]', f'mov [edx+{S["pc"]}], eax',      # edx = state
+            f'mov edx, [edx+{S["frame"]}]', f'mov [edx+{FRAME_PC}], eax',
+            'mov eax, ebx', f'sub eax, [edx+{FRAME_LOCALS}]', f'mov [edx+{FRAME_SP}], eax']
     return [
         # plain bytecode callee: an activation on this stack, then dispatch in it
-        f'mov edx, [ecx+{method}]', 'test WORD PTR [edx], 0520h', f'jnz call_c_{n}',   # native, synchronized, abstract: C
-        'mov edx, [esp]', 'mov eax, esi', 'dec eax', f'sub eax, [edx+{S["code"]}]', f'mov [edx+{S["pc"]}], eax',
-        f'mov edx, [edx+{S["frame"]}]', f'mov [edx+{FRAME_PC}], eax',
-        'mov eax, ebx', f'sub eax, [edx+{FRAME_LOCALS}]', f'mov [edx+{FRAME_SP}], eax',
-        f'mov edx, [ecx+{method}]', f'mov eax, [ecx+{owner}]',
+        'test WORD PTR [edx], 0520h', f'jnz call_c_{n}',   # native, synchronized, abstract: C
+        'cmp BYTE PTR [edx+METHOD_ACCESSOR], 0', f'jne acc_{n}', f'acc_back_{n}:',
+        'push eax', 'push edx', 'mov edx, [esp+8]'] + sync + ['pop edx', 'pop eax',
         f'movzx ecx, WORD PTR [ecx+{LINK_ARGC}]', 'neg ecx', 'add ecx, ebx',                  # argbase
         f'sub esp, {ACT_SIZE}', 'push esp',                                                   # [esp] = callee activation
         'call enter_run',                                                                     # eax = status; [esp] = callee
@@ -217,50 +220,49 @@ def call(owner, method, size, n):
         f'movq xmm0, QWORD PTR [ecx+{S["result"]}]', f'movq QWORD PTR [edx+{S["result"]}], xmm0',
         f'mov ebx, [ecx+{ACT_ARGBASE}]', f'movzx ebp, BYTE PTR [ecx+{ACT_KIND}]', f'add esp, {ACT_SIZE}',
         f'mov edi, [edx+{S["locals"]}]', f'mov esi, [edx+{S["code"]}]', f'add esi, [edx+{S["pc"]}]', 'inc esi',
-        'test eax, eax', 'jnz frame_failed', f'add esi, {size}',
+        'test eax, eax', 'jnz frame_failed', f'add esi, {size}', 'mov ecx, ebp', f'mov ebp, [edx+{S["refs"]}]',
+        f'jmp call_result_{n}',
+        f'call_limit_{n}:', 'pop eax', f'add esp, {ACT_SIZE}', 'jmp exit_op',               # limits: C reports them (esi, ebx kept)
+        # accessors, inline once the field is resolved: getter (receiver -> value), int setter
+        f'acc_{n}:', 'push ecx', 'push eax', 'mov ecx, [edx+METHOD_CODE]',
+        'cmp BYTE PTR [edx+METHOD_ACCESSOR], 1', f'jne acc_set_{n}',
+        'movzx ecx, WORD PTR [ecx+2]', 'xchg cl, ch', f'imul ecx, ecx, {CONSTANT_SIZE}', 'add ecx, [eax+8]', f'mov ecx, [ecx+{CONSTANT_LINK}]',
+        'test ecx, ecx', f'jz acc_fail_{n}', f'cmp BYTE PTR [ecx+{LINK_FAST}], 1', f'jne acc_fail_{n}',
+        'mov eax, [edi+ebx*4-4]', 'and eax, 0FFFFFFh', 'mov edx, [esp+8]', f'mov edx, [edx+{S["handles"]}]', 'mov eax, [edx+eax*4]',
+        f'mov edx, [ecx+{LINK_SLOT}]', 'mov eax, [eax+edx*4+4]', f'mov dl, [ecx+{LINK_KIND}]',
+        'mov [edi+ebx*4-4], eax', 'mov [ebp+ebx-1], dl', 'add esp, 8', f'add esi, {size}', 'DISPATCH',
+        f'acc_set_{n}:', 'movzx ecx, WORD PTR [ecx+3]', 'xchg cl, ch', f'imul ecx, ecx, {CONSTANT_SIZE}', 'add ecx, [eax+8]', f'mov ecx, [ecx+{CONSTANT_LINK}]',
+        'test ecx, ecx', f'jz acc_fail_{n}', f'cmp BYTE PTR [ecx+{LINK_FAST}], 1', f'jne acc_fail_{n}', f'cmp WORD PTR [ecx+{LINK_KIND}], 4900h', f'jne acc_fail_{n}',
+        'mov eax, [edi+ebx*4-8]', 'and eax, 0FFFFFFh', 'mov edx, [esp+8]', f'mov edx, [edx+{S["handles"]}]', 'mov eax, [edx+eax*4]',
+        f'mov edx, [ecx+{LINK_SLOT}]', 'mov ecx, [edi+ebx*4-4]', 'mov [eax+edx*4+4], ecx',
+        'sub ebx, 2', 'mov eax, [edi+ebx*4-4]', 'add esp, 8', f'add esi, {size}', 'DISPATCH',
+        f'acc_fail_{n}:', 'pop eax', 'pop ecx', f'jmp acc_back_{n}',
+        f'call_c_{n}:',                                                                       # through jbv_execute
+        'push eax', 'push edx', 'mov edx, [esp+8]'] + sync + [
+        f'movzx eax, WORD PTR [ecx+{LINK_ARGC}]', 'neg eax', 'add eax, ebx',              # argbase
+        'pop edx', 'push ecx', 'push eax',                                                # [esp] argbase, link, owner, state
+        'mov ecx, [esp+12]', f'lea ecx, [ecx+{S["result"]}]', 'push ecx',                # result
+        'mov ecx, [esp+8]', f'movzx ecx, WORD PTR [ecx+{LINK_ARGC}]', 'push ecx',         # count
+        'lea ecx, [ebp+eax]', 'push ecx', 'lea ecx, [edi+eax*4]', 'push ecx', 'push edx', # refs, args, m
+        'mov edx, [esp+28]', 'mov ecx, [esp+32]', f'mov ecx, [ecx+{S["vm"]}]',
+        'call @jbv_execute@28',
+        'pop ebx', 'pop ecx', 'add esp, 4', 'mov edx, [esp]',                             # sp = argbase; link; state
+        'test eax, eax', 'jnz call_failed', f'movzx ecx, BYTE PTR [ecx+{LINK_RESULT}]', f'add esi, {size}',
+        # the result: ecx = result kind, edx = the caller (the call may have collected)
+        f'call_result_{n}:',
         f'mov eax, [edx+{S["table"]}]', 'mov eax, [eax]', f'mov [edx+{S["handles"]}], eax',
         f'mov eax, [edx+{S["nursery_ref"]}]', 'mov eax, [eax]', f'mov [edx+{S["nursery"]}], eax',
         f'mov eax, [edx+{S["nursery_size_ref"]}]', 'mov eax, [eax]', f'mov [edx+{S["nursery_size"]}], eax',
-        'mov ecx, ebp', f'mov ebp, [edx+{S["refs"]}]',
         'test ecx, ecx', f'jz fd_void_{n}', 'cmp cl, 3', f'je fd_wide_{n}', 'cmp cl, 6', f'je fd_wide_{n}',
         'cmp cl, 2', 'sete al', 'mov [ebp+ebx], al',
         f'mov eax, [edx+{S["result"]}]', 'mov [edi+ebx*4], eax', 'inc ebx', 'DISPATCH',
         f'fd_wide_{n}:', f'movq xmm0, QWORD PTR [edx+{S["result"]}]', 'movq QWORD PTR [edi+ebx*4], xmm0',
         'mov BYTE PTR [ebp+ebx], 0', 'mov BYTE PTR [ebp+ebx+1], 0', 'add ebx, 2', 'mov eax, [edi+ebx*4-4]', 'DISPATCH',
-        f'fd_void_{n}:', 'mov eax, [edi+ebx*4-4]', 'DISPATCH',
-        f'call_limit_{n}:', 'pop eax', f'add esp, {ACT_SIZE}', 'jmp exit_op',               # limits: C reports them (esi, ebx kept)
-        f'call_c_{n}:',
-        'mov edx, [esp]', 'mov eax, esi', 'dec eax', f'sub eax, [edx+{S["code"]}]',      # frame->pc = opcode
-        f'mov edx, [edx+{S["frame"]}]', f'mov [edx+{FRAME_PC}], eax',
-        'mov eax, ebx', f'sub eax, [edx+{FRAME_LOCALS}]', f'mov [edx+{FRAME_SP}], eax',  # frame->sp
-        f'movzx eax, WORD PTR [ecx+{LINK_ARGC}]', 'neg eax', 'add eax, ebx',              # argbase
-        'push ecx', 'push eax',                                                           # [esp] argbase, link, state
-        'mov edx, [esp+8]', f'lea edx, [edx+{S["result"]}]', 'push edx',                 # result
-        f'movzx edx, WORD PTR [ecx+{LINK_ARGC}]', 'push edx',                             # count
-        'lea edx, [ebp+eax]', 'push edx',                                                 # refs + argbase
-        'lea edx, [edi+eax*4]', 'push edx',                                               # locals + argbase
-        f'push DWORD PTR [ecx+{method}]',                                                 # m
-        f'mov edx, [ecx+{owner}]', f'mov ecx, [esp+28]', f'mov ecx, [ecx+{S["vm"]}]',
-        'call @jbv_execute@28',
-        'pop ebx', 'pop ecx', 'mov edx, [esp]',                                           # sp = argbase; link; state
-        'test eax, eax', 'jnz call_failed',
-        f'mov eax, [edx+{S["table"]}]', 'mov eax, [eax]', f'mov [edx+{S["handles"]}], eax',  # the call may have collected
-        f'mov eax, [edx+{S["nursery_ref"]}]', 'mov eax, [eax]', f'mov [edx+{S["nursery"]}], eax',
-        f'mov eax, [edx+{S["nursery_size_ref"]}]', 'mov eax, [eax]', f'mov [edx+{S["nursery_size"]}], eax',
-        f'movzx eax, BYTE PTR [ecx+{LINK_RESULT}]',
-        f'add esi, {size}',
-        'test eax, eax', f'jz call_void_{n}',
-        'cmp al, 3', f'je call_wide_{n}', 'cmp al, 6', f'je call_wide_{n}',
-        'cmp al, 2', 'sete al', 'mov [ebp+ebx], al',
-        f'mov eax, [edx+{S["result"]}]', 'mov [edi+ebx*4], eax', 'inc ebx', 'DISPATCH',
-        f'call_wide_{n}:',
-        f'mov eax, [edx+{S["result"]}]', 'mov [edi+ebx*4], eax', 'mov BYTE PTR [ebp+ebx], 0', 'inc ebx',
-        f'mov eax, [edx+{S["result"]}+4]', 'mov [edi+ebx*4], eax', 'mov BYTE PTR [ebp+ebx], 0', 'inc ebx', 'DISPATCH',
-        f'call_void_{n}:', 'mov eax, [edi+ebx*4-4]', 'DISPATCH']
+        f'fd_void_{n}:', 'mov eax, [edi+ebx*4-4]', 'DISPATCH']
 body.append('call_failed:                     ; eax = status, edx = state; esi just past the opcode\n'
             f'    mov [edx+{STATE["status"]}], eax\n    jmp exit_op\n')
 handler([184], 'op_invokestatic', lines(METHOD_LINK, [f'cmp BYTE PTR [ecx+{LINK_READY}], 1', 'jne exit_op'],
-                                        call(LINK_OWNER, LINK_MEMBER, 2, 1)))
+                                        [f'mov edx, [ecx+{LINK_MEMBER}]', f'mov eax, [ecx+{LINK_OWNER}]'], call(2, 'st')))
 for op, size in [(182, 2), (185, 4)]:
     entries = [(LINK_SEEN, LINK_TARGET_OWNER, LINK_TARGET)] + [(LINK_PIC_SEEN + 4 * k, LINK_PIC_OWNER + 4 * k, LINK_PIC_TARGET + 4 * k) for k in range(3)]
     code = METHOD_LINK + [f'mov edx, [ecx+{LINK_SEEN}]', 'test edx, edx', 'jz exit_op',
@@ -269,13 +271,14 @@ for op, size in [(182, 2), (185, 4)]:
             'mov eax, [edx+eax*4]', 'mov eax, [eax]']
     code += [f'cmp eax, [ecx+{seen}]\nje inv_{op}_{k}' for k, (seen, _, _) in enumerate(entries)] + ['jmp exit_op']
     for k, (_, owner, target) in enumerate(entries):
-        code += [f'inv_{op}_{k}:'] + call(owner, target, size, f'{op}_{k}')
+        code += [f'inv_{op}_{k}:', f'mov edx, [ecx+{target}]', f'mov eax, [ecx+{owner}]', f'jmp inv_{op}_call']
+    code += [f'inv_{op}_call:'] + call(size, op)
     handler([op], f'op_invoke_{op}', '\n'.join(code))
 handler([183], 'op_invokespecial', lines(METHOD_LINK, [
     f'mov edx, [ecx+{LINK_SPECIAL}]', 'test edx, edx', 'jz exit_op',
     f'movzx eax, WORD PTR [ecx+{LINK_ARGC}]', 'neg eax', 'add eax, ebx', 'cmp DWORD PTR [edi+eax*4], 0', 'je exit_op',   # null receiver: C
     f'cmp BYTE PTR [ecx+{LINK_TRIVIAL}], 1', 'jne special_call',
-    'mov ebx, eax', 'mov eax, [edi+ebx*4-4]', 'add esi, 2'], DISPATCH, ['special_call:'], call(LINK_SPECIAL_OWNER, LINK_SPECIAL, 2, 'sp')))
+    'mov ebx, eax', 'mov eax, [edi+ebx*4-4]', 'add esi, 2'], DISPATCH, ['special_call:', f'mov edx, [ecx+{LINK_SPECIAL}]', f'mov eax, [ecx+{LINK_SPECIAL_OWNER}]'], call(2, 'sp')))
 
 # new of a resolved, initialized, concrete class: jbv_new(vm, type, 0, &ref), which may collect
 def sync_frame():
@@ -289,10 +292,33 @@ def reload_after_call():   # edx = state
             f'mov eax, [edx+{S["nursery_size_ref"]}]', 'mov eax, [eax]', f'mov [edx+{S["nursery_size"]}], eax']
 handler([187], 'op_new', lines(['movzx ecx, WORD PTR [esi]', 'xchg cl, ch', f'imul ecx, ecx, {CONSTANT_SIZE}', 'mov edx, [esp]',
     f'add ecx, [edx+{STATE["pool"]}]', 'cmp BYTE PTR [ecx], 7', 'jne exit_op', f'mov ecx, [ecx+{CONSTANT_LINK}]', 'test ecx, ecx', 'jz exit_op',
-    'cmp BYTE PTR [ecx+CLASS_INIT], 2', 'jne exit_op', 'test WORD PTR [ecx+CLASS_FLAGS], 0600h', 'jnz exit_op'],
+    'cmp BYTE PTR [ecx+CLASS_INIT], 2', 'jne exit_op', 'test WORD PTR [ecx+CLASS_FLAGS], 0600h', 'jnz exit_op',
+    'IF JBV_GC_STRESS EQ 0',   # a plain object in the pre-zeroed young region, a free handle
+    'mov edx, [esp]', f'mov edx, [edx+{STATE["vm"]}]', f'cmp DWORD PTR [edx+{VM_FREE_HANDLE}], 0', 'je new_c',
+    'mov eax, [ecx+CLASS_SLOTS]', 'lea eax, [eax*4+8]', 'cmp eax, 516', 'ja new_c',
+    'push esi', 'push ebx', f'mov esi, [edx+{VM_NURSERY}]', f'add esi, [edx+{VM_NURSERY_SIZE}]', f'sub esi, [edx+{VM_NURSERY_TOP}]',
+    'cmp esi, eax', 'jb new_c_pop', f'mov esi, [edx+{VM_HEAP_LIMIT}]', f'sub esi, [edx+{VM_HEAP_BYTES}]', 'jb new_c_pop', 'cmp esi, eax', 'jb new_c_pop',
+    f'add [edx+{VM_HEAP_BYTES}], eax', f'mov esi, [edx+{VM_NURSERY_TOP}]', f'add [edx+{VM_NURSERY_TOP}], eax',
+    'mov [esi+4], ecx', f'mov eax, [edx+{VM_FREE_HANDLE}]', f'mov ecx, [edx+{VM_HANDLES}]',
+    'mov ebx, [ecx+eax*4]', 'shr ebx, 1', f'mov [edx+{VM_FREE_HANDLE}], ebx', 'lea ebx, [esi+4]', 'mov [ecx+eax*4], ebx',
+    f'inc DWORD PTR [edx+{VM_OBJECT_COUNT}]', 'lea ebx, [eax+eax]', 'mov [esi], ebx',
+    f'mov ecx, [edx+{VM_GENERATIONS}]', 'movzx ecx, BYTE PTR [ecx+eax]', 'shl ecx, 24', 'or eax, ecx',
+    'pop ebx', 'pop esi', 'mov [edi+ebx*4], eax', 'mov BYTE PTR [ebp+ebx], 1', 'inc ebx', 'add esi, 2', 'DISPATCH',
+    'new_c_pop:', 'pop ebx', 'pop esi', 'new_c:', 'ENDIF'],
     sync_frame(), ['mov edx, ecx', 'mov ecx, [esp]', f'lea eax, [ecx+{STATE["result"]}]', 'push eax', 'push 0',
     f'mov ecx, [ecx+{STATE["vm"]}]', 'call @jbv_new@16', 'mov edx, [esp]', 'test eax, eax', 'jnz call_failed'], reload_after_call(),
     [f'mov eax, [edx+{STATE["result"]}]', 'mov [edi+ebx*4], eax', 'mov BYTE PTR [ebp+ebx], 1', 'inc ebx', 'add esi, 2'], DISPATCH))
+
+# Superinstructions: 203 = aload_0 getfield, 204 = iinc goto (the rest of the pair is
+# unchanged; on any special case the core leaves the marker to C, which runs the first opcode).
+handler([203], 'op_this_getfield', lines(['movzx ecx, WORD PTR [esi+1]', 'xchg cl, ch', f'imul ecx, ecx, {CONSTANT_SIZE}', 'mov edx, [esp]',
+    f'add ecx, [edx+{STATE["pool"]}]', f'mov ecx, [ecx+{CONSTANT_LINK}]', 'test ecx, ecx', 'jz exit_op',
+    f'cmp BYTE PTR [ecx+{LINK_FAST}], 1', 'jne exit_op', 'mov eax, [edi]', 'test eax, eax', 'jz exit_op'], deref('eax'), [
+    f'mov edx, [ecx+{LINK_SLOT}]', 'mov eax, [eax+edx*4+4]', f'mov cl, [ecx+{LINK_KIND}]',
+    'mov [edi+ebx*4], eax', 'mov [ebp+ebx], cl', 'inc ebx', 'add esi, 3'], DISPATCH))
+handler([204], 'op_iinc_goto', lines(['movzx edx, WORD PTR [esi+3]', 'xchg dl, dh', 'movsx edx, dx'], budget('iinc_goto_go'), [
+    'movzx ecx, BYTE PTR [esi]', 'lea ecx, [edi+ecx*4]', 'push edx', 'movsx edx, BYTE PTR [esi+1]', 'add [ecx], edx', 'pop edx',
+    'lea esi, [esi+edx+2]'], DISPATCH))
 
 # checkcast/instanceof against a resolved class: null and the exact class here, the rest in C
 CLASS_REF = ['movzx ecx, WORD PTR [esi]', 'xchg cl, ch', f'imul ecx, ecx, {CONSTANT_SIZE}', 'mov edx, [esp]',
@@ -469,9 +495,9 @@ handler([177], 'op_return', lines(ret(['xor eax, eax'])))
 
 out = ['; Generated by tools/gen_interp_x86.py; do not edit.', '; ' + __doc__.strip().splitlines()[0],
        '.686', '.xmm', '.model flat, C', 'option casemap:none', 'option noscoped                 ; handler labels are referenced by op_table', 'PUBLIC jbv_interpret_x86', 'EXTERN SYSCALL @jbv_execute@28:PROC   ; fastcall (/Gr), no C decoration', 'EXTERN SYSCALL @jbv_remember@8:PROC', 'EXTERN SYSCALL @jbv_new@16:PROC', 'EXTERN SYSCALL @jbv_core_leave@4:PROC', 'EXTERN SYSCALL @jbv_core_finish@4:PROC', '',
-       'IF JBV_PROFILE_FULL', 'CLASS_COMPONENT EQU 72', 'CLASS_FLAGS EQU 56', 'CLASS_INIT EQU 82',
+       'IF JBV_PROFILE_FULL', 'CLASS_COMPONENT EQU 72', 'CLASS_FLAGS EQU 56', 'CLASS_INIT EQU 82', 'CLASS_SLOTS EQU 76', 'METHOD_ACCESSOR EQU 49',
        'METHOD_CODE EQU 28', 'METHOD_ARGS EQU 36', 'METHOD_RESULT EQU 38',
-       'ELSE', 'CLASS_COMPONENT EQU 68', 'CLASS_FLAGS EQU 52', 'CLASS_INIT EQU 78', 'METHOD_CODE EQU 24', 'METHOD_ARGS EQU 32', 'METHOD_RESULT EQU 34', 'ENDIF', '',
+       'ELSE', 'CLASS_COMPONENT EQU 68', 'CLASS_FLAGS EQU 52', 'CLASS_INIT EQU 78', 'METHOD_CODE EQU 24', 'METHOD_ARGS EQU 32', 'METHOD_RESULT EQU 34', 'CLASS_SLOTS EQU 72', 'METHOD_ACCESSOR EQU 45', 'ENDIF', '',
        'DISPATCH_W MACRO', '    movzx ecx, BYTE PTR [esi]', '    inc esi', '    jmp DWORD PTR op_table_w[ecx*4]', 'ENDM', '',
        'DISPATCH MACRO', '    movzx ecx, BYTE PTR [esi]', '    inc esi', '    jmp DWORD PTR op_table[ecx*4]', 'ENDM', '',
        '.const', 'ALIGN 4', 'op_table LABEL DWORD']

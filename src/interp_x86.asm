@@ -75,6 +75,7 @@ PUBLIC op_ifcmp_166
 PUBLIC op_ifnonnull
 PUBLIC op_ifnull
 PUBLIC op_iinc
+PUBLIC op_iinc_goto
 PUBLIC op_ineg
 PUBLIC op_instanceof
 PUBLIC op_int_100
@@ -135,6 +136,7 @@ PUBLIC op_store_76
 PUBLIC op_store_77
 PUBLIC op_store_78
 PUBLIC op_swap
+PUBLIC op_this_getfield
 PUBLIC op_wconst_10
 PUBLIC op_wconst_14
 PUBLIC op_wconst_15
@@ -191,6 +193,8 @@ IF JBV_PROFILE_FULL
 CLASS_COMPONENT EQU 72
 CLASS_FLAGS EQU 56
 CLASS_INIT EQU 82
+CLASS_SLOTS EQU 76
+METHOD_ACCESSOR EQU 49
 METHOD_CODE EQU 28
 METHOD_ARGS EQU 36
 METHOD_RESULT EQU 38
@@ -201,6 +205,8 @@ CLASS_INIT EQU 78
 METHOD_CODE EQU 24
 METHOD_ARGS EQU 32
 METHOD_RESULT EQU 34
+CLASS_SLOTS EQU 72
+METHOD_ACCESSOR EQU 45
 ENDIF
 
 DISPATCH_W MACRO
@@ -421,8 +427,8 @@ op_table LABEL DWORD
     DWORD exit_op
     DWORD exit_op
     DWORD exit_op
-    DWORD exit_op
-    DWORD exit_op
+    DWORD op_this_getfield
+    DWORD op_iinc_goto
     DWORD exit_op
     DWORD exit_op
     DWORD exit_op
@@ -678,8 +684,8 @@ op_table_w LABEL DWORD
     DWORD exit_op
     DWORD exit_op
     DWORD exit_op
-    DWORD exit_op
-    DWORD exit_op
+    DWORD op_this_getfield
+    DWORD op_iinc_goto
     DWORD exit_op
     DWORD exit_op
     DWORD exit_op
@@ -2133,9 +2139,15 @@ op_invokestatic:
     cmp BYTE PTR [ecx+39], 1
     jne exit_op
     mov edx, [ecx+8]
+    mov eax, [ecx+0]
     test WORD PTR [edx], 0520h
-    jnz call_c_1
-    mov edx, [esp]
+    jnz call_c_st
+    cmp BYTE PTR [edx+METHOD_ACCESSOR], 0
+    jne acc_st
+acc_back_st:
+    push eax
+    push edx
+    mov edx, [esp+8]
     mov eax, esi
     dec eax
     sub eax, [edx+0]
@@ -2145,8 +2157,8 @@ op_invokestatic:
     mov eax, ebx
     sub eax, [edx+24]
     mov [edx+16], eax
-    mov edx, [ecx+8]
-    mov eax, [ecx+0]
+    pop edx
+    pop eax
     movzx ecx, WORD PTR [ecx+40]
     neg ecx
     add ecx, ebx
@@ -2154,7 +2166,7 @@ op_invokestatic:
     push esp
     call enter_run
     cmp eax, 1279872256
-    je call_limit_1
+    je call_limit_st
     pop ecx
     mov edx, [ecx+144]
     movq xmm0, QWORD PTR [ecx+48]
@@ -2169,50 +2181,78 @@ op_invokestatic:
     test eax, eax
     jnz frame_failed
     add esi, 2
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
     mov ecx, ebp
     mov ebp, [edx+8]
-    test ecx, ecx
-    jz fd_void_1
-    cmp cl, 3
-    je fd_wide_1
-    cmp cl, 6
-    je fd_wide_1
-    cmp cl, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-fd_wide_1:
-    movq xmm0, QWORD PTR [edx+48]
-    movq QWORD PTR [edi+ebx*4], xmm0
-    mov BYTE PTR [ebp+ebx], 0
-    mov BYTE PTR [ebp+ebx+1], 0
-    add ebx, 2
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-fd_void_1:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-call_limit_1:
+    jmp call_result_st
+call_limit_st:
     pop eax
     add esp, 168
     jmp exit_op
-call_c_1:
-    mov edx, [esp]
+acc_st:
+    push ecx
+    push eax
+    mov ecx, [edx+METHOD_CODE]
+    cmp BYTE PTR [edx+METHOD_ACCESSOR], 1
+    jne acc_set_st
+    movzx ecx, WORD PTR [ecx+2]
+    xchg cl, ch
+    imul ecx, ecx, 24
+    add ecx, [eax+8]
+    mov ecx, [ecx+16]
+    test ecx, ecx
+    jz acc_fail_st
+    cmp BYTE PTR [ecx+38], 1
+    jne acc_fail_st
+    mov eax, [edi+ebx*4-4]
+    and eax, 0FFFFFFh
+    mov edx, [esp+8]
+    mov edx, [edx+24]
+    mov eax, [edx+eax*4]
+    mov edx, [ecx+32]
+    mov eax, [eax+edx*4+4]
+    mov dl, [ecx+36]
+    mov [edi+ebx*4-4], eax
+    mov [ebp+ebx-1], dl
+    add esp, 8
+    add esi, 2
+    DISPATCH
+acc_set_st:
+    movzx ecx, WORD PTR [ecx+3]
+    xchg cl, ch
+    imul ecx, ecx, 24
+    add ecx, [eax+8]
+    mov ecx, [ecx+16]
+    test ecx, ecx
+    jz acc_fail_st
+    cmp BYTE PTR [ecx+38], 1
+    jne acc_fail_st
+    cmp WORD PTR [ecx+36], 4900h
+    jne acc_fail_st
+    mov eax, [edi+ebx*4-8]
+    and eax, 0FFFFFFh
+    mov edx, [esp+8]
+    mov edx, [edx+24]
+    mov eax, [edx+eax*4]
+    mov edx, [ecx+32]
+    mov ecx, [edi+ebx*4-4]
+    mov [eax+edx*4+4], ecx
+    sub ebx, 2
+    mov eax, [edi+ebx*4-4]
+    add esp, 8
+    add esi, 2
+    DISPATCH
+acc_fail_st:
+    pop eax
+    pop ecx
+    jmp acc_back_st
+call_c_st:
+    push eax
+    push edx
+    mov edx, [esp+8]
     mov eax, esi
     dec eax
     sub eax, [edx+0]
+    mov [edx+12], eax
     mov edx, [edx+36]
     mov [edx+12], eax
     mov eax, ebx
@@ -2221,27 +2261,33 @@ call_c_1:
     movzx eax, WORD PTR [ecx+40]
     neg eax
     add eax, ebx
+    pop edx
     push ecx
     push eax
-    mov edx, [esp+8]
-    lea edx, [edx+48]
+    mov ecx, [esp+12]
+    lea ecx, [ecx+48]
+    push ecx
+    mov ecx, [esp+8]
+    movzx ecx, WORD PTR [ecx+40]
+    push ecx
+    lea ecx, [ebp+eax]
+    push ecx
+    lea ecx, [edi+eax*4]
+    push ecx
     push edx
-    movzx edx, WORD PTR [ecx+40]
-    push edx
-    lea edx, [ebp+eax]
-    push edx
-    lea edx, [edi+eax*4]
-    push edx
-    push DWORD PTR [ecx+8]
-    mov edx, [ecx+0]
-    mov ecx, [esp+28]
+    mov edx, [esp+28]
+    mov ecx, [esp+32]
     mov ecx, [ecx+32]
     call @jbv_execute@28
     pop ebx
     pop ecx
+    add esp, 4
     mov edx, [esp]
     test eax, eax
     jnz call_failed
+    movzx ecx, BYTE PTR [ecx+42]
+    add esi, 2
+call_result_st:
     mov eax, [edx+44]
     mov eax, [eax]
     mov [edx+24], eax
@@ -2251,32 +2297,28 @@ call_c_1:
     mov eax, [edx+72]
     mov eax, [eax]
     mov [edx+64], eax
-    movzx eax, BYTE PTR [ecx+42]
-    add esi, 2
-    test eax, eax
-    jz call_void_1
-    cmp al, 3
-    je call_wide_1
-    cmp al, 6
-    je call_wide_1
-    cmp al, 2
+    test ecx, ecx
+    jz fd_void_st
+    cmp cl, 3
+    je fd_wide_st
+    cmp cl, 6
+    je fd_wide_st
+    cmp cl, 2
     sete al
     mov [ebp+ebx], al
     mov eax, [edx+48]
     mov [edi+ebx*4], eax
     inc ebx
     DISPATCH
-call_wide_1:
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
+fd_wide_st:
+    movq xmm0, QWORD PTR [edx+48]
+    movq QWORD PTR [edi+ebx*4], xmm0
     mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    mov eax, [edx+48+4]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
+    mov BYTE PTR [ebp+ebx+1], 0
+    add ebx, 2
+    mov eax, [edi+ebx*4-4]
     DISPATCH
-call_void_1:
+fd_void_st:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
@@ -2315,453 +2357,29 @@ op_invoke_182:
     jmp exit_op
 inv_182_0:
     mov edx, [ecx+20]
-    test WORD PTR [edx], 0520h
-    jnz call_c_182_0
-    mov edx, [esp]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov [edx+12], eax
-    mov edx, [edx+36]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    mov edx, [ecx+20]
     mov eax, [ecx+16]
-    movzx ecx, WORD PTR [ecx+40]
-    neg ecx
-    add ecx, ebx
-    sub esp, 168
-    push esp
-    call enter_run
-    cmp eax, 1279872256
-    je call_limit_182_0
-    pop ecx
-    mov edx, [ecx+144]
-    movq xmm0, QWORD PTR [ecx+48]
-    movq QWORD PTR [edx+48], xmm0
-    mov ebx, [ecx+152]
-    movzx ebp, BYTE PTR [ecx+157]
-    add esp, 168
-    mov edi, [edx+4]
-    mov esi, [edx+0]
-    add esi, [edx+12]
-    inc esi
-    test eax, eax
-    jnz frame_failed
-    add esi, 2
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
-    mov ecx, ebp
-    mov ebp, [edx+8]
-    test ecx, ecx
-    jz fd_void_182_0
-    cmp cl, 3
-    je fd_wide_182_0
-    cmp cl, 6
-    je fd_wide_182_0
-    cmp cl, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-fd_wide_182_0:
-    movq xmm0, QWORD PTR [edx+48]
-    movq QWORD PTR [edi+ebx*4], xmm0
-    mov BYTE PTR [ebp+ebx], 0
-    mov BYTE PTR [ebp+ebx+1], 0
-    add ebx, 2
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-fd_void_182_0:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-call_limit_182_0:
-    pop eax
-    add esp, 168
-    jmp exit_op
-call_c_182_0:
-    mov edx, [esp]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov edx, [edx+36]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    movzx eax, WORD PTR [ecx+40]
-    neg eax
-    add eax, ebx
-    push ecx
-    push eax
-    mov edx, [esp+8]
-    lea edx, [edx+48]
-    push edx
-    movzx edx, WORD PTR [ecx+40]
-    push edx
-    lea edx, [ebp+eax]
-    push edx
-    lea edx, [edi+eax*4]
-    push edx
-    push DWORD PTR [ecx+20]
-    mov edx, [ecx+16]
-    mov ecx, [esp+28]
-    mov ecx, [ecx+32]
-    call @jbv_execute@28
-    pop ebx
-    pop ecx
-    mov edx, [esp]
-    test eax, eax
-    jnz call_failed
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
-    movzx eax, BYTE PTR [ecx+42]
-    add esi, 2
-    test eax, eax
-    jz call_void_182_0
-    cmp al, 3
-    je call_wide_182_0
-    cmp al, 6
-    je call_wide_182_0
-    cmp al, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-call_wide_182_0:
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    mov eax, [edx+48+4]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    DISPATCH
-call_void_182_0:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
+    jmp inv_182_call
 inv_182_1:
     mov edx, [ecx+72]
-    test WORD PTR [edx], 0520h
-    jnz call_c_182_1
-    mov edx, [esp]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov [edx+12], eax
-    mov edx, [edx+36]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    mov edx, [ecx+72]
     mov eax, [ecx+60]
-    movzx ecx, WORD PTR [ecx+40]
-    neg ecx
-    add ecx, ebx
-    sub esp, 168
-    push esp
-    call enter_run
-    cmp eax, 1279872256
-    je call_limit_182_1
-    pop ecx
-    mov edx, [ecx+144]
-    movq xmm0, QWORD PTR [ecx+48]
-    movq QWORD PTR [edx+48], xmm0
-    mov ebx, [ecx+152]
-    movzx ebp, BYTE PTR [ecx+157]
-    add esp, 168
-    mov edi, [edx+4]
-    mov esi, [edx+0]
-    add esi, [edx+12]
-    inc esi
-    test eax, eax
-    jnz frame_failed
-    add esi, 2
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
-    mov ecx, ebp
-    mov ebp, [edx+8]
-    test ecx, ecx
-    jz fd_void_182_1
-    cmp cl, 3
-    je fd_wide_182_1
-    cmp cl, 6
-    je fd_wide_182_1
-    cmp cl, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-fd_wide_182_1:
-    movq xmm0, QWORD PTR [edx+48]
-    movq QWORD PTR [edi+ebx*4], xmm0
-    mov BYTE PTR [ebp+ebx], 0
-    mov BYTE PTR [ebp+ebx+1], 0
-    add ebx, 2
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-fd_void_182_1:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-call_limit_182_1:
-    pop eax
-    add esp, 168
-    jmp exit_op
-call_c_182_1:
-    mov edx, [esp]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov edx, [edx+36]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    movzx eax, WORD PTR [ecx+40]
-    neg eax
-    add eax, ebx
-    push ecx
-    push eax
-    mov edx, [esp+8]
-    lea edx, [edx+48]
-    push edx
-    movzx edx, WORD PTR [ecx+40]
-    push edx
-    lea edx, [ebp+eax]
-    push edx
-    lea edx, [edi+eax*4]
-    push edx
-    push DWORD PTR [ecx+72]
-    mov edx, [ecx+60]
-    mov ecx, [esp+28]
-    mov ecx, [ecx+32]
-    call @jbv_execute@28
-    pop ebx
-    pop ecx
-    mov edx, [esp]
-    test eax, eax
-    jnz call_failed
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
-    movzx eax, BYTE PTR [ecx+42]
-    add esi, 2
-    test eax, eax
-    jz call_void_182_1
-    cmp al, 3
-    je call_wide_182_1
-    cmp al, 6
-    je call_wide_182_1
-    cmp al, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-call_wide_182_1:
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    mov eax, [edx+48+4]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    DISPATCH
-call_void_182_1:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
+    jmp inv_182_call
 inv_182_2:
     mov edx, [ecx+76]
-    test WORD PTR [edx], 0520h
-    jnz call_c_182_2
-    mov edx, [esp]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov [edx+12], eax
-    mov edx, [edx+36]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    mov edx, [ecx+76]
     mov eax, [ecx+64]
-    movzx ecx, WORD PTR [ecx+40]
-    neg ecx
-    add ecx, ebx
-    sub esp, 168
-    push esp
-    call enter_run
-    cmp eax, 1279872256
-    je call_limit_182_2
-    pop ecx
-    mov edx, [ecx+144]
-    movq xmm0, QWORD PTR [ecx+48]
-    movq QWORD PTR [edx+48], xmm0
-    mov ebx, [ecx+152]
-    movzx ebp, BYTE PTR [ecx+157]
-    add esp, 168
-    mov edi, [edx+4]
-    mov esi, [edx+0]
-    add esi, [edx+12]
-    inc esi
-    test eax, eax
-    jnz frame_failed
-    add esi, 2
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
-    mov ecx, ebp
-    mov ebp, [edx+8]
-    test ecx, ecx
-    jz fd_void_182_2
-    cmp cl, 3
-    je fd_wide_182_2
-    cmp cl, 6
-    je fd_wide_182_2
-    cmp cl, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-fd_wide_182_2:
-    movq xmm0, QWORD PTR [edx+48]
-    movq QWORD PTR [edi+ebx*4], xmm0
-    mov BYTE PTR [ebp+ebx], 0
-    mov BYTE PTR [ebp+ebx+1], 0
-    add ebx, 2
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-fd_void_182_2:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-call_limit_182_2:
-    pop eax
-    add esp, 168
-    jmp exit_op
-call_c_182_2:
-    mov edx, [esp]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov edx, [edx+36]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    movzx eax, WORD PTR [ecx+40]
-    neg eax
-    add eax, ebx
-    push ecx
-    push eax
-    mov edx, [esp+8]
-    lea edx, [edx+48]
-    push edx
-    movzx edx, WORD PTR [ecx+40]
-    push edx
-    lea edx, [ebp+eax]
-    push edx
-    lea edx, [edi+eax*4]
-    push edx
-    push DWORD PTR [ecx+76]
-    mov edx, [ecx+64]
-    mov ecx, [esp+28]
-    mov ecx, [ecx+32]
-    call @jbv_execute@28
-    pop ebx
-    pop ecx
-    mov edx, [esp]
-    test eax, eax
-    jnz call_failed
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
-    movzx eax, BYTE PTR [ecx+42]
-    add esi, 2
-    test eax, eax
-    jz call_void_182_2
-    cmp al, 3
-    je call_wide_182_2
-    cmp al, 6
-    je call_wide_182_2
-    cmp al, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-call_wide_182_2:
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    mov eax, [edx+48+4]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    DISPATCH
-call_void_182_2:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
+    jmp inv_182_call
 inv_182_3:
     mov edx, [ecx+80]
+    mov eax, [ecx+68]
+    jmp inv_182_call
+inv_182_call:
     test WORD PTR [edx], 0520h
-    jnz call_c_182_3
-    mov edx, [esp]
+    jnz call_c_182
+    cmp BYTE PTR [edx+METHOD_ACCESSOR], 0
+    jne acc_182
+acc_back_182:
+    push eax
+    push edx
+    mov edx, [esp+8]
     mov eax, esi
     dec eax
     sub eax, [edx+0]
@@ -2771,8 +2389,8 @@ inv_182_3:
     mov eax, ebx
     sub eax, [edx+24]
     mov [edx+16], eax
-    mov edx, [ecx+80]
-    mov eax, [ecx+68]
+    pop edx
+    pop eax
     movzx ecx, WORD PTR [ecx+40]
     neg ecx
     add ecx, ebx
@@ -2780,7 +2398,7 @@ inv_182_3:
     push esp
     call enter_run
     cmp eax, 1279872256
-    je call_limit_182_3
+    je call_limit_182
     pop ecx
     mov edx, [ecx+144]
     movq xmm0, QWORD PTR [ecx+48]
@@ -2795,50 +2413,78 @@ inv_182_3:
     test eax, eax
     jnz frame_failed
     add esi, 2
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
     mov ecx, ebp
     mov ebp, [edx+8]
-    test ecx, ecx
-    jz fd_void_182_3
-    cmp cl, 3
-    je fd_wide_182_3
-    cmp cl, 6
-    je fd_wide_182_3
-    cmp cl, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-fd_wide_182_3:
-    movq xmm0, QWORD PTR [edx+48]
-    movq QWORD PTR [edi+ebx*4], xmm0
-    mov BYTE PTR [ebp+ebx], 0
-    mov BYTE PTR [ebp+ebx+1], 0
-    add ebx, 2
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-fd_void_182_3:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-call_limit_182_3:
+    jmp call_result_182
+call_limit_182:
     pop eax
     add esp, 168
     jmp exit_op
-call_c_182_3:
-    mov edx, [esp]
+acc_182:
+    push ecx
+    push eax
+    mov ecx, [edx+METHOD_CODE]
+    cmp BYTE PTR [edx+METHOD_ACCESSOR], 1
+    jne acc_set_182
+    movzx ecx, WORD PTR [ecx+2]
+    xchg cl, ch
+    imul ecx, ecx, 24
+    add ecx, [eax+8]
+    mov ecx, [ecx+16]
+    test ecx, ecx
+    jz acc_fail_182
+    cmp BYTE PTR [ecx+38], 1
+    jne acc_fail_182
+    mov eax, [edi+ebx*4-4]
+    and eax, 0FFFFFFh
+    mov edx, [esp+8]
+    mov edx, [edx+24]
+    mov eax, [edx+eax*4]
+    mov edx, [ecx+32]
+    mov eax, [eax+edx*4+4]
+    mov dl, [ecx+36]
+    mov [edi+ebx*4-4], eax
+    mov [ebp+ebx-1], dl
+    add esp, 8
+    add esi, 2
+    DISPATCH
+acc_set_182:
+    movzx ecx, WORD PTR [ecx+3]
+    xchg cl, ch
+    imul ecx, ecx, 24
+    add ecx, [eax+8]
+    mov ecx, [ecx+16]
+    test ecx, ecx
+    jz acc_fail_182
+    cmp BYTE PTR [ecx+38], 1
+    jne acc_fail_182
+    cmp WORD PTR [ecx+36], 4900h
+    jne acc_fail_182
+    mov eax, [edi+ebx*4-8]
+    and eax, 0FFFFFFh
+    mov edx, [esp+8]
+    mov edx, [edx+24]
+    mov eax, [edx+eax*4]
+    mov edx, [ecx+32]
+    mov ecx, [edi+ebx*4-4]
+    mov [eax+edx*4+4], ecx
+    sub ebx, 2
+    mov eax, [edi+ebx*4-4]
+    add esp, 8
+    add esi, 2
+    DISPATCH
+acc_fail_182:
+    pop eax
+    pop ecx
+    jmp acc_back_182
+call_c_182:
+    push eax
+    push edx
+    mov edx, [esp+8]
     mov eax, esi
     dec eax
     sub eax, [edx+0]
+    mov [edx+12], eax
     mov edx, [edx+36]
     mov [edx+12], eax
     mov eax, ebx
@@ -2847,27 +2493,33 @@ call_c_182_3:
     movzx eax, WORD PTR [ecx+40]
     neg eax
     add eax, ebx
+    pop edx
     push ecx
     push eax
-    mov edx, [esp+8]
-    lea edx, [edx+48]
+    mov ecx, [esp+12]
+    lea ecx, [ecx+48]
+    push ecx
+    mov ecx, [esp+8]
+    movzx ecx, WORD PTR [ecx+40]
+    push ecx
+    lea ecx, [ebp+eax]
+    push ecx
+    lea ecx, [edi+eax*4]
+    push ecx
     push edx
-    movzx edx, WORD PTR [ecx+40]
-    push edx
-    lea edx, [ebp+eax]
-    push edx
-    lea edx, [edi+eax*4]
-    push edx
-    push DWORD PTR [ecx+80]
-    mov edx, [ecx+68]
-    mov ecx, [esp+28]
+    mov edx, [esp+28]
+    mov ecx, [esp+32]
     mov ecx, [ecx+32]
     call @jbv_execute@28
     pop ebx
     pop ecx
+    add esp, 4
     mov edx, [esp]
     test eax, eax
     jnz call_failed
+    movzx ecx, BYTE PTR [ecx+42]
+    add esi, 2
+call_result_182:
     mov eax, [edx+44]
     mov eax, [eax]
     mov [edx+24], eax
@@ -2877,32 +2529,28 @@ call_c_182_3:
     mov eax, [edx+72]
     mov eax, [eax]
     mov [edx+64], eax
-    movzx eax, BYTE PTR [ecx+42]
-    add esi, 2
-    test eax, eax
-    jz call_void_182_3
-    cmp al, 3
-    je call_wide_182_3
-    cmp al, 6
-    je call_wide_182_3
-    cmp al, 2
+    test ecx, ecx
+    jz fd_void_182
+    cmp cl, 3
+    je fd_wide_182
+    cmp cl, 6
+    je fd_wide_182
+    cmp cl, 2
     sete al
     mov [ebp+ebx], al
     mov eax, [edx+48]
     mov [edi+ebx*4], eax
     inc ebx
     DISPATCH
-call_wide_182_3:
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
+fd_wide_182:
+    movq xmm0, QWORD PTR [edx+48]
+    movq QWORD PTR [edi+ebx*4], xmm0
     mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    mov eax, [edx+48+4]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
+    mov BYTE PTR [ebp+ebx+1], 0
+    add ebx, 2
+    mov eax, [edi+ebx*4-4]
     DISPATCH
-call_void_182_3:
+fd_void_182:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
@@ -2941,453 +2589,29 @@ op_invoke_185:
     jmp exit_op
 inv_185_0:
     mov edx, [ecx+20]
-    test WORD PTR [edx], 0520h
-    jnz call_c_185_0
-    mov edx, [esp]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov [edx+12], eax
-    mov edx, [edx+36]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    mov edx, [ecx+20]
     mov eax, [ecx+16]
-    movzx ecx, WORD PTR [ecx+40]
-    neg ecx
-    add ecx, ebx
-    sub esp, 168
-    push esp
-    call enter_run
-    cmp eax, 1279872256
-    je call_limit_185_0
-    pop ecx
-    mov edx, [ecx+144]
-    movq xmm0, QWORD PTR [ecx+48]
-    movq QWORD PTR [edx+48], xmm0
-    mov ebx, [ecx+152]
-    movzx ebp, BYTE PTR [ecx+157]
-    add esp, 168
-    mov edi, [edx+4]
-    mov esi, [edx+0]
-    add esi, [edx+12]
-    inc esi
-    test eax, eax
-    jnz frame_failed
-    add esi, 4
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
-    mov ecx, ebp
-    mov ebp, [edx+8]
-    test ecx, ecx
-    jz fd_void_185_0
-    cmp cl, 3
-    je fd_wide_185_0
-    cmp cl, 6
-    je fd_wide_185_0
-    cmp cl, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-fd_wide_185_0:
-    movq xmm0, QWORD PTR [edx+48]
-    movq QWORD PTR [edi+ebx*4], xmm0
-    mov BYTE PTR [ebp+ebx], 0
-    mov BYTE PTR [ebp+ebx+1], 0
-    add ebx, 2
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-fd_void_185_0:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-call_limit_185_0:
-    pop eax
-    add esp, 168
-    jmp exit_op
-call_c_185_0:
-    mov edx, [esp]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov edx, [edx+36]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    movzx eax, WORD PTR [ecx+40]
-    neg eax
-    add eax, ebx
-    push ecx
-    push eax
-    mov edx, [esp+8]
-    lea edx, [edx+48]
-    push edx
-    movzx edx, WORD PTR [ecx+40]
-    push edx
-    lea edx, [ebp+eax]
-    push edx
-    lea edx, [edi+eax*4]
-    push edx
-    push DWORD PTR [ecx+20]
-    mov edx, [ecx+16]
-    mov ecx, [esp+28]
-    mov ecx, [ecx+32]
-    call @jbv_execute@28
-    pop ebx
-    pop ecx
-    mov edx, [esp]
-    test eax, eax
-    jnz call_failed
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
-    movzx eax, BYTE PTR [ecx+42]
-    add esi, 4
-    test eax, eax
-    jz call_void_185_0
-    cmp al, 3
-    je call_wide_185_0
-    cmp al, 6
-    je call_wide_185_0
-    cmp al, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-call_wide_185_0:
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    mov eax, [edx+48+4]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    DISPATCH
-call_void_185_0:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
+    jmp inv_185_call
 inv_185_1:
     mov edx, [ecx+72]
-    test WORD PTR [edx], 0520h
-    jnz call_c_185_1
-    mov edx, [esp]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov [edx+12], eax
-    mov edx, [edx+36]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    mov edx, [ecx+72]
     mov eax, [ecx+60]
-    movzx ecx, WORD PTR [ecx+40]
-    neg ecx
-    add ecx, ebx
-    sub esp, 168
-    push esp
-    call enter_run
-    cmp eax, 1279872256
-    je call_limit_185_1
-    pop ecx
-    mov edx, [ecx+144]
-    movq xmm0, QWORD PTR [ecx+48]
-    movq QWORD PTR [edx+48], xmm0
-    mov ebx, [ecx+152]
-    movzx ebp, BYTE PTR [ecx+157]
-    add esp, 168
-    mov edi, [edx+4]
-    mov esi, [edx+0]
-    add esi, [edx+12]
-    inc esi
-    test eax, eax
-    jnz frame_failed
-    add esi, 4
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
-    mov ecx, ebp
-    mov ebp, [edx+8]
-    test ecx, ecx
-    jz fd_void_185_1
-    cmp cl, 3
-    je fd_wide_185_1
-    cmp cl, 6
-    je fd_wide_185_1
-    cmp cl, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-fd_wide_185_1:
-    movq xmm0, QWORD PTR [edx+48]
-    movq QWORD PTR [edi+ebx*4], xmm0
-    mov BYTE PTR [ebp+ebx], 0
-    mov BYTE PTR [ebp+ebx+1], 0
-    add ebx, 2
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-fd_void_185_1:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-call_limit_185_1:
-    pop eax
-    add esp, 168
-    jmp exit_op
-call_c_185_1:
-    mov edx, [esp]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov edx, [edx+36]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    movzx eax, WORD PTR [ecx+40]
-    neg eax
-    add eax, ebx
-    push ecx
-    push eax
-    mov edx, [esp+8]
-    lea edx, [edx+48]
-    push edx
-    movzx edx, WORD PTR [ecx+40]
-    push edx
-    lea edx, [ebp+eax]
-    push edx
-    lea edx, [edi+eax*4]
-    push edx
-    push DWORD PTR [ecx+72]
-    mov edx, [ecx+60]
-    mov ecx, [esp+28]
-    mov ecx, [ecx+32]
-    call @jbv_execute@28
-    pop ebx
-    pop ecx
-    mov edx, [esp]
-    test eax, eax
-    jnz call_failed
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
-    movzx eax, BYTE PTR [ecx+42]
-    add esi, 4
-    test eax, eax
-    jz call_void_185_1
-    cmp al, 3
-    je call_wide_185_1
-    cmp al, 6
-    je call_wide_185_1
-    cmp al, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-call_wide_185_1:
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    mov eax, [edx+48+4]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    DISPATCH
-call_void_185_1:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
+    jmp inv_185_call
 inv_185_2:
     mov edx, [ecx+76]
-    test WORD PTR [edx], 0520h
-    jnz call_c_185_2
-    mov edx, [esp]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov [edx+12], eax
-    mov edx, [edx+36]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    mov edx, [ecx+76]
     mov eax, [ecx+64]
-    movzx ecx, WORD PTR [ecx+40]
-    neg ecx
-    add ecx, ebx
-    sub esp, 168
-    push esp
-    call enter_run
-    cmp eax, 1279872256
-    je call_limit_185_2
-    pop ecx
-    mov edx, [ecx+144]
-    movq xmm0, QWORD PTR [ecx+48]
-    movq QWORD PTR [edx+48], xmm0
-    mov ebx, [ecx+152]
-    movzx ebp, BYTE PTR [ecx+157]
-    add esp, 168
-    mov edi, [edx+4]
-    mov esi, [edx+0]
-    add esi, [edx+12]
-    inc esi
-    test eax, eax
-    jnz frame_failed
-    add esi, 4
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
-    mov ecx, ebp
-    mov ebp, [edx+8]
-    test ecx, ecx
-    jz fd_void_185_2
-    cmp cl, 3
-    je fd_wide_185_2
-    cmp cl, 6
-    je fd_wide_185_2
-    cmp cl, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-fd_wide_185_2:
-    movq xmm0, QWORD PTR [edx+48]
-    movq QWORD PTR [edi+ebx*4], xmm0
-    mov BYTE PTR [ebp+ebx], 0
-    mov BYTE PTR [ebp+ebx+1], 0
-    add ebx, 2
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-fd_void_185_2:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-call_limit_185_2:
-    pop eax
-    add esp, 168
-    jmp exit_op
-call_c_185_2:
-    mov edx, [esp]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov edx, [edx+36]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    movzx eax, WORD PTR [ecx+40]
-    neg eax
-    add eax, ebx
-    push ecx
-    push eax
-    mov edx, [esp+8]
-    lea edx, [edx+48]
-    push edx
-    movzx edx, WORD PTR [ecx+40]
-    push edx
-    lea edx, [ebp+eax]
-    push edx
-    lea edx, [edi+eax*4]
-    push edx
-    push DWORD PTR [ecx+76]
-    mov edx, [ecx+64]
-    mov ecx, [esp+28]
-    mov ecx, [ecx+32]
-    call @jbv_execute@28
-    pop ebx
-    pop ecx
-    mov edx, [esp]
-    test eax, eax
-    jnz call_failed
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
-    movzx eax, BYTE PTR [ecx+42]
-    add esi, 4
-    test eax, eax
-    jz call_void_185_2
-    cmp al, 3
-    je call_wide_185_2
-    cmp al, 6
-    je call_wide_185_2
-    cmp al, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-call_wide_185_2:
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    mov eax, [edx+48+4]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    DISPATCH
-call_void_185_2:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
+    jmp inv_185_call
 inv_185_3:
     mov edx, [ecx+80]
+    mov eax, [ecx+68]
+    jmp inv_185_call
+inv_185_call:
     test WORD PTR [edx], 0520h
-    jnz call_c_185_3
-    mov edx, [esp]
+    jnz call_c_185
+    cmp BYTE PTR [edx+METHOD_ACCESSOR], 0
+    jne acc_185
+acc_back_185:
+    push eax
+    push edx
+    mov edx, [esp+8]
     mov eax, esi
     dec eax
     sub eax, [edx+0]
@@ -3397,8 +2621,8 @@ inv_185_3:
     mov eax, ebx
     sub eax, [edx+24]
     mov [edx+16], eax
-    mov edx, [ecx+80]
-    mov eax, [ecx+68]
+    pop edx
+    pop eax
     movzx ecx, WORD PTR [ecx+40]
     neg ecx
     add ecx, ebx
@@ -3406,7 +2630,7 @@ inv_185_3:
     push esp
     call enter_run
     cmp eax, 1279872256
-    je call_limit_185_3
+    je call_limit_185
     pop ecx
     mov edx, [ecx+144]
     movq xmm0, QWORD PTR [ecx+48]
@@ -3421,50 +2645,78 @@ inv_185_3:
     test eax, eax
     jnz frame_failed
     add esi, 4
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
     mov ecx, ebp
     mov ebp, [edx+8]
-    test ecx, ecx
-    jz fd_void_185_3
-    cmp cl, 3
-    je fd_wide_185_3
-    cmp cl, 6
-    je fd_wide_185_3
-    cmp cl, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-fd_wide_185_3:
-    movq xmm0, QWORD PTR [edx+48]
-    movq QWORD PTR [edi+ebx*4], xmm0
-    mov BYTE PTR [ebp+ebx], 0
-    mov BYTE PTR [ebp+ebx+1], 0
-    add ebx, 2
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-fd_void_185_3:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-call_limit_185_3:
+    jmp call_result_185
+call_limit_185:
     pop eax
     add esp, 168
     jmp exit_op
-call_c_185_3:
-    mov edx, [esp]
+acc_185:
+    push ecx
+    push eax
+    mov ecx, [edx+METHOD_CODE]
+    cmp BYTE PTR [edx+METHOD_ACCESSOR], 1
+    jne acc_set_185
+    movzx ecx, WORD PTR [ecx+2]
+    xchg cl, ch
+    imul ecx, ecx, 24
+    add ecx, [eax+8]
+    mov ecx, [ecx+16]
+    test ecx, ecx
+    jz acc_fail_185
+    cmp BYTE PTR [ecx+38], 1
+    jne acc_fail_185
+    mov eax, [edi+ebx*4-4]
+    and eax, 0FFFFFFh
+    mov edx, [esp+8]
+    mov edx, [edx+24]
+    mov eax, [edx+eax*4]
+    mov edx, [ecx+32]
+    mov eax, [eax+edx*4+4]
+    mov dl, [ecx+36]
+    mov [edi+ebx*4-4], eax
+    mov [ebp+ebx-1], dl
+    add esp, 8
+    add esi, 4
+    DISPATCH
+acc_set_185:
+    movzx ecx, WORD PTR [ecx+3]
+    xchg cl, ch
+    imul ecx, ecx, 24
+    add ecx, [eax+8]
+    mov ecx, [ecx+16]
+    test ecx, ecx
+    jz acc_fail_185
+    cmp BYTE PTR [ecx+38], 1
+    jne acc_fail_185
+    cmp WORD PTR [ecx+36], 4900h
+    jne acc_fail_185
+    mov eax, [edi+ebx*4-8]
+    and eax, 0FFFFFFh
+    mov edx, [esp+8]
+    mov edx, [edx+24]
+    mov eax, [edx+eax*4]
+    mov edx, [ecx+32]
+    mov ecx, [edi+ebx*4-4]
+    mov [eax+edx*4+4], ecx
+    sub ebx, 2
+    mov eax, [edi+ebx*4-4]
+    add esp, 8
+    add esi, 4
+    DISPATCH
+acc_fail_185:
+    pop eax
+    pop ecx
+    jmp acc_back_185
+call_c_185:
+    push eax
+    push edx
+    mov edx, [esp+8]
     mov eax, esi
     dec eax
     sub eax, [edx+0]
+    mov [edx+12], eax
     mov edx, [edx+36]
     mov [edx+12], eax
     mov eax, ebx
@@ -3473,27 +2725,33 @@ call_c_185_3:
     movzx eax, WORD PTR [ecx+40]
     neg eax
     add eax, ebx
+    pop edx
     push ecx
     push eax
-    mov edx, [esp+8]
-    lea edx, [edx+48]
+    mov ecx, [esp+12]
+    lea ecx, [ecx+48]
+    push ecx
+    mov ecx, [esp+8]
+    movzx ecx, WORD PTR [ecx+40]
+    push ecx
+    lea ecx, [ebp+eax]
+    push ecx
+    lea ecx, [edi+eax*4]
+    push ecx
     push edx
-    movzx edx, WORD PTR [ecx+40]
-    push edx
-    lea edx, [ebp+eax]
-    push edx
-    lea edx, [edi+eax*4]
-    push edx
-    push DWORD PTR [ecx+80]
-    mov edx, [ecx+68]
-    mov ecx, [esp+28]
+    mov edx, [esp+28]
+    mov ecx, [esp+32]
     mov ecx, [ecx+32]
     call @jbv_execute@28
     pop ebx
     pop ecx
+    add esp, 4
     mov edx, [esp]
     test eax, eax
     jnz call_failed
+    movzx ecx, BYTE PTR [ecx+42]
+    add esi, 4
+call_result_185:
     mov eax, [edx+44]
     mov eax, [eax]
     mov [edx+24], eax
@@ -3503,32 +2761,28 @@ call_c_185_3:
     mov eax, [edx+72]
     mov eax, [eax]
     mov [edx+64], eax
-    movzx eax, BYTE PTR [ecx+42]
-    add esi, 4
-    test eax, eax
-    jz call_void_185_3
-    cmp al, 3
-    je call_wide_185_3
-    cmp al, 6
-    je call_wide_185_3
-    cmp al, 2
+    test ecx, ecx
+    jz fd_void_185
+    cmp cl, 3
+    je fd_wide_185
+    cmp cl, 6
+    je fd_wide_185
+    cmp cl, 2
     sete al
     mov [ebp+ebx], al
     mov eax, [edx+48]
     mov [edi+ebx*4], eax
     inc ebx
     DISPATCH
-call_wide_185_3:
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
+fd_wide_185:
+    movq xmm0, QWORD PTR [edx+48]
+    movq QWORD PTR [edi+ebx*4], xmm0
     mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    mov eax, [edx+48+4]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
+    mov BYTE PTR [ebp+ebx+1], 0
+    add ebx, 2
+    mov eax, [edi+ebx*4-4]
     DISPATCH
-call_void_185_3:
+fd_void_185:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
@@ -3558,9 +2812,15 @@ op_invokespecial:
     DISPATCH
 special_call:
     mov edx, [ecx+28]
+    mov eax, [ecx+24]
     test WORD PTR [edx], 0520h
     jnz call_c_sp
-    mov edx, [esp]
+    cmp BYTE PTR [edx+METHOD_ACCESSOR], 0
+    jne acc_sp
+acc_back_sp:
+    push eax
+    push edx
+    mov edx, [esp+8]
     mov eax, esi
     dec eax
     sub eax, [edx+0]
@@ -3570,8 +2830,8 @@ special_call:
     mov eax, ebx
     sub eax, [edx+24]
     mov [edx+16], eax
-    mov edx, [ecx+28]
-    mov eax, [ecx+24]
+    pop edx
+    pop eax
     movzx ecx, WORD PTR [ecx+40]
     neg ecx
     add ecx, ebx
@@ -3594,6 +2854,113 @@ special_call:
     test eax, eax
     jnz frame_failed
     add esi, 2
+    mov ecx, ebp
+    mov ebp, [edx+8]
+    jmp call_result_sp
+call_limit_sp:
+    pop eax
+    add esp, 168
+    jmp exit_op
+acc_sp:
+    push ecx
+    push eax
+    mov ecx, [edx+METHOD_CODE]
+    cmp BYTE PTR [edx+METHOD_ACCESSOR], 1
+    jne acc_set_sp
+    movzx ecx, WORD PTR [ecx+2]
+    xchg cl, ch
+    imul ecx, ecx, 24
+    add ecx, [eax+8]
+    mov ecx, [ecx+16]
+    test ecx, ecx
+    jz acc_fail_sp
+    cmp BYTE PTR [ecx+38], 1
+    jne acc_fail_sp
+    mov eax, [edi+ebx*4-4]
+    and eax, 0FFFFFFh
+    mov edx, [esp+8]
+    mov edx, [edx+24]
+    mov eax, [edx+eax*4]
+    mov edx, [ecx+32]
+    mov eax, [eax+edx*4+4]
+    mov dl, [ecx+36]
+    mov [edi+ebx*4-4], eax
+    mov [ebp+ebx-1], dl
+    add esp, 8
+    add esi, 2
+    DISPATCH
+acc_set_sp:
+    movzx ecx, WORD PTR [ecx+3]
+    xchg cl, ch
+    imul ecx, ecx, 24
+    add ecx, [eax+8]
+    mov ecx, [ecx+16]
+    test ecx, ecx
+    jz acc_fail_sp
+    cmp BYTE PTR [ecx+38], 1
+    jne acc_fail_sp
+    cmp WORD PTR [ecx+36], 4900h
+    jne acc_fail_sp
+    mov eax, [edi+ebx*4-8]
+    and eax, 0FFFFFFh
+    mov edx, [esp+8]
+    mov edx, [edx+24]
+    mov eax, [edx+eax*4]
+    mov edx, [ecx+32]
+    mov ecx, [edi+ebx*4-4]
+    mov [eax+edx*4+4], ecx
+    sub ebx, 2
+    mov eax, [edi+ebx*4-4]
+    add esp, 8
+    add esi, 2
+    DISPATCH
+acc_fail_sp:
+    pop eax
+    pop ecx
+    jmp acc_back_sp
+call_c_sp:
+    push eax
+    push edx
+    mov edx, [esp+8]
+    mov eax, esi
+    dec eax
+    sub eax, [edx+0]
+    mov [edx+12], eax
+    mov edx, [edx+36]
+    mov [edx+12], eax
+    mov eax, ebx
+    sub eax, [edx+24]
+    mov [edx+16], eax
+    movzx eax, WORD PTR [ecx+40]
+    neg eax
+    add eax, ebx
+    pop edx
+    push ecx
+    push eax
+    mov ecx, [esp+12]
+    lea ecx, [ecx+48]
+    push ecx
+    mov ecx, [esp+8]
+    movzx ecx, WORD PTR [ecx+40]
+    push ecx
+    lea ecx, [ebp+eax]
+    push ecx
+    lea ecx, [edi+eax*4]
+    push ecx
+    push edx
+    mov edx, [esp+28]
+    mov ecx, [esp+32]
+    mov ecx, [ecx+32]
+    call @jbv_execute@28
+    pop ebx
+    pop ecx
+    add esp, 4
+    mov edx, [esp]
+    test eax, eax
+    jnz call_failed
+    movzx ecx, BYTE PTR [ecx+42]
+    add esi, 2
+call_result_sp:
     mov eax, [edx+44]
     mov eax, [eax]
     mov [edx+24], eax
@@ -3603,8 +2970,6 @@ special_call:
     mov eax, [edx+72]
     mov eax, [eax]
     mov [edx+64], eax
-    mov ecx, ebp
-    mov ebp, [edx+8]
     test ecx, ecx
     jz fd_void_sp
     cmp cl, 3
@@ -3629,81 +2994,6 @@ fd_wide_sp:
 fd_void_sp:
     mov eax, [edi+ebx*4-4]
     DISPATCH
-call_limit_sp:
-    pop eax
-    add esp, 168
-    jmp exit_op
-call_c_sp:
-    mov edx, [esp]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov edx, [edx+36]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    movzx eax, WORD PTR [ecx+40]
-    neg eax
-    add eax, ebx
-    push ecx
-    push eax
-    mov edx, [esp+8]
-    lea edx, [edx+48]
-    push edx
-    movzx edx, WORD PTR [ecx+40]
-    push edx
-    lea edx, [ebp+eax]
-    push edx
-    lea edx, [edi+eax*4]
-    push edx
-    push DWORD PTR [ecx+28]
-    mov edx, [ecx+24]
-    mov ecx, [esp+28]
-    mov ecx, [ecx+32]
-    call @jbv_execute@28
-    pop ebx
-    pop ecx
-    mov edx, [esp]
-    test eax, eax
-    jnz call_failed
-    mov eax, [edx+44]
-    mov eax, [eax]
-    mov [edx+24], eax
-    mov eax, [edx+68]
-    mov eax, [eax]
-    mov [edx+60], eax
-    mov eax, [edx+72]
-    mov eax, [eax]
-    mov [edx+64], eax
-    movzx eax, BYTE PTR [ecx+42]
-    add esi, 2
-    test eax, eax
-    jz call_void_sp
-    cmp al, 3
-    je call_wide_sp
-    cmp al, 6
-    je call_wide_sp
-    cmp al, 2
-    sete al
-    mov [ebp+ebx], al
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-call_wide_sp:
-    mov eax, [edx+48]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    mov eax, [edx+48+4]
-    mov [edi+ebx*4], eax
-    mov BYTE PTR [ebp+ebx], 0
-    inc ebx
-    DISPATCH
-call_void_sp:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
 
 ALIGN 16
 op_new:
@@ -3721,6 +3011,57 @@ op_new:
     jne exit_op
     test WORD PTR [ecx+CLASS_FLAGS], 0600h
     jnz exit_op
+    IF JBV_GC_STRESS EQ 0
+    mov edx, [esp]
+    mov edx, [edx+32]
+    cmp DWORD PTR [edx+396], 0
+    je new_c
+    mov eax, [ecx+CLASS_SLOTS]
+    lea eax, [eax*4+8]
+    cmp eax, 516
+    ja new_c
+    push esi
+    push ebx
+    mov esi, [edx+1984]
+    add esi, [edx+1992]
+    sub esi, [edx+1988]
+    cmp esi, eax
+    jb new_c_pop
+    mov esi, [edx+2040]
+    sub esi, [edx+2036]
+    jb new_c_pop
+    cmp esi, eax
+    jb new_c_pop
+    add [edx+2036], eax
+    mov esi, [edx+1988]
+    add [edx+1988], eax
+    mov [esi+4], ecx
+    mov eax, [edx+396]
+    mov ecx, [edx+376]
+    mov ebx, [ecx+eax*4]
+    shr ebx, 1
+    mov [edx+396], ebx
+    lea ebx, [esi+4]
+    mov [ecx+eax*4], ebx
+    inc DWORD PTR [edx+400]
+    lea ebx, [eax+eax]
+    mov [esi], ebx
+    mov ecx, [edx+380]
+    movzx ecx, BYTE PTR [ecx+eax]
+    shl ecx, 24
+    or eax, ecx
+    pop ebx
+    pop esi
+    mov [edi+ebx*4], eax
+    mov BYTE PTR [ebp+ebx], 1
+    inc ebx
+    add esi, 2
+    DISPATCH
+new_c_pop:
+    pop ebx
+    pop esi
+new_c:
+    ENDIF
     mov edx, [esp]
     mov eax, esi
     dec eax
@@ -3754,6 +3095,56 @@ op_new:
     mov BYTE PTR [ebp+ebx], 1
     inc ebx
     add esi, 2
+    DISPATCH
+
+ALIGN 16
+op_this_getfield:
+    movzx ecx, WORD PTR [esi+1]
+    xchg cl, ch
+    imul ecx, ecx, 24
+    mov edx, [esp]
+    add ecx, [edx+28]
+    mov ecx, [ecx+16]
+    test ecx, ecx
+    jz exit_op
+    cmp BYTE PTR [ecx+38], 1
+    jne exit_op
+    mov eax, [edi]
+    test eax, eax
+    jz exit_op
+    and eax, 0FFFFFFh
+    mov edx, [esp]
+    mov edx, [edx+24]
+    mov eax, [edx+eax*4]
+    mov edx, [ecx+32]
+    mov eax, [eax+edx*4+4]
+    mov cl, [ecx+36]
+    mov [edi+ebx*4], eax
+    mov [ebp+ebx], cl
+    inc ebx
+    add esi, 3
+    DISPATCH
+
+ALIGN 16
+op_iinc_goto:
+    movzx edx, WORD PTR [esi+3]
+    xchg dl, dh
+    movsx edx, dx
+    test edx, edx
+    jg iinc_goto_go
+    mov ecx, [esp]
+    mov ecx, [ecx+20]
+    sub DWORD PTR [ecx], 1
+    jc iinc_goto_go_borrow
+iinc_goto_go_back:
+iinc_goto_go:
+    movzx ecx, BYTE PTR [esi]
+    lea ecx, [edi+ecx*4]
+    push edx
+    movsx edx, BYTE PTR [esi+1]
+    add [ecx], edx
+    pop edx
+    lea esi, [esi+edx+2]
     DISPATCH
 
 ALIGN 16
@@ -5057,6 +4448,15 @@ goto_go_borrow:                ; the low word was 0: borrow from the high word, 
     dec DWORD PTR [ecx+4]
     jmp goto_go_back
 goto_go_out:
+    mov DWORD PTR [ecx], 0
+    jmp exit_op
+
+iinc_goto_go_borrow:                ; the low word was 0: borrow from the high word, or stop
+    cmp DWORD PTR [ecx+4], 0
+    je iinc_goto_go_out
+    dec DWORD PTR [ecx+4]
+    jmp iinc_goto_go_back
+iinc_goto_go_out:
     mov DWORD PTR [ecx], 0
     jmp exit_op
 

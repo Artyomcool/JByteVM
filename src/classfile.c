@@ -51,6 +51,32 @@ JbvStatus jbv_parse(JbvVM *vm, const void *bytes, size_t size, JbvClass **out) {
     return jbv_parse_owned(vm, image, size, out);
 }
 /* Takes ownership of image (allocated with jbv_alloc), also on failure. */
+/* Length of the instruction at code[i] (trusted bytecode). */
+static uint32_t op_length(const uint8_t *code, uint32_t i) {
+    uint8_t op = code[i];
+    uint32_t p = (i + 4) & ~3u;
+    if (op == 170) return p + 12 + 4 * (uint32_t)((int32_t)jbv_u32(code + p + 8) - (int32_t)jbv_u32(code + p + 4) + 1) - i;
+    if (op == 171) return p + 8 + 8 * jbv_u32(code + p + 4) - i;
+    if (op == 196) return code[i + 1] == 132 ? 6 : 4;
+    if (op == 16 || op == 18 || (op >= 21 && op <= 25) || (op >= 54 && op <= 58) || op == 169 || op == 188) return 2;
+    if (op == 17 || op == 19 || op == 20 || op == 132 || (op >= 153 && op <= 168) || (op >= 178 && op <= 184) || op == 187 ||
+        op == 189 || op == 192 || op == 193 || op == 198 || op == 199) return 3;
+    return op == 197 ? 4 : op == 185 || op == 186 || op == 200 || op == 201 ? 5 : 1;
+}
+/* Accessor methods (run inline at the call site by the x86 core) and superinstructions:
+ * the first byte of `aload_0 getfield` becomes 203, of `iinc goto` 204. Only that byte
+ * changes: the C loop runs the original opcode, branches into the pair still work. */
+static void prepare_code(JbvMethod *m, uint8_t *code, uint32_t size) {
+    uint32_t i;
+    if (!(m->flags & (JBV_STATIC | JBV_SYNCHRONIZED))) {
+        if (size == 5 && code[0] == 0x2a && code[1] == 0xb4 && (code[4] == 0xac || code[4] == 0xb0)) m->accessor = 1;
+        else if (size == 6 && code[0] == 0x2a && code[1] == 0x1b && code[2] == 0xb5 && code[5] == 0xb1) m->accessor = 2;
+    }
+    for (i = 0; i < size; i += op_length(code, i)) {
+        if (code[i] == 0x2a && i + 1 < size && code[i + 1] == 0xb4) code[i] = 203;
+        else if (code[i] == 0x84 && i + 3 < size && code[i + 3] == 0xa7) code[i] = 204;
+    }
+}
 JbvStatus jbv_parse_owned(JbvVM *vm, uint8_t *image, size_t size, JbvClass **out) {
     Reader r;
     JbvClass *c;
@@ -146,6 +172,7 @@ JbvStatus jbv_parse_owned(JbvVM *vm, uint8_t *image, size_t size, JbvClass **out
                 m->max_locals = u2(&attr);
                 code_size = u4(&attr);
                 m->code = take(&attr, code_size);
+                if (!attr.bad) prepare_code(m, (uint8_t *)m->code, code_size);
                 m->handlers = u2(&attr);
                 m->exception_table = take(&attr, (size_t)m->handlers * 8);
                 {

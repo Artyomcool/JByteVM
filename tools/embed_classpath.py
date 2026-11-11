@@ -1,4 +1,4 @@
-"""Compile the small class library and embed it as a deflated JAR."""
+"""Compile the small class library and embed it as an LZMA-compressed JAR."""
 from pathlib import Path
 import subprocess
 import shutil
