@@ -1,4 +1,5 @@
 #include "internal.h"
+#include <intrin.h>
 
 int jbv_reference_type(JbvText descriptor) {
     return descriptor.size && (descriptor.data[0] == 'L' || descriptor.data[0] == '[');
@@ -15,6 +16,7 @@ JbvStatus jbv_bootstrap(JbvVM *vm) {
         c->flags = i == 0 ? 1 : 1 | JBV_INTERFACE | JBV_ABSTRACT;
         c->link_state = c->init_state = 2;
         c->super = root;
+        if (!i) vm->object_class = c;
         c->next = vm->classes;
         vm->classes = c;
         if (!i || i == 3) {
@@ -80,9 +82,9 @@ JbvStatus jbv_resolve_class(JbvVM *vm, JbvText name, JbvClass **out) {
     JbvStatus status;
     JbvText part;
     uint32_t dimensions = 0;
-    if (jbv_exception_name(name)) return jbv_exception_class(vm, name, out);
-    c = jbv_find_class(vm, name);
+    c = jbv_find_class(vm, name);   /* loaded classes first: no name tables on the common path */
     if (c) { *out = c; return jbv_link(vm, c, 0); }
+    if (jbv_exception_name(name)) return jbv_exception_class(vm, name, out);
     status = jbv_lazy_class(vm, name, out);
     if (status != JBV_NOT_FOUND) return status;
     if (!name.size || name.data[0] != '[') return JBV_NOT_FOUND;
@@ -111,7 +113,6 @@ JbvStatus jbv_class_constant(JbvVM *vm, JbvClass *c, uint16_t index, JbvClass **
     if (entry->text.data) { *out = (JbvClass *)entry->text.data; return JBV_OK; }
     status = jbv_resolve_class(vm, c->pool[entry->a].text, out);
     if (status == JBV_NOT_FOUND) { JbvText none = {0, 0}; return jbv_throw_detail(vm, "java/lang/NoClassDefFoundError", c->pool[entry->a].text, none, none, 0, status); }
-    if (status == JBV_OK) status = jbv_class_access(vm, c, *out);
     if (status == JBV_OK) entry->text.data = (const uint8_t *)*out;
     return status;
 }
@@ -138,8 +139,6 @@ JbvStatus jbv_link(JbvVM *vm, JbvClass *c, uint32_t depth) {
     }
     status = jbv_link(vm, c->super, depth + 1);
     if (status != JBV_OK) goto fail;
-    status = jbv_class_access(vm, c, c->super);
-    if (status != JBV_OK) goto fail;
     if (c->interface_count && !c->interfaces) {
         c->interfaces = (JbvClass **)jbv_alloc(vm, (size_t)c->interface_count * sizeof(*c->interfaces));
         if (!c->interfaces) { status = JBV_OUT_OF_MEMORY; goto fail; }
@@ -155,8 +154,6 @@ JbvStatus jbv_link(JbvVM *vm, JbvClass *c, uint32_t depth) {
         if (!c->interfaces[i]) { status = JBV_NOT_FOUND; goto fail; }
         if (!(c->interfaces[i]->flags & JBV_INTERFACE)) { status = JBV_LINKAGE_ERROR; goto fail; }
         status = jbv_link(vm, c->interfaces[i], depth + 1);
-        if (status != JBV_OK) goto fail;
-        status = jbv_class_access(vm, c, c->interfaces[i]);
         if (status != JBV_OK) goto fail;
     }
     c->instance_slots = c->super->instance_slots;
@@ -380,8 +377,9 @@ static int push_pointer(JbvVM *vm, void ***list, uint32_t *count, uint32_t *capa
 }
 /* Write barrier slow path: an old object may now reference a young one. */
 void jbv_remember(JbvVM *vm, JbvObject *owner) {
-    if (vm->remembered_count && vm->remembered[vm->remembered_count - 1] == owner) return;
+    if (vm->last_remembered == owner) return;
     if (!push_pointer(vm, &vm->remembered, &vm->remembered_count, &vm->remembered_capacity, owner)) vm->remembered_overflow = 1;
+    else vm->last_remembered = owner;
 }
 void jbv_barrier_checked(JbvVM *vm, JbvObject *owner, int32_t value) {
     JbvObject *target;
@@ -389,10 +387,32 @@ void jbv_barrier_checked(JbvVM *vm, JbvObject *owner, int32_t value) {
 }
 
 /* ---- Marking and scanning. A fixed mark stack; on overflow marked objects are rescanned. ---- */
+/* The reference slots of a class (an oop map), built on first use; 0 if memory is short. */
+static const uint16_t *ref_slots(JbvVM *vm, JbvClass *type, uint32_t *count) {
+    const JbvClass *c;
+    uint32_t n = 0, i;
+    if (!type->ref_ready) {
+        for (c = type; c; c = c->super)
+            for (i = 0; i < c->field_count; ++i)
+                if (!(c->fields[i].flags & JBV_STATIC) && jbv_reference_type(c->fields[i].descriptor)) ++n;
+        if (n) {
+            type->ref_slots = (uint16_t *)jbv_alloc(vm, n * sizeof(uint16_t));
+            if (!type->ref_slots) { *count = 0; return 0; }
+            n = 0;
+            for (c = type; c; c = c->super)
+                for (i = 0; i < c->field_count; ++i)
+                    if (!(c->fields[i].flags & JBV_STATIC) && jbv_reference_type(c->fields[i].descriptor)) type->ref_slots[n++] = (uint16_t)c->fields[i].slot;
+        }
+        type->ref_count = (uint16_t)n; type->ref_ready = 1;
+    }
+    *count = type->ref_count;
+    return type->ref_slots ? type->ref_slots : (const uint16_t *)type;   /* non-null: ready (count may be 0) */
+}
 static int needs_scan(const JbvClass *type) {
     const JbvClass *c;
     uint16_t i;
     if (type->array_kind) return type->array_kind == 'L';
+    if (type->ref_ready) return type->ref_count != 0;
     for (c = type; c; c = c->super)
         for (i = 0; i < c->field_count; ++i)
             if (!(c->fields[i].flags & JBV_STATIC) && jbv_reference_type(c->fields[i].descriptor)) return 1;
@@ -409,10 +429,14 @@ static void scan(JbvVM *vm, JbvObject *object, Visit visit) {
     uint32_t i;
     vm->scanning = object;
     if (object->type->array_kind == 'L') { for (i = jbv_length(object); i--;) visit(vm, data[i]); }
-    else if (!object->type->array_kind)
+    else if (!object->type->array_kind) {
+        uint32_t count;
+        const uint16_t *slots = ref_slots(vm, object->type, &count);
+        if (slots) { for (i = 0; i < count; ++i) visit(vm, data[slots[i]]); vm->scanning = 0; return; }
         for (c = object->type; c; c = c->super)
             for (i = 0; i < c->field_count; ++i)
                 if (!(c->fields[i].flags & JBV_STATIC) && jbv_reference_type(c->fields[i].descriptor)) visit(vm, data[c->fields[i].slot]);
+    }
     vm->scanning = 0;
 }
 /* Full marking also rebuilds the remembered set (old objects referencing young ones). */
@@ -436,7 +460,7 @@ static void roots(JbvVM *vm, Visit visit) {
     for (i = 0; i < vm->pin_count; ++i) visit(vm, (int32_t)jbv_handle_ref(vm, vm->pins[i].index));
     for (i = 0; i < vm->monitor_capacity; ++i) if (vm->monitors[i].ref) visit(vm, vm->monitors[i].ref);
     for (frame = vm->frames; frame; frame = frame->previous) {
-        uint32_t end = frame->base + frame->locals + *frame->sp;
+        uint32_t end = frame->base + frame->locals + frame->sp;
         for (i = frame->base; i < end; ++i) if (vm->slot_refs[i] == JBV_REF) visit(vm, vm->slots[i]);
     }
     for (c = vm->classes; c; c = c->next) {
@@ -492,7 +516,7 @@ static void promote_children(JbvVM *vm, JbvObject *object) { scan(vm, object, pr
 static JbvStatus minor(JbvVM *vm) {
     uint32_t i;
     uint8_t *p;
-    if (!vm->nursery || vm->nursery_top == vm->nursery) { vm->remembered_count = vm->recent_count = 0; vm->remembered_overflow = 0; return JBV_OK; }
+    if (!vm->nursery || vm->nursery_top == vm->nursery) { vm->remembered_count = vm->recent_count = 0; vm->remembered_overflow = 0; vm->last_remembered = 0; return JBV_OK; }
     clear_marks(vm); vm->promote_failed = 0;
     roots(vm, promote);
     for (i = 0; i < vm->remembered_count; ++i) promote_children(vm, (JbvObject *)vm->remembered[i]);
@@ -513,9 +537,12 @@ static JbvStatus minor(JbvVM *vm) {
     vm->heap_bytes -= (size_t)(vm->nursery_top - vm->nursery);
 #if JBV_GC_STRESS
     { uint8_t *q; for (q = vm->nursery; q < vm->nursery_top; ++q) *q = 0xcd; }   /* poison: stale pointers read garbage */
+#else
+    /* The young region is kept zeroed above nursery_top: allocation there needs no clearing. */
+    __stosd((unsigned long *)vm->nursery, 0, (size_t)(vm->nursery_top - vm->nursery) / 4);
 #endif
     vm->nursery_top = vm->nursery;
-    vm->remembered_count = vm->recent_count = 0; vm->remembered_overflow = 0;
+    vm->remembered_count = vm->recent_count = 0; vm->remembered_overflow = 0; vm->last_remembered = 0;
     return JBV_OK;
 }
 
@@ -562,7 +589,7 @@ static JbvStatus collect(JbvVM *vm, int moving) {
     if (!vm->marks) return JBV_OK;   /* nothing allocated yet */
     ++vm->collections;
     if (moving && minor(vm) != JBV_OK) moving = 0;
-    vm->remembered_count = vm->recent_count = 0; vm->remembered_overflow = 0;
+    vm->remembered_count = vm->recent_count = 0; vm->remembered_overflow = 0; vm->last_remembered = 0;
     clear_marks(vm);
     roots(vm, mark_full); finish_marking(vm, mark_full);
     for (chunk = vm->chunks; chunk; chunk = *(void **)chunk) ++count;
@@ -632,6 +659,25 @@ JbvStatus jbv_new(JbvVM *vm, JbvClass *type, int32_t length, int32_t *ref) {
     size_t bytes, pre = 0;
     uint8_t *block = 0;
     int moving = 1, in_young = 0;
+#if !JBV_GC_STRESS
+    /* The common case: a plain object that fits the young region (pre-zeroed), a free handle. */
+    if (!type->array_kind && vm->free_handle && !(type->flags & (JBV_INTERFACE | JBV_ABSTRACT))) {
+        bytes = JBV_ALIGN + align_size(sizeof(*object) + (size_t)type->instance_slots * sizeof(int32_t));
+        if (bytes <= JBV_ALIGN + JBV_SMALL && (size_t)(vm->nursery + vm->nursery_size - vm->nursery_top) >= bytes &&
+            vm->heap_bytes <= vm->heap_limit && bytes <= vm->heap_limit - vm->heap_bytes) {
+            block = vm->nursery_top; vm->nursery_top += bytes; vm->heap_bytes += bytes;
+            object = (JbvObject *)(block + JBV_ALIGN);
+            object->type = type;
+            index = vm->free_handle;
+            vm->free_handle = (uint32_t)(vm->handles[index] >> 1);
+            vm->handles[index] = (uintptr_t)object;
+            ++vm->object_count;
+            *(uint32_t *)block = index << 1;
+            *ref = (int32_t)jbv_handle_ref(vm, index);
+            return JBV_OK;
+        }
+    }
+#endif
     if (type->array_kind) {
         if (length < 0) return JBV_NEGATIVE_ARRAY_SIZE;
         payload = (uint64_t)(uint32_t)length * jbv_element_bytes(type->array_kind);
@@ -654,19 +700,24 @@ JbvStatus jbv_new(JbvVM *vm, JbvClass *type, int32_t length, int32_t *ref) {
         if (vm->handle_capacity - vm->object_count < vm->handle_capacity / 4 && vm->handle_capacity < JBV_HANDLE_MASK) (void)grow_handles(vm);
     }
     if (vm->heap_bytes > vm->heap_limit || bytes > vm->heap_limit - vm->heap_bytes) return JBV_OUT_OF_MEMORY;
-    if (bytes <= JBV_SMALL) {
+    if (bytes <= JBV_YOUNG_MAX / 8) {
         if (!vm->nursery && !vm->nursery_disabled) {   /* lazily, 1/16 of the heap up to 256 KiB */
             size_t size = vm->heap_limit / 16 > JBV_YOUNG_MAX ? JBV_YOUNG_MAX : (vm->heap_limit / 16) & ~(size_t)(JBV_ALIGN - 1);
             if (size >= 16384) vm->nursery = (uint8_t *)jbv_alloc(vm, size);
             if (vm->nursery) { vm->nursery_size = size; vm->nursery_top = vm->nursery; } else vm->nursery_disabled = 1;
         }
+        /* Arrays up to 1/8 of the young region start young too (no write barrier while young). */
+        if (vm->nursery && bytes > JBV_SMALL && JBV_ALIGN + bytes > vm->nursery_size / 8) goto old;
         if (vm->nursery && (size_t)(vm->nursery + vm->nursery_size - vm->nursery_top) < JBV_ALIGN + bytes && moving) (void)minor(vm);
         if (vm->nursery && (size_t)(vm->nursery + vm->nursery_size - vm->nursery_top) >= JBV_ALIGN + bytes) {
             block = vm->nursery_top + JBV_ALIGN; vm->nursery_top += JBV_ALIGN + bytes;
-            zero_words(block - JBV_ALIGN, JBV_ALIGN + bytes);
+#if JBV_GC_STRESS
+            zero_words(block - JBV_ALIGN, JBV_ALIGN + bytes);   /* poisoned after each minor collection */
+#endif
             vm->heap_bytes += JBV_ALIGN + bytes; in_young = 1;
         }
     }
+old:
     if (!block) {
         block = (uint8_t *)block_alloc(vm, bytes);
         if (!block) {
@@ -680,7 +731,7 @@ JbvStatus jbv_new(JbvVM *vm, JbvClass *type, int32_t length, int32_t *ref) {
     if (!vm->free_handle) {   /* only when no collection could free one: grow */
         status = grow_handles(vm);
         if (status != JBV_OK) {
-            if (in_young) { vm->nursery_top -= JBV_ALIGN + bytes; vm->heap_bytes -= JBV_ALIGN + bytes; }
+            if (in_young) { vm->nursery_top -= JBV_ALIGN + bytes; vm->heap_bytes -= JBV_ALIGN + bytes; zero_words(vm->nursery_top, JBV_ALIGN + bytes); }
             else { vm->heap_bytes -= bytes; block_free(vm, block, bytes); }
             return status;
         }

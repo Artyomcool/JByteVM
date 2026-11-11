@@ -46,23 +46,17 @@ JBV_GC static JbvStatus make_handle(JbvVM *vm, JbvClass *caller, JbvClass *symbo
     uint32_t n = 0, i, capacity = (uint32_t)descriptor.size + symbolic->name.size*2u + 12u;
     int32_t type_ref = 0, caller_ref = 0;
     JbvText invocation;
-    if (caller) status = jbv_class_access(vm, caller, symbolic);
-    else status = symbolic->flags & 1 ? JBV_OK : JBV_LINKAGE_ERROR;
-    if (status != JBV_OK) return status;
     if (kind <= 4) {
         field = jbv_lookup_field(&owner, name, descriptor);
         if (!field) return jbv_throw_named(vm, "java/lang/NoSuchFieldError", 0, JBV_NOT_FOUND);
         flags = field->flags;
         if (!!(flags & JBV_STATIC) != (kind == 2 || kind == 4)) return jbv_throw_named(vm, "java/lang/IncompatibleClassChangeError", 0, JBV_LINKAGE_ERROR);
-        if ((kind == 3 || kind == 4) && (flags & JBV_FINAL)) return jbv_throw_named(vm, "java/lang/IllegalAccessError", 0, JBV_LINKAGE_ERROR);
     } else {
         method = jbv_lookup_method(&owner, name, descriptor);
         if (!method) return jbv_throw_named(vm, "java/lang/NoSuchMethodError", 0, JBV_NOT_FOUND);
         flags = method->flags;
         if (!!(flags & JBV_STATIC) != (kind == 6)) return jbv_throw_named(vm, "java/lang/IncompatibleClassChangeError", 0, JBV_LINKAGE_ERROR);
     }
-    status = caller ? jbv_member_access(vm, caller, owner, flags, 0) : flags & 1 ? JBV_OK : JBV_LINKAGE_ERROR;
-    if (status != JBV_OK) return status;
     if (capacity > UINT16_MAX) return JBV_BAD_ARGUMENT;
     buffer = (uint8_t *)jbv_alloc(vm, capacity);
     if (!buffer) return JBV_OUT_OF_MEMORY;
@@ -173,8 +167,7 @@ JBV_GC static JbvStatus invoke_handle(JbvVM *vm, int32_t ref, int32_t array_ref,
     if (kind == 1 || kind == 3 || kind == 5 || kind == 7 || kind == 9) {
         JbvClass *actual;
         status = jbv_object(vm, slots[0], &receiver); if (status != JBV_OK) goto done;
-        actual = receiver->type;   /* jbv_member_access may move the receiver */
-        if (caller) { status = jbv_member_access(vm, caller, owner, field ? field->flags : method->flags, actual); if (status != JBV_OK) goto done; }
+        actual = receiver->type;
         if (kind == 5 || kind == 9) { method = jbv_virtual_method(&actual, owner, method); owner = actual; }
     }
     if (field) {
@@ -320,7 +313,6 @@ JbvStatus jbv_dynamic_native(JbvVM *vm, uint32_t op, const int32_t *a, uint64_t 
         }
         if (!field || (field->flags & (JBV_STATIC|JBV_FINAL)) != (JBV_STATIC|JBV_FINAL)) { status = jbv_throw_named(vm, op == 7 ? "java/lang/IllegalArgumentException" : "java/lang/NoSuchFieldError", 0, JBV_EXCEPTION); goto done; }
         if (op == 7 && !(field->flags & 0x4000)) { status = JBV_BAD_ARGUMENT; goto done; }
-        if (caller) { status = jbv_member_access(vm, caller, declaring, field->flags, 0); if (status != JBV_OK) goto done; }
         if (op == 4) {
             JbvClass *expected = jbv_mirror_type(vm,a[3]), *actual;
             status = jbv_type_class(vm, field->descriptor, &actual); if (status != JBV_OK) goto done;

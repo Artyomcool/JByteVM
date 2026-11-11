@@ -12,11 +12,15 @@ JbvStatus jbv_capture_trace(JbvVM *vm, int32_t *out) {
     JbvStatus status;
     uint32_t length = 0, i = 0, j;
     int32_t array_ref = 0, ref;
-    status = jbv_resolve_class(vm,jbv_text("java/lang/Throwable"),&throwable);
-    if (status != JBV_OK) return status;
+    if (!vm->throwable_class) {
+        status = jbv_resolve_class(vm,jbv_text("java/lang/Throwable"),&vm->throwable_class);
+        if (status != JBV_OK) return status;
+    }
+    throwable = vm->throwable_class;
     while (first && internal_frame(first,throwable)) first = first->previous;
     for (frame = first; frame; frame = frame->previous) ++length;
-    status = jbv_resolve_class(vm,jbv_text("java/lang/StackTraceElement"),&element_type);
+    status = vm->trace_element_class ? JBV_OK : jbv_resolve_class(vm,jbv_text("java/lang/StackTraceElement"),&vm->trace_element_class);
+    element_type = vm->trace_element_class;
     if (status == JBV_OK) status = jbv_array_class(vm,element_type,'L',&array_type);
     if (status == JBV_OK) status = jbv_new(vm,array_type,(int32_t)length,&array_ref);
     if (status != JBV_OK) return status;
@@ -36,7 +40,7 @@ JbvStatus jbv_capture_trace(JbvVM *vm, int32_t *out) {
         }
         if (status != JBV_OK) break;
         if (frame->method->flags & JBV_NATIVE) line = -2;
-        else for (j=0;j<frame->method->line_count;++j) if(jbv_u16(frame->method->lines+4*j)<=*frame->pc)line=jbv_u16(frame->method->lines+4*j+2);
+        else for (j=0;j<frame->method->line_count;++j) if(jbv_u16(frame->method->lines+4*j)<=frame->pc)line=jbv_u16(frame->method->lines+4*j+2);
         (void)jbv_object(vm,ref,&element); jbv_data(element)[3]=line;
     }
     if (status == JBV_OK) *out=array_ref;

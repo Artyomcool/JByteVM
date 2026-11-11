@@ -9,5 +9,4 @@ public class AccessValues {
     public static int field(int n){try{return Api.field+n;}catch(IllegalAccessError e){return 1;}catch(NoSuchFieldError e){return 2;}catch(IncompatibleClassChangeError e){return 3;}}
     public static int method(int n){try{return Api.call()+n;}catch(IllegalAccessError e){return 4;}catch(NoSuchMethodError e){return 5;}catch(IncompatibleClassChangeError e){return 6;}}
     public static int wrongStatic(int n){try{return Api.call()+n;}catch(IncompatibleClassChangeError e){return 8;}}
-    public static int hiddenParent(int n){try{return new Child().dispatch();}catch(IllegalAccessError e){return 9;}}
 }

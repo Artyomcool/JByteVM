@@ -234,34 +234,15 @@ done:
     }
     if (status == JBV_OK) *out = (uint32_t)ref; return status;
 }
-static JbvClass *caller(JbvVM *vm) {
-    JbvFrame *f;
-    for (f = vm->frames; f; f = f->previous) {
-        JbvText n = f->owner->name;
-        if (jbv_text_is(n,"jbv/runtime/Reflection")) continue;
-        if (n.size >= 18) { n.size = 18; if (jbv_text_is(n,"java/lang/reflect/")) continue; }
-        return f->owner;
-    }
-    return 0;
-}
-JBV_GC static JbvStatus access(JbvVM *vm, Member m, JbvObject *member, int32_t receiver, int query) {
+/* Receiver checks only: there are no access checks, every member is accessible. */
+static JbvStatus access(JbvVM *vm, Member m, JbvObject *member, int32_t receiver, int query) {
     JbvObject *o;
-    JbvClass *from, *type = 0;
     JbvStatus status;
-    if (m.kind == 2 || (flags(m) & JBV_STATIC)) {
-        if (query && receiver) return JBV_BAD_ARGUMENT;
-    } else {
-        if (!receiver) return query ? JBV_BAD_ARGUMENT : JBV_NULL_REFERENCE;
-        status = jbv_object(vm, receiver, &o); if (status != JBV_OK) return status;
-        type = o->type; if (!jbv_assignable(type,m.owner)) return JBV_BAD_ARGUMENT;
-    }
-    if (jbv_data(member)[3]) return JBV_OK;
-    from = caller(vm);
-    if (!from) return flags(m) & m.owner->flags & 1 ? JBV_OK : error(vm,"java/lang/IllegalAccessException");
-    status = jbv_class_access(vm, from, m.owner);
-    if (status == JBV_OK) status = jbv_member_access(vm, from, m.owner, flags(m), type);
-    if (status == JBV_LINKAGE_ERROR) { vm->exception = 0; return error(vm,"java/lang/IllegalAccessException"); }
-    return status;
+    (void)member;
+    if (m.kind == 2 || (flags(m) & JBV_STATIC)) return query && receiver ? JBV_BAD_ARGUMENT : JBV_OK;
+    if (!receiver) return query ? JBV_BAD_ARGUMENT : JBV_NULL_REFERENCE;
+    status = jbv_object(vm, receiver, &o); if (status != JBV_OK) return status;
+    return jbv_assignable(o->type,m.owner) ? JBV_OK : JBV_BAD_ARGUMENT;
 }
 JBV_GC static JbvStatus info(JbvVM *vm, Member m, uint32_t op, int32_t *ref) {
     JbvText d = descriptor(m);
@@ -302,7 +283,7 @@ JBV_GC static JbvStatus info(JbvVM *vm, Member m, uint32_t op, int32_t *ref) {
     }
     (void)jbv_release(vm,*ref); return status;
 }
-JBV_GC static JbvStatus convert(JbvVM *vm, int32_t value, JbvText type, uint64_t *bits) {
+static JbvStatus convert(JbvVM *vm, int32_t value, JbvText type, uint64_t *bits) {
     JbvStatus status = jbv_from_object(vm,value,type,bits);
     return status == JBV_CLASS_CAST || status == JBV_NULL_REFERENCE ? JBV_BAD_ARGUMENT : status;
 }

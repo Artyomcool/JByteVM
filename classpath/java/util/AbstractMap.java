@@ -27,7 +27,7 @@ public abstract class AbstractMap<K,V> implements Map<K,V> {
     public int hashCode(){int h=0;for(Entry<K,V> e:entrySet())h+=e.hashCode();return h;}
     public String toString(){StringBuilder b=new StringBuilder("{");boolean first=true;for(Entry<K,V> e:entrySet()){if(!first)b.append(", ");first=false;b.append(e.getKey()==this?"(this Map)":e.getKey()).append('=').append(e.getValue()==this?"(this Map)":e.getValue());}return b.append('}').toString();}
     public static class SimpleEntry<K,V> implements Entry<K,V>,java.io.Serializable {
-        private final K key;private V value;
+        final K key;V value;   // package access: HashMap reads them directly
         public SimpleEntry(K key,V value){this.key=key;this.value=value;}
         public SimpleEntry(Entry<? extends K,? extends V> e){this(e.getKey(),e.getValue());}
         public K getKey(){return key;}public V getValue(){return value;}

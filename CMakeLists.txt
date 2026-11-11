@@ -34,7 +34,7 @@ set(JBV_GC_STRESS 0 CACHE STRING "1: collect and move objects at almost every sa
 target_compile_definitions(jbytevm PRIVATE JBV_GC_STRESS=${JBV_GC_STRESS})
 if(CMAKE_SIZEOF_VOID_P EQUAL 4)
     enable_language(ASM_MASM)
-    target_sources(jbytevm PRIVATE src/native_x86.asm)
+    target_sources(jbytevm PRIVATE src/native_x86.asm src/interp_x86.asm)
     target_compile_options(jbytevm PRIVATE "$<$<COMPILE_LANGUAGE:ASM_MASM>:/safeseh>")
 endif()
 if(MSVC)
@@ -47,6 +47,8 @@ if(MSVC)
     # The inflater keeps byte arrays on the stack; its own bounds checks replace
     # /GS, whose failure handler would import KERNEL32 from the CRT.
     set_source_files_properties(src/jar.c PROPERTIES COMPILE_OPTIONS "/GS-")
+    # The interpreter loop is the one place where speed beats size (~1.5 KiB for ~1.2x).
+    set_source_files_properties(src/interpreter.c PROPERTIES COMPILE_OPTIONS "/O2")
     # Allocator callbacks belong to the embedding application. The DLL has no
     # CRT startup or global constructors. The native bridge needs no OS imports.
     target_link_options(jbytevm PRIVATE /NODEFAULTLIB /NOENTRY /INCREMENTAL:NO /OPT:REF /OPT:ICF /MAP)
@@ -66,6 +68,11 @@ target_compile_definitions(jbytevm-bench PRIVATE JBV_USE_DLL)
 target_link_libraries(jbytevm-bench PRIVATE jbytevm)
 set_property(TARGET jbytevm-bench PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
 target_compile_options(jbytevm-bench PRIVATE /W4 /WX /O2)
+add_executable(jbytevm-run examples/run_host.c)
+target_compile_definitions(jbytevm-run PRIVATE JBV_USE_DLL)
+target_link_libraries(jbytevm-run PRIVATE jbytevm)
+set_property(TARGET jbytevm-run PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+target_compile_options(jbytevm-run PRIVATE /W4 /WX /O2)
 add_executable(jbytevm-native-demo examples/native_host.c)
 target_compile_definitions(jbytevm-native-demo PRIVATE JBV_USE_DLL)
 target_link_libraries(jbytevm-native-demo PRIVATE jbytevm)

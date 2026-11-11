@@ -30,6 +30,13 @@ __declspec(safebuffers)
 JbvStatus jbv_native_call(JbvVM *vm, JbvMethod *m, const int32_t *args, uint16_t count, uint64_t *out) {
     JbvFPEnv state;
     JbvStatus status;
+    if (m->intrinsic) {   /* built-in: runs in the VM's FP state, no switch */
+        int32_t result = 0;
+        if (m->native_slots) return m->native_slots(vm,m->native_user,args,count,out);
+        if (!m->native) return JBV_NOT_FOUND;
+        status = m->native(vm,m->native_user,args,count,&result); *out = (uint32_t)result;
+        return status;
+    }
     jbv_fp_enter(&state); vm->fp_ready = 0;
     if (m->flags & JBV_TYPED_NATIVE) status = jbv_typed_call(vm,m,args,count,out);
     else if (m->native_slots) status = m->native_slots(vm,m->native_user,args,count,out);
@@ -42,7 +49,7 @@ JbvStatus jbv_native_call(JbvVM *vm, JbvMethod *m, const int32_t *args, uint16_t
     return status;
 }
 
-JBV_GC JBV_API JbvStatus JBV_CALL jbv_register_natives(JbvVM *vm, const char *class_name,
+JBV_API JbvStatus JBV_CALL jbv_register_natives(JbvVM *vm, const char *class_name,
     const JbvNativeEntry *entries, uint32_t count, void *user) {
 #if defined(_M_IX86)
     JbvClass *c;
@@ -115,7 +122,7 @@ void jbv_begin_call(JbvVM *vm) {
     }
 }
 
-JBV_GC JBV_API JbvStatus JBV_CALL jbv_resolve_method(JbvVM *vm, const char *class_name,
+JBV_API JbvStatus JBV_CALL jbv_resolve_method(JbvVM *vm, const char *class_name,
     const char *name, const char *descriptor, JbvMethodId *out) {
     JbvClass *c;
     JbvMethod *m;
@@ -225,7 +232,7 @@ JBV_GC JBV_API JbvStatus JBV_CALL jbv_new_array(JbvVM *vm, const char *descripto
     return status;
 }
 
-JBV_GC JBV_API JbvStatus JBV_CALL jbv_resolve_field(JbvVM *vm, const char *class_name,
+JBV_API JbvStatus JBV_CALL jbv_resolve_field(JbvVM *vm, const char *class_name,
     const char *name, const char *descriptor, JbvFieldId *out) {
     JbvClass *c;
     JbvField *f;
@@ -381,7 +388,7 @@ JBV_API JbvStatus JBV_CALL jbv_array_write(JbvVM *vm, JbvRef ref, uint32_t start
     return JBV_OK;
 }
 
-JBV_GC JBV_API JbvStatus JBV_CALL jbv_throw(JbvVM *vm, JbvRef ref) {
+JBV_API JbvStatus JBV_CALL jbv_throw(JbvVM *vm, JbvRef ref) {
     JbvStatus status;
     if (!vm) return JBV_BAD_ARGUMENT;
     if (!ref) return JBV_NULL_REFERENCE;

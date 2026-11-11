@@ -69,10 +69,11 @@ JBV_GC static JbvStatus JBV_CALL exception_native(JbvVM *vm, void *user, const i
     JbvStatus status = jbv_object(vm, a[0], &object);
     if (status != JBV_OK) return status;
     fields = jbv_data(object);
-    throwable = jbv_find_class(vm, jbv_text(L "Throwable"));
+    throwable = vm->throwable_class ? vm->throwable_class : (vm->throwable_class = jbv_find_class(vm, jbv_text(L "Throwable")));
     if (throwable && throwable->instance_slots > 3 && id <= E_OPTIONS) {
-        JbvMethod *ctor = jbv_find_method(throwable, jbv_text("<init>"), jbv_text(methods[id].descriptor));
+        JbvMethod *ctor = vm->throwable_init[id];
         uint64_t ignored;
+        if (!ctor) ctor = vm->throwable_init[id] = jbv_find_method(throwable, jbv_text("<init>"), jbv_text(methods[id].descriptor));
         return ctor ? jbv_execute(vm, throwable, ctor, a, 0, count, &ignored) : JBV_NOT_FOUND;
     }
     switch (id) {

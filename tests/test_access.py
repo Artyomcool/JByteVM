@@ -1,4 +1,4 @@
-"""Runtime resolution/access tests, including binary-incompatible replacement."""
+"""Runtime resolution tests, including binary-incompatible replacement (there are no access checks)."""
 import struct
 import subprocess
 import unittest
@@ -18,19 +18,6 @@ def pool(data):
         i+=1
     return pos,texts,offsets
 
-def change_access(data,member=None):
-    data=bytearray(data);pos,texts,_=pool(data)
-    if member is None:struct.pack_into('>H',data,pos,struct.unpack_from('>H',data,pos)[0]&~1);return bytes(data)
-    n=struct.unpack_from('>H',data,pos+6)[0];pos+=8+2*n
-    for kind in ('field','method'):
-        count=struct.unpack_from('>H',data,pos)[0];pos+=2
-        for _ in range(count):
-            flags,name,desc,attrs=struct.unpack_from('>HHHH',data,pos)
-            if texts[name]==member:struct.pack_into('>H',data,pos,(flags&~7)|2)
-            pos+=8
-            for _ in range(attrs):size=struct.unpack_from('>I',data,pos+2)[0];pos+=6+size
-    return bytes(data)
-
 def rename(data,old,new):
     data=bytearray(data);_,_,offsets=pool(data);pos,n=offsets[old];assert len(new)==n;data[pos:pos+n]=new.encode();return bytes(data)
 
@@ -44,14 +31,11 @@ class AccessTests(unittest.TestCase):
         oracle=subprocess.run([str(JAVA),'-cp',str(CLASSES),'NumericOracle'],input='AccessValues#positive (I)I 7\n',text=True,capture_output=True,check=True)
         vm=self.prepare();self.assertEqual(vm.call('positive',7,owner='AccessValues'),(OK,int(oracle.stdout,16)))
     def test_resolution_errors_are_java_exceptions(self):
+        # No access checks: only missing members and wrong member kinds fail.
         original=(CLASSES/'access/base/Api.class').read_bytes()
-        for member,method,result in [('field','field',1),('call','method',4),(None,'method',4)]:
-            vm=self.prepare(api=change_access(original,member));self.assertEqual(vm.call(method,0,owner='AccessValues'),(OK,result))
         for old,new,method,result in [('field','other','field',2),('call','gone','method',5)]:
             vm=self.prepare(api=rename(original,old,new));self.assertEqual(vm.call(method,0,owner='AccessValues'),(OK,result))
         vm=self.prepare(caller=rename((CLASSES/'AccessValues.class').read_bytes(),'call','inst'))
         self.assertEqual(vm.call('wrongStatic',0,owner='AccessValues'),(OK,8))
-        vm=self.prepare(api=change_access(original))
-        self.assertEqual(vm.call('hiddenParent',0,owner='AccessValues'),(OK,9))
 
 if __name__=='__main__':unittest.main(argv=[__file__,*remaining],verbosity=2)

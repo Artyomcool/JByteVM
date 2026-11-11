@@ -49,7 +49,7 @@ JBV_GC static JbvStatus JBV_CALL element(JbvVM *vm, void *user, const int32_t *a
     if(jbv_reference_type(jbv_return_type(method->descriptor))){status=clone_array(vm,ref,&ref);if(status==JBV_OK)*out=(uint32_t)ref;return status;}
     return jbv_unbox(vm,ref,jbv_return_type(method->descriptor).data[0],0,out);
 }
-JBV_GC static JbvStatus implementation(JbvVM *vm, JbvClass *type, JbvClass **out) {
+static JbvStatus implementation(JbvVM *vm, JbvClass *type, JbvClass **out) {
     JbvClass *c,*base=0;
     uint32_t i;
     JbvStatus status;

@@ -99,7 +99,12 @@ def main():
     print(json.dumps(report, indent=2), flush=True)
     if args.test:
         # Every function that may collect (and move objects) must be marked JBV_GC.
-        run([sys.executable, ROOT / "tools/check_gc.py"])
+        # The checker is Java, run on JByteVM itself (jbytevm-run with jbvhost.Host file natives).
+        checker = ROOT / "build/tools/checkgc"
+        shutil.rmtree(checker, ignore_errors=True)
+        run([jdk / "bin/javac.exe", "--release", "25", "-g:none", "-XDstringConcat=inline", "-d", checker / "classes", ROOT / "tools/jbvhost/Host.java", ROOT / "tools/checkgc/CheckGc.java"])
+        run([sys.executable, ROOT / "tools/prepare.py", checker / "classes", "-o", checker / "checkgc.jar", "--lower-lambdas", "--jdk", jdk])
+        run([build / "Release/jbytevm-run.exe", checker / "checkgc.jar", "checkgc/CheckGc", ROOT / "src"])
         pointer_size = 4 if args.arch == "x86" else 8
         python = args.test_python
         if not python:

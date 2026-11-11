@@ -171,10 +171,7 @@ JbvStatus jbv_parse_owned(JbvVM *vm, uint8_t *image, size_t size, JbvClass **out
     for (i = 0; i < n && !r.bad; ++i) {
         JbvText name;
         Reader attr = attribute(&r, c, &name);
-        if (jbv_text_is(name, "NestHost")) c->nest_host = u2(&attr);
-        else if (jbv_text_is(name, "NestMembers")) {
-            c->nest_count = u2(&attr); c->nest_members = take(&attr, (size_t)c->nest_count * 2);
-        } else if (jbv_text_is(name, "SourceFile")) c->source_file = utf(&attr, c, u2(&attr));
+        if (jbv_text_is(name, "SourceFile")) c->source_file = utf(&attr, c, u2(&attr));
         if (attr.bad) goto fail;
     }
     if (r.bad || r.pos != r.size) goto fail;

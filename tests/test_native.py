@@ -300,12 +300,12 @@ class NativeTests(unittest.TestCase):
         # Preload metadata so failure is in the array/object allocation path.
         array = self.array(vm, '[J', 0)
         self.assertEqual(LIB.jbv_release(vm.handle, array), OK)
-        # Small objects come from already allocated heap chunks; a large one needs the host.
+        # Small objects and arrays come from the young region or heap chunks; a large one needs the host.
         vm.fail_after = vm.allocations
-        self.assertEqual(LIB.jbv_new_array(vm.handle, b'[J', 100, C.byref(out)), OOM)
+        self.assertEqual(LIB.jbv_new_array(vm.handle, b'[J', 10000, C.byref(out)), OOM)
         self.assertEqual(out.value, 123)
         vm.fail_after = None
-        array = self.array(vm, '[J', 100)
+        array = self.array(vm, '[J', 10000)
         self.assertEqual(LIB.jbv_release(vm.handle, array), OK)
         self.assertEqual(LIB.jbv_collect(vm.handle), OK)
         self.assertEqual(vm.stats().objects, 0)

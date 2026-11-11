@@ -238,10 +238,12 @@ public final class Strings {
     private static void put16(byte[] r, int at, char c, int kind) { if (kind == UTF16LE) { r[at] = (byte) c; r[at + 1] = (byte) (c >> 8); } else { r[at] = (byte) (c >> 8); r[at + 1] = (byte) c; } }
     static String decode(byte[] b, int off, int len, int kind) {
         if (off < 0 || len < 0 || off > b.length - len) throw new StringIndexOutOfBoundsException("offset " + off + ", count " + len + ", length " + b.length);
-        StringBuilder s = new StringBuilder(len);
-        if (kind == LATIN1) { for (int i = 0; i < len; i++) s.append((char) (b[off + i] & 0xff)); return s.toString(); }
-        if (kind == ASCII) { for (int i = 0; i < len; i++) { int c = b[off + i]; s.append(c >= 0 ? (char) c : '�'); } return s.toString(); }
+        // Single-byte charsets and UTF-8 decode into a char[]: at most one char per byte.
+        char[] r = new char[len];
+        if (kind == LATIN1) { for (int i = 0; i < len; i++) r[i] = (char) (b[off + i] & 0xff); return new String(r); }
+        if (kind == ASCII) { for (int i = Support.ascii(b, off, len, r); i < len; i++) { int c = b[off + i]; r[i] = c >= 0 ? (char) c : '�'; } return new String(r); }
         if (kind >= UTF16) {
+            StringBuilder s = new StringBuilder(len / 2 + 1);
             int i = 0; boolean little = kind == UTF16LE;
             if (kind == UTF16 && len >= 2) { int m = (b[off] & 0xff) << 8 | b[off + 1] & 0xff; if (m == 0xfeff || m == 0xfffe) { little = m == 0xfffe; i = 2; } }
             char pending = 0;   // unpaired surrogates become U+FFFD, as in the JDK decoder
@@ -256,12 +258,12 @@ public final class Strings {
         }
         // UTF-8 with the JDK decoder's replacement rules: each malformed sequence (as sized
         // by the JDK's malformedN) becomes one U+FFFD; an incomplete tail becomes one U+FFFD.
-        int i = off, end = off + len;
+        int k = Support.ascii(b, off, len, r), i = off + k, end = off + len;   // bulk ASCII prefix
         while (i < end) {
             int c = b[i] & 0xff;
-            if (c < 0x80) { s.append((char) c); i++; continue; }
+            if (c < 0x80) { r[k++] = (char) c; i++; continue; }
             int need = c >= 0xc2 && c <= 0xdf ? 1 : c >= 0xe0 && c <= 0xef ? 2 : c >= 0xf0 && c <= 0xf4 ? 3 : -1;
-            if (need < 0) { s.append('�'); i++; continue; }
+            if (need < 0) { r[k++] = '�'; i++; continue; }
             int have = Math.min(need, end - i - 1), b2 = have > 0 ? b[i + 1] & 0xff : 0, b3 = have > 1 ? b[i + 2] & 0xff : 0, b4 = have > 2 ? b[i + 3] & 0xff : 0;
             boolean c2 = (b2 & 0xc0) == 0x80, c3 = (b3 & 0xc0) == 0x80, c4 = (b4 & 0xc0) == 0x80;
             int bad;   // length of a malformed sequence, 0 if well-formed, -1 if an incomplete tail
@@ -280,13 +282,14 @@ public final class Strings {
                     else bad = c > 0xf4 || head ? 1 : !c3 ? 2 : 3;
                 }
             }
-            if (bad < 0) { s.append('�'); break; }
-            if (bad > 0) { s.append('�'); i += bad; continue; }
+            if (bad < 0) { r[k++] = '�'; break; }
+            if (bad > 0) { r[k++] = '�'; i += bad; continue; }
             int cp = need == 1 ? (c & 0x1f) << 6 | b2 & 0x3f : need == 2 ? (c & 0x0f) << 12 | (b2 & 0x3f) << 6 | b3 & 0x3f
                 : (c & 0x07) << 18 | (b2 & 0x3f) << 12 | (b3 & 0x3f) << 6 | b4 & 0x3f;
-            s.appendCodePoint(cp); i += need + 1;
+            if (cp >= 0x10000) { r[k++] = Character.highSurrogate(cp); r[k++] = Character.lowSurrogate(cp); } else r[k++] = (char) cp;
+            i += need + 1;
         }
-        return s.toString();
+        return new String(r, 0, k);
     }
     public static String init(byte[] b) { return decode(b, 0, b.length, UTF8); }
     public static String init(byte[] b, int off, int len) { return decode(b, off, len, UTF8); }

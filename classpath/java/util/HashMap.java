@@ -19,12 +19,12 @@ public class HashMap<K,V> extends AbstractMap<K,V> implements Cloneable,java.io.
     public HashMap(Map<? extends K,? extends V> other){this();putAll(other);}
     public static <K,V> HashMap<K,V> newHashMap(int expected){if(expected<0)throw new IllegalArgumentException();return new HashMap<K,V>((int)Math.min(1<<30,Math.ceil(expected/.75)));}
     private int threshold(int n){return Math.max(1,(int)(n*loadFactor));}
-    private static int hash(Object key){int h=Objects.hashCode(key);return h^(h>>>16);}
-    Node<K,V> node(Object key){int h=hash(key);for(Node<K,V> n=table[h&(table.length-1)];n!=null;n=n.next)if(n.hash==h&&Objects.equals(key,n.getKey()))return n;return null;}
+    private static int hash(Object key){int h=key==null?0:key.hashCode();return h^(h>>>16);}
+    Node<K,V> node(Object key){int h=hash(key);for(Node<K,V> n=table[h&(table.length-1)];n!=null;n=n.next){Object k=n.key;if(n.hash==h&&(k==key||key!=null&&key.equals(k)))return n;}return null;}
     public int size(){return length;}
     public boolean containsKey(Object key){return node(key)!=null;}
-    public V get(Object key){Node<K,V> n=node(key);if(n==null)return null;accessed(n);return n.getValue();}
-    public V put(K key,V value){int h=hash(key),i=h&(table.length-1);for(Node<K,V> n=table[i];n!=null;n=n.next)if(n.hash==h&&Objects.equals(key,n.getKey())){V old=n.setValue(value);accessed(n);return old;}table[i]=newNode(h,key,value,table[i]);length++;modCount++;if(length>threshold)grow();inserted();return null;}
+    public V get(Object key){Node<K,V> n=node(key);if(n==null)return null;accessed(n);return n.value;}
+    public V put(K key,V value){int h=hash(key),i=h&(table.length-1);for(Node<K,V> n=table[i];n!=null;n=n.next){Object k=n.key;if(n.hash==h&&(k==key||key!=null&&key.equals(k))){V old=n.value;n.value=value;accessed(n);return old;}}table[i]=newNode(h,key,value,table[i]);length++;modCount++;if(length>threshold)grow();inserted();return null;}
     @SuppressWarnings("unchecked") private void grow(){if(table.length>=1<<30){threshold=Integer.MAX_VALUE;return;}Node<K,V>[] next=(Node<K,V>[])new Node<?,?>[table.length<<1];for(Node<K,V> head:table)while(head!=null){Node<K,V> n=head;head=head.next;int i=n.hash&(next.length-1);n.next=next[i];next[i]=n;}table=next;threshold=threshold(next.length);}
     public V remove(Object key){int h=hash(key),i=h&(table.length-1);Node<K,V> prev=null;for(Node<K,V> n=table[i];n!=null;n=n.next){if(n.hash==h&&Objects.equals(key,n.getKey())){if(prev==null)table[i]=n.next;else prev.next=n.next;length--;modCount++;removed(n);return n.getValue();}prev=n;}return null;}
     public void clear(){if(length!=0){for(int i=0;i<table.length;i++)table[i]=null;length=0;}modCount++;}

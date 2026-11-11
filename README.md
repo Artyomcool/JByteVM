@@ -2,7 +2,7 @@
 
 Крайне компактная встраиваемая JVM для модов. Только интерпретатор, без JIT
 и `invokedynamic`. Class-файлы Java 25 (`major=69`, `minor=0`).
-Компактная библиотека классов, мониторы и доступ, диагностика, рефлексия,
+Компактная библиотека классов, мониторы, диагностика, рефлексия,
 преобразование лямбд и CONSTANT_Dynamic при подготовке и три профиля x86.
 
 **Сейчас работаем только над Windows x86 (32 бита).** Это сборка по умолчанию.
@@ -82,9 +82,26 @@ EXE хозяина. RAM измеряется отдельно; КиБ = 1024 б�
 - athrow, try/catch/finally, try-with-resources, cause и suppressed exceptions.
   Исключения — GC-объекты, работают пользовательские подклассы.
   ExceptionInInitializerError/NoClassDefFoundError при ошибках инициализации.
-- public/private/protected/package-доступ, nestmates, ограничения final-полей,
-  ошибки разрешения членов и виртуальный выбор метода с учётом пакетов.
-  Успешное разрешение class constant кэшируется без дополнительных аллокаций.
+- Проверок доступа нет: private/protected/package и nestmates не проверяются,
+  запись в final-поля не запрещена. Ошибки разрешения членов
+  (NoSuchField/MethodError, IncompatibleClassChangeError) и виртуальный выбор метода
+  с учётом пакетов сохранены.
+- Разрешение ссылок как в ConstantPoolCache HotSpot: class constant, Fieldref и
+  Methodref разрешаются один раз и кэшируются в записи пула; виртуальные и
+  интерфейсные вызовы — с мономорфным кэшем (класс последнего получателя → метод).
+  Встроенные native-методы вызываются без переключения FPU-окружения.
+- Интерпретатор устроен как шаблонный интерпретатор HotSpot. На x86 горячие байткоды
+  (170 из 202) исполняет ядро на ассемблере `src/interp_x86.asm`, сгенерированное
+  `tools/gen_interp_x86.py`: своя диспетчеризация в конце каждого обработчика, вершина
+  стека в `eax` (двухслотовая — ещё и в `xmm7`, со своей таблицей переходов), память
+  стека всегда актуальна. Вызовы обычных байткод-методов, возвраты, `new`, поля,
+  массивы с барьером записи, checkcast/instanceof, long/double — в ядре; кадры для
+  вызовов ядро строит само, настоящими `call`/`ret`. Всё остальное и любые особые
+  случаи (null, границы, неразрешённые ссылки, исключения, лимиты) ядро отдаёт C-циклу
+  `jbv_run`, который сам по себе — полный интерпретатор. Аргументы вызова становятся
+  locals вызванного метода на месте; `JbvLink` хранит разрешённые члены, полиморфный
+  кэш на 4 класса получателя. Сверка с `java -Xint` на одном P-ядре: 0.4–1.35×.
+  Профиль: `JBV_SAMPLE=файл jbytevm-bench ...`, затем `tools/profile_samples.py`.
 - Реентерабельные monitorenter/monitorexit и synchronized-методы; владение,
   IllegalMonitorStateException и очистка при исключении/прерывании по бюджету.
   Object.notify/notifyAll проверяют владение. Потоков и Object.wait нет.
@@ -96,6 +113,8 @@ EXE хозяина. RAM измеряется отдельно; КиБ = 1024 б�
   числе при native → Java → native → Java и изменении rounding/DAZ/FTZ в native.
 - Синхронные native → Java → native → … на одном системном потоке.
   Общие лимиты инструкций/глубины/слотов; восстановление кадров после ошибок.
+  «Инструкции» бюджета — входы в методы и обратные переходы (как safepoint-опросы
+  HotSpot): любой цикл и рекурсия ограничены без счётчика на каждом байткоде.
 - Неперемещающий mark-and-sweep GC с отдельными метками ссылок 0/1.
   Корни: locals и активные операнды всех приостановленных кадров, статические
   ссылки, pending exception и удержания хозяина. Обход объектов итеративный.
@@ -166,8 +185,8 @@ arrays используют два байта на code unit.
 `Class.get[Declared]Methods/Fields/Constructors` и поиск по имени/параметрам;
 Method.invoke, Constructor.newInstance, Field.get/set и примитивные варианты;
 Modifier, AccessibleObject, Array.newInstance/get/set/getLength. Есть boxing,
-расширение примитивов, виртуальный вызов, исключения доступа, InvocationTargetException,
-protected receiver, nestmates, setAccessible/trySetAccessible/canAccess. Статические
+расширение примитивов, виртуальный вызов, InvocationTargetException,
+setAccessible/trySetAccessible/canAccess (доступ всегда разрешён). Статические
 final-поля не изменяются; обычные instance final допускают запись после setAccessible.
 Модификаторы, типы параметров/результата, объявленные исключения, bridge/varargs/default
 и synthetic доступны через API. Отражённые объекты членов независимы: изменение
@@ -259,7 +278,8 @@ GC — serial (stop-the-world), поколенческий:
   `jbv_object`. Свежий объект, на который ссылается только локальная переменная C,
   закрепляется `jbv_retain` на время следующих выделений. Ссылки — дескрипторы,
   поэтому перемещение меняет только запись в таблице.
-  Разметку проверяет `tools/check_gc.py` (запускается в `build.py --test`): строит граф
+  Разметку проверяет `tools/checkgc/CheckGc.java`, исполняемый на самой JByteVM через
+  `jbytevm-run` (запускается в `build.py --test`; `--fix` расставляет метки): строит граф
   вызовов функций и макросов VM, отправные точки — `jbv_new`, `jbv_execute`, сборщик и
   любые вызовы через указатели на функции (native-методы, колбэки хоста), — и требует
   `JBV_GC` у каждой функции, из которой они достижимы; лишние метки — предупреждение.
@@ -454,7 +474,7 @@ python tools/build.py --jdk C:/path/to/jdk-25 --test --test-python C:/path/to/py
 |---|---|---|
 | full, по умолчанию | Ядро, native, текст, Java-библиотека, рефлексия и аннотации, Java MethodHandle, диагностика | build/x86 |
 | text | Ядро, native, Object/Class/String/StringBuilder, C-реализация базовых исключений; без Java-библиотеки, рефлексии и stack traces | build/x86-text |
-| core | Ядро, native, идентичность/клонирование Object, массивы, базовые исключения, доступ и мониторы; без строк и Class mirrors | build/x86-core |
+| core | Ядро, native, идентичность/клонирование Object, массивы, базовые исключения и мониторы; без строк и Class mirrors | build/x86-core |
 
 C ABI одинаков; доступность групп возвращает `jbv_features()`. Строковые C API
 в core возвращают UNSUPPORTED_FEATURE. Уменьшенные профили сознательно меняют
@@ -481,7 +501,7 @@ classpath и generated_classpath.c, затем вызывает CMake. Для fu
 - сравнения с HotSpot 25: 846 целочисленных, 37 объектных/массивных,
   5264 числовых, 7982 вывода float/double, 7910 операций обёрток/Math,
   4278 разбора float/double, 35 сценариев коллекций;
-- исключения/clinit, интерфейсы/default-методы, доступ/nestmates и ошибки
+- исключения/clinit, интерфейсы/default-методы, nestmates и ошибки
   бинарной совместимости, condy с вложенными bootstrap, кэшем и рекурсией;
 - source/line stack traces, cause/suppressed, печать через хозяина, Java OOM
   и StackOverflowError, ограниченность повторных удержанных OOM;
@@ -605,6 +625,7 @@ String.split/format) — это список пробелов, а не регр�
 ```powershell
 .tools/python-x86/python.exe tests/run_projects.py --jdk .tools/jdk-25.0.5+8 [p05_enumcollections ...]
 build/x86/Release/jbytevm-bench.exe app.jar pkg/Class method 5   # время статического ()I метода, хост на malloc
+build/x86/Release/jbytevm-run.exe app.jar pkg/Class args...      # static int run(String[]); файлы через jbvhost.Host
 ```
 
 ## Сборка модов без indy

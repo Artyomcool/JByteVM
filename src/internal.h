@@ -43,6 +43,29 @@ typedef struct JbvMethod {
     JbvNativeSlots native_slots;
     void *native_user;
 } JbvMethod;
+/* A resolved Fieldref/Methodref/InterfaceMethodref, kept in the otherwise unused
+ * text pointer of its pool entry (like HotSpot's ConstantPoolCache): lookup by name
+ * and the linkage checks run once. Virtual calls add a monomorphic cache: the last
+ * receiver class and the method selected for it. */
+typedef struct JbvLink {
+    struct JbvClass *owner, *symbolic;   /* declaring and referenced class */
+    void *member;                        /* JbvField or JbvMethod; 0 for MethodHandle.invoke* */
+    struct JbvClass *seen, *target_owner;
+    struct JbvMethod *target;            /* virtual: selected for `seen` */
+    struct JbvClass *special_owner;      /* invokespecial: the selected (super) method */
+    struct JbvMethod *special;
+    uint32_t slot;                       /* instance fields: int32 offset after the object header */
+    uint8_t kind, type, fast;            /* fields: JBV_* kind, descriptor char; one-slot int/ref: 1 instance, 2 static */
+    uint8_t ready;                       /* invokestatic: resolved and its class initialized */
+    uint16_t argc;                       /* methods: argument slots, receiver included */
+    uint8_t result;                      /* methods: result_kind */
+    uint8_t trivial;                     /* invokespecial: the target is Object.<init> (no call) */
+    int32_t *address;                    /* static fields: &value */
+    struct JbvClass *pic_seen[3];        /* virtual calls: three more receiver classes... */
+    struct JbvClass *pic_owner[3];
+    struct JbvMethod *pic_target[3];     /* ...and their selected methods */
+    uint8_t pic_next;
+} JbvLink;
 typedef struct JbvField {
     uint16_t flags, constant;
     JbvText name, descriptor;
@@ -66,8 +89,6 @@ typedef struct JbvClass {
     JbvField *fields;
     uint16_t flags, interface_count;
     const uint8_t *interface_indices;
-    uint16_t nest_host, nest_count;
-    const uint8_t *nest_members;
     struct JbvClass **interfaces;
     struct JbvClass *super, *component;
     uint32_t instance_slots;
@@ -76,6 +97,9 @@ typedef struct JbvClass {
     uint8_t builtin, primitive;
     int32_t mirror;
     JbvStatus init_error;
+    uint16_t *ref_slots;      /* instance slots holding references, inherited included (built by the GC) */
+    uint16_t ref_count;
+    uint8_t ref_ready;
 } JbvClass;
 typedef struct JbvObject {
     /* One-word header (single-threaded VM, non-moving GC): just the class.
@@ -92,9 +116,8 @@ typedef struct JbvFrame {
     struct JbvFrame *previous;
     JbvClass *owner;
     JbvMethod *method;
-    const uint32_t *pc;
+    uint32_t pc, sp;      /* copies, written before anything that may collect or throw */
     uint32_t base, locals;
-    const uint32_t *sp;
     uint8_t has_monitors;
 } JbvFrame;
 
@@ -110,9 +133,13 @@ struct JbvVM {
     JbvConfig config;
     size_t memory_used, memory_peak;
     JbvClass *classes;
+    JbvClass *class_cache[64];   /* jbv_find_class by name hash; cleared when a class is freed */
+    JbvClass *throwable_class, *trace_element_class;   /* resolved once, for exceptions */
+    struct JbvMethod *throwable_init[5];                /* Java Throwable constructors by native id */
     int32_t *slots;
     uint32_t used_slots, depth;
     uint64_t remaining;
+    struct JbvClass *object_class;   /* java/lang/Object */
     uint8_t *slot_refs; /* GC reference bits (0/1), not operand verification tags. */
     JbvFrame *frames;
     JbvNativeFrame *native_frame;
@@ -134,6 +161,7 @@ struct JbvVM {
     uint8_t nursery_disabled;
     void **remembered;        /* old objects that may reference young ones (write barrier) */
     uint32_t remembered_count, remembered_capacity;
+    JbvObject *last_remembered;   /* the newest remembered entry (0 when empty): repeats are skipped */
     uint8_t remembered_overflow;
     void **recent;            /* old objects allocated since the last minor collection */
     uint32_t recent_count, recent_capacity;
@@ -171,29 +199,27 @@ JbvStatus jbv_classpath_find(JbvVM *vm, JbvText name, const uint8_t **data, uint
 JbvStatus jbv_archive_open(JbvVM *vm, JbvArchive *archive, const uint8_t *jar, size_t size, int verify);
 JbvStatus jbv_archive_find(const JbvArchive *archive, JbvText name, const uint8_t **data, uint32_t *size);
 /* Built-in library class, then a class of the application JAR (linked). */
-JBV_GC JbvStatus jbv_lazy_class(JbvVM *vm, JbvText name, JbvClass **out);
+JbvStatus jbv_lazy_class(JbvVM *vm, JbvText name, JbvClass **out);
 void jbv_free_image(JbvVM *vm, uint8_t *image);
 uint8_t jbv_library_id(JbvText name);
-JBV_GC JbvStatus jbv_library_class(JbvVM *vm, JbvText name, JbvClass **out);
+JbvStatus jbv_library_class(JbvVM *vm, JbvText name, JbvClass **out);
 JBV_GC JbvStatus jbv_library_initialize(JbvVM *vm, JbvClass *type);
 JBV_GC JbvStatus jbv_literal(JbvVM *vm, JbvClass *owner, uint16_t index, int32_t *out);
 JBV_GC JbvStatus jbv_mirror(JbvVM *vm, JbvClass *type, int32_t *out);
-JBV_GC JbvStatus jbv_link(JbvVM *vm, JbvClass *c, uint32_t depth);
-JBV_GC JbvStatus jbv_resolve_class(JbvVM *vm, JbvText name, JbvClass **out);
+JbvStatus jbv_link(JbvVM *vm, JbvClass *c, uint32_t depth);
+JbvStatus jbv_resolve_class(JbvVM *vm, JbvText name, JbvClass **out);
 JbvStatus jbv_array_class(JbvVM *vm, JbvClass *component, uint8_t kind, JbvClass **out);
 JBV_GC JbvStatus jbv_class_constant(JbvVM *vm, JbvClass *c, uint16_t index, JbvClass **out);
 int jbv_assignable(JbvClass *from, JbvClass *to);
 JbvMethod *jbv_lookup_method(JbvClass **owner, JbvText name, JbvText descriptor);
 JbvField *jbv_lookup_field(JbvClass **owner, JbvText name, JbvText descriptor);
 int jbv_same_package(JbvClass *a, JbvClass *b);
-JBV_GC JbvStatus jbv_class_access(JbvVM *vm, JbvClass *caller, JbvClass *target);
-JBV_GC JbvStatus jbv_member_access(JbvVM *vm, JbvClass *caller, JbvClass *owner, uint16_t flags, JbvClass *receiver);
 JbvMethod *jbv_virtual_method(JbvClass **owner, JbvClass *resolved, JbvMethod *method);
 JBV_GC JbvStatus jbv_constant(JbvVM *vm, JbvClass *owner, uint16_t index, uint64_t *out, uint8_t *kind);
 JBV_GC JbvStatus jbv_dynamic_native(JbvVM *vm, uint32_t op, const int32_t *args, uint64_t *out);
 JBV_GC JbvStatus jbv_polymorphic(JbvVM *vm, int32_t handle, JbvText descriptor, const int32_t *args, int exact, uint64_t *out);
 int jbv_reference_type(JbvText descriptor);
-JBV_GC JbvStatus jbv_check_reference(JbvVM *vm, int32_t ref, JbvText descriptor);
+JbvStatus jbv_check_reference(JbvVM *vm, int32_t ref, JbvText descriptor);
 JBV_GC JbvStatus jbv_new(JbvVM *vm, JbvClass *type, int32_t length, int32_t *ref);
 JBV_GC JbvStatus jbv_multi_array(JbvVM *vm, JbvClass *type, const int32_t *sizes, uint8_t dimensions, int32_t *ref);
 JbvStatus jbv_object(JbvVM *vm, int32_t ref, JbvObject **out);
@@ -214,7 +240,7 @@ JbvStatus jbv_monitor(JbvVM *vm, JbvClass *type, int32_t ref, int action);
 void jbv_release_monitors(JbvVM *vm, JbvFrame *frame);
 int32_t jbv_narrow(int32_t value, uint8_t type);
 JbvText jbv_return_type(JbvText descriptor);
-JBV_GC JbvStatus jbv_arguments(JbvVM *vm, JbvClass *owner, JbvMethod *method,
+JbvStatus jbv_arguments(JbvVM *vm, JbvClass *owner, JbvMethod *method,
     const int32_t *args, uint16_t count, uint8_t *refs, int pin);
 JBV_GC JbvStatus jbv_initialize(JbvVM *vm, JbvClass *c);
 JBV_GC JbvStatus jbv_execute(JbvVM *vm, JbvClass *c, JbvMethod *m,
@@ -280,7 +306,7 @@ JBV_INLINE void jbv_array_set(JbvObject *array, uint32_t i, uint8_t kind, uint64
 uint32_t jbv_numeric_types(uint8_t op);
 JbvStatus jbv_numeric(uint8_t op, uint64_t a, uint64_t b, uint64_t *out);
 int jbv_exception_name(JbvText name);
-JBV_GC JbvStatus jbv_exception_class(JbvVM *vm, JbvText name, JbvClass **out);
+JbvStatus jbv_exception_class(JbvVM *vm, JbvText name, JbvClass **out);
 JBV_GC JbvStatus jbv_raise(JbvVM *vm, JbvStatus status);
 JBV_GC JbvStatus jbv_capture_trace(JbvVM *vm, int32_t *out);
 JBV_GC JbvStatus jbv_throw_named(JbvVM *vm, const char *name, int32_t cause, JbvStatus status);

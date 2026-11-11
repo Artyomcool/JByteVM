@@ -305,6 +305,13 @@ JBV_GC static JbvStatus builder_call(JbvVM *vm, uint32_t op, uint8_t kind, const
         if (a[1] < 0 || (uint32_t)a[1] > length) return string_bounds(vm);
         --count;
     }
+    if (op == A_APPEND && kind == 'C') {   /* the common case: no temporary String */
+        status = builder_buffer(vm, a[0], length + 1, &buffer);
+        if (status != JBV_OK) return status;
+        buffer.data[length] = (uint16_t)v[0];
+        (void)jbv_object(vm, a[0], &o); jbv_data(o)[1] = (int32_t)length + 1;
+        *out = a[0]; return JBV_OK;
+    }
     if (kind == '[') {
         status = array_view(vm, v[0], &text);
         if (status != JBV_OK) return status;

@@ -65,9 +65,17 @@ int jbv_text_is(JbvText a, const char *s) {
 JbvConstant *jbv_cp(JbvClass *c, uint16_t index, uint8_t tag) {
     return index && index < c->pool_size && c->pool[index].tag == tag ? &c->pool[index] : 0;
 }
+static uint32_t name_slot(JbvText name) {
+    uint32_t h = name.size, i;
+    for (i = 0; i < name.size; ++i) h = h * 31 + name.data[i];
+    return (h ^ h >> 7) & 63u;
+}
 JbvClass *jbv_find_class(JbvVM *vm, JbvText name) {
     JbvClass *c;
-    for (c = vm->classes; c; c = c->next) if (!c->primitive && jbv_text_eq(c->name, name)) return c;
+    uint32_t slot = name_slot(name);
+    c = vm->class_cache[slot];
+    if (c && jbv_text_eq(c->name, name)) return c;
+    for (c = vm->classes; c; c = c->next) if (!c->primitive && jbv_text_eq(c->name, name)) { vm->class_cache[slot] = c; return c; }
     return 0;
 }
 JbvMethod *jbv_find_method(JbvClass *c, JbvText name, JbvText descriptor) {
@@ -89,10 +97,22 @@ void jbv_free_image(JbvVM *vm, uint8_t *image) {
     if (!inside(&vm->library, image) && !inside(&vm->app, image)) jbv_free(vm, image);
 }
 void jbv_free_class(JbvVM *vm, JbvClass *c) {
+    uint32_t slot;
     if (!c) return;
+    for (slot = 0; slot < 64; ++slot) if (vm->class_cache[slot] == c) vm->class_cache[slot] = 0;
+    if (vm->throwable_class == c || vm->trace_element_class == c) {
+        vm->throwable_class = vm->trace_element_class = 0;
+        for (slot = 0; slot < 5; ++slot) vm->throwable_init[slot] = 0;
+    }
+    jbv_free(vm, c->ref_slots);
     jbv_free(vm, c->methods);
     jbv_free(vm, c->fields);
     jbv_free(vm, c->interfaces);
+    if (c->pool) {
+        uint16_t i;
+        for (i = 1; i < c->pool_size; ++i)
+            if (c->pool[i].tag >= 9 && c->pool[i].tag <= 11) jbv_free(vm, (void *)c->pool[i].text.data);
+    }
     jbv_free(vm, c->pool);
     jbv_free_image(vm, c->image);
     jbv_free(vm, c);
@@ -168,7 +188,7 @@ JBV_API JbvStatus JBV_CALL jbv_load_class(JbvVM *vm, const void *bytes, size_t s
     vm->classes = c;
     return JBV_OK;
 }
-JBV_GC static JbvStatus bind_native(JbvVM *vm, const char *class_name,
+static JbvStatus bind_native(JbvVM *vm, const char *class_name,
     const char *name, const char *descriptor, JbvNative callback, JbvNativeSlots wide, void *user) {
     JbvClass *c;
     JbvMethod *m;
@@ -187,11 +207,11 @@ JBV_GC static JbvStatus bind_native(JbvVM *vm, const char *class_name,
     m->native_user = user;
     return JBV_OK;
 }
-JBV_GC JBV_API JbvStatus JBV_CALL jbv_bind_native(JbvVM *vm, const char *class_name,
+JBV_API JbvStatus JBV_CALL jbv_bind_native(JbvVM *vm, const char *class_name,
     const char *name, const char *descriptor, JbvNative callback, void *user) {
     return bind_native(vm, class_name, name, descriptor, callback, 0, user);
 }
-JBV_GC JBV_API JbvStatus JBV_CALL jbv_bind_native_slots(JbvVM *vm, const char *class_name,
+JBV_API JbvStatus JBV_CALL jbv_bind_native_slots(JbvVM *vm, const char *class_name,
     const char *name, const char *descriptor, JbvNativeSlots callback, void *user) {
     return bind_native(vm, class_name, name, descriptor, 0, callback, user);
 }

@@ -10,7 +10,16 @@ public class ArrayList<E> extends AbstractList<E> implements RandomAccess,Clonea
     public void trimToSize(){modCount++;if(length<values.length){Object[] next=new Object[length];System.arraycopy(values,0,next,0,length);values=next;}}
     @SuppressWarnings("unchecked") public E get(int index){Objects.checkIndex(index,length);return (E)values[index];}
     @SuppressWarnings("unchecked") public E set(int index,E value){Objects.checkIndex(index,length);E old=(E)values[index];values[index]=value;return old;}
-    public void add(int index,E value){position(index);grow(length+1);System.arraycopy(values,index,values,index+1,length-index);values[index]=value;length++;modCount++;}
+    public boolean add(E value){if(length==values.length)grow(length+1);values[length++]=value;modCount++;return true;}
+    public void add(int index,E value){position(index);grow(length+1);if(index<length)System.arraycopy(values,index,values,index+1,length-index);values[index]=value;length++;modCount++;}
+    /** Direct array iteration, as the JDK's ArrayList.Itr (the generic cursor goes through get). */
+    public Iterator<E> iterator(){return new Itr();}
+    private final class Itr implements Iterator<E> {
+        int next,last=-1,expected=modCount;
+        public boolean hasNext(){return next<length;}
+        @SuppressWarnings("unchecked") public E next(){if(expected!=modCount)throw new ConcurrentModificationException();if(next>=length)throw new NoSuchElementException();last=next;return (E)values[next++];}
+        public void remove(){if(last<0)throw new IllegalStateException();if(expected!=modCount)throw new ConcurrentModificationException();ArrayList.this.remove(last);next=last;last=-1;expected=modCount;}
+    }
     public boolean addAll(Collection<? extends E> other){return addAll(length,other);}
     public boolean addAll(int index,Collection<? extends E> other){position(index);Object[] a=other.toArray();modCount++;if(a.length==0)return false;grow(length+a.length);System.arraycopy(values,index,values,index+a.length,length-index);System.arraycopy(a,0,values,index,a.length);length+=a.length;return true;}
     @SuppressWarnings("unchecked") public E remove(int index){Objects.checkIndex(index,length);E old=(E)values[index];removeRange(index,index+1);return old;}

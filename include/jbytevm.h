@@ -65,7 +65,7 @@ typedef struct JbvConfig {
     void *allocator_user;
     uint32_t max_slots;       /* zero selects 16384 int32 slots */
     uint32_t max_depth;       /* zero selects 64; maximum 256 */
-    uint64_t max_instructions; /* zero selects 10000000 per outer call */
+    uint64_t max_instructions; /* budget in method entries + backward branches; zero selects 10000000 per outer call */
     size_t max_memory;        /* total live allocator bytes; zero selects 10 MiB */
     size_t max_heap;          /* Java heap bytes; zero uses the total memory limit */
 } JbvConfig;

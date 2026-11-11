@@ -1,8 +1,8 @@
 #include "classpath.h"
 
-enum { H_PRIMITIVE,H_COPY,H_ARRAY,H_HASH,H_CLOCK,H_WRITE,H_COLLECT,H_FBITS,H_FVALUE,H_DBITS,H_DVALUE,H_PARSE,H_SQRT,H_ROUND };
+enum { H_PRIMITIVE,H_COPY,H_ARRAY,H_HASH,H_CLOCK,H_WRITE,H_COLLECT,H_FBITS,H_FVALUE,H_DBITS,H_DVALUE,H_PARSE,H_SQRT,H_ROUND,H_ASCII };
 static const char *const hooks[] = {"primitive","arraycopy","newArrayLike","identityHash","clock","write","collect",
-    "floatBits","bitsFloat","doubleBits","bitsDouble","parseFP","sqrt","roundIntegral",
+    "floatBits","bitsFloat","doubleBits","bitsDouble","parseFP","sqrt","roundIntegral","ascii",
     "callerClass","methodTypeClass","findHandle","invokeHandle","staticFinal","wrapperClass","explicitCast","enumValue","captureStackTrace"};
 
 static JbvStatus arraycopy(JbvVM *vm, const int32_t *a) {
@@ -101,7 +101,20 @@ JBV_GC static JbvStatus JBV_CALL hook(JbvVM *vm, void *user, const int32_t *a, u
         *out = n.bits; return JBV_OK;
     }
     case H_ROUND: *out = integral_round(jbv_slot_bits(a, JBV_DOUBLE), a[2]); return JBV_OK;
-    default: return jbv_dynamic_native(vm, op-H_ROUND-1, a, out);
+    case H_ASCII: {   /* ascii(byte[] b, int off, int len, char[] out): copies the leading ASCII run */
+        JbvObject *from, *to;
+        const int8_t *s;
+        uint16_t *d;
+        uint32_t n = 0;
+        if (!a[0] || !a[3]) return JBV_NULL_REFERENCE;
+        (void)jbv_object(vm, a[0], &from); (void)jbv_object(vm, a[3], &to);
+        if (a[1] < 0 || a[2] < 0 || (uint32_t)a[1] > jbv_length(from) || (uint32_t)a[2] > jbv_length(from) - (uint32_t)a[1] ||
+            (uint32_t)a[2] > jbv_length(to)) return JBV_ARRAY_BOUNDS;
+        s = (const int8_t *)(from + 1) + a[1]; d = (uint16_t *)(to + 1);
+        while (n < (uint32_t)a[2] && s[n] >= 0) { d[n] = (uint16_t)s[n]; ++n; }
+        *out = n; return JBV_OK;
+    }
+    default: return jbv_dynamic_native(vm, op-H_ASCII-1, a, out);
     }
 }
 JbvStatus jbv_classpath_find(JbvVM *vm, JbvText name, const uint8_t **data, uint32_t *size) {

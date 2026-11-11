@@ -26,4 +26,6 @@ public final class Support {
     public static native long parseFP(String value,boolean single);
     public static native double sqrt(double value);
     public static native double roundIntegral(double value,int mode);
+    /** Copies the leading ASCII bytes of b[off, off+len) to out; returns their count. */
+    public static native int ascii(byte[] b,int off,int len,char[] out);
 }
