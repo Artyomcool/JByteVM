@@ -24,7 +24,7 @@ static JbvStatus method_type(JbvVM *vm, JbvText descriptor, int32_t *out) {
     if (status != JBV_OK) return status;
     (void)jbv_retain(vm, string);
     status = new_object(vm, MT, out, &o);
-    if (status == JBV_OK) jbv_data(o)[0] = string;
+    if (status == JBV_OK) { jbv_data(o)[0] = string; jbv_barrier_checked(vm, o, string); }
     (void)jbv_release(vm, string); return status;
 }
 static uint32_t class_descriptor(JbvClass *type, uint8_t *buffer) {
@@ -95,12 +95,10 @@ static JbvStatus make_handle(JbvVM *vm, JbvClass *caller, JbvClass *symbolic, Jb
     }
     (void)jbv_release(vm, type_ref); return status;
 }
-static JbvStatus object_array(JbvVM *vm, JbvClass *component, uint32_t length, int32_t *ref, JbvObject **out) {
+static JbvStatus object_array(JbvVM *vm, JbvClass *component, uint32_t length, int32_t *ref) {
     JbvClass *type;
     JbvStatus status = jbv_array_class(vm, component, 'L', &type);
-    if (status == JBV_OK) status = jbv_new(vm, type, (int32_t)length, ref);
-    if (status == JBV_OK) (void)jbv_object(vm, *ref, out);
-    return status;
+    return status == JBV_OK ? jbv_new(vm, type, (int32_t)length, ref) : status;
 }
 static JbvStatus handle_descriptor(JbvVM *vm, JbvObject *handle, JbvText *out) {
     JbvObject *type;
@@ -116,12 +114,13 @@ static JbvStatus invoke_handle(JbvVM *vm, int32_t ref, int32_t array_ref, int32_
     JbvStatus status;
     int32_t *slots = 0, varargs_ref = 0, receiver_ref = 0;
     uint8_t *refs = 0;
-    uint32_t pos = 1, argc = 0, used = 0, width, parameters = 0, begin, i;
+    uint32_t pos = 1, argc = 0, used = 0, width, parameters = 0, begin, i, length;
     uint8_t kind;
     uint64_t bits = 0;
     status = jbv_object(vm, ref, &handle); if (status != JBV_OK) return status;
     status = jbv_object(vm, array_ref, &array); if (status != JBV_OK) return status;
     if (!jbv_text_is(handle->type->name, MH) || array->type->array_kind != 'L') return JBV_CLASS_CAST;
+    length = jbv_length(array);   /* handle and array may move once anything allocates */
     kind = (uint8_t)jbv_data(handle)[4];
     owner = (JbvClass *)(uintptr_t)jbv_slot_bits(jbv_data(handle)+2, JBV_LONG);
     caller = jbv_mirror_type(vm, jbv_data(handle)[6]);
@@ -146,32 +145,37 @@ static JbvStatus invoke_handle(JbvVM *vm, int32_t ref, int32_t array_ref, int32_
         if (collect && (kind&128) && i+1 == parameters) {
             JbvClass *array_type;
             JbvObject *tail = 0;
-            uint32_t j, remaining = jbv_length(array)-argc;
+            uint32_t j, remaining = length-argc;
             JbvText component = {type.data+1,(uint16_t)(type.size-1)};
             status = jbv_type_class(vm, type, &array_type);
             if (status == JBV_OK) status = jbv_new(vm, array_type, (int32_t)remaining, &varargs_ref);
             if (status != JBV_OK) goto done;
-            (void)jbv_retain(vm, varargs_ref); (void)jbv_object(vm, varargs_ref, &tail);
+            (void)jbv_retain(vm, varargs_ref);
             for (j = 0; j < remaining; ++j) {
+                (void)jbv_object(vm, array_ref, &array);
                 status = jbv_from_object(vm, jbv_data(array)[argc++], component, &bits);
                 if (status != JBV_OK) goto done;
+                (void)jbv_object(vm, varargs_ref, &tail);
                 jbv_array_set(tail, j, array_type->array_kind, bits);
+                if (array_type->array_kind == 'L') jbv_barrier_checked(vm, tail, (int32_t)(uint32_t)bits);
             }
             argument = varargs_ref;
         } else {
-            if (argc >= jbv_length(array)) { status = JBV_BAD_ARGUMENT; goto wrong_type; }
-            argument = jbv_data(array)[argc++];
+            if (argc >= length) { status = JBV_BAD_ARGUMENT; goto wrong_type; }
+            (void)jbv_object(vm, array_ref, &array); argument = jbv_data(array)[argc++];
         }
         status = jbv_from_object(vm, argument, type, &bits);
         if (status != JBV_OK) goto done;
         refs[used] = (uint8_t)jbv_reference_type(type); jbv_put_bits(slots+used, bits, jbv_kind(type.data[0])); used += width;
     }
-    if (argc != jbv_length(array)) { status = JBV_BAD_ARGUMENT; goto wrong_type; }
+    if (argc != length) { status = JBV_BAD_ARGUMENT; goto wrong_type; }
     kind &= 127;
     if (kind == 1 || kind == 3 || kind == 5 || kind == 7 || kind == 9) {
+        JbvClass *actual;
         status = jbv_object(vm, slots[0], &receiver); if (status != JBV_OK) goto done;
-        if (caller) { status = jbv_member_access(vm, caller, owner, field ? field->flags : method->flags, receiver->type); if (status != JBV_OK) goto done; }
-        if (kind == 5 || kind == 9) { JbvClass *actual = receiver->type; method = jbv_virtual_method(&actual, owner, method); owner = actual; }
+        actual = receiver->type;   /* jbv_member_access may move the receiver */
+        if (caller) { status = jbv_member_access(vm, caller, owner, field ? field->flags : method->flags, actual); if (status != JBV_OK) goto done; }
+        if (kind == 5 || kind == 9) { method = jbv_virtual_method(&actual, owner, method); owner = actual; }
     }
     if (field) {
         int32_t *location;
@@ -184,7 +188,7 @@ static JbvStatus invoke_handle(JbvVM *vm, int32_t ref, int32_t array_ref, int32_
     } else {
         if (!method || (method->flags & JBV_ABSTRACT)) { status = jbv_throw_named(vm, "java/lang/AbstractMethodError", 0, JBV_LINKAGE_ERROR); goto done; }
         if (method->flags & JBV_STATIC) status = jbv_initialize(vm, owner);
-        if (status == JBV_OK) status = JBV_CALL_OUT(vm, jbv_execute(vm, owner, method, slots, refs, (uint16_t)used, &bits));
+        if (status == JBV_OK) status = jbv_execute(vm, owner, method, slots, refs, (uint16_t)used, &bits);
         if (status != JBV_OK) goto done;
         if (kind == 8) bits = (uint32_t)receiver_ref;
     }
@@ -216,7 +220,7 @@ JbvStatus jbv_polymorphic(JbvVM *vm, int32_t ref, JbvText d, const int32_t *args
         if (status != JBV_OK) return status;
     }
     while (d.data[pos] != ')') { (void)jbv_descriptor_type(d, &pos, &width); ++count; }
-    status = object_array(vm, object, count, &array_ref, &array);
+    status = object_array(vm, object, count, &array_ref);
     if (status != JBV_OK) return status;
     (void)jbv_retain(vm, array_ref); pos = 1;
     while (index < count) {
@@ -224,13 +228,15 @@ JbvStatus jbv_polymorphic(JbvVM *vm, int32_t ref, JbvText d, const int32_t *args
         (void)jbv_descriptor_type(d, &pos, &width);
         if (code == 'L' || code == '[') value = args[used];
         else { status = jbv_box(vm, code, jbv_slot_bits(args+used, jbv_kind(code)), &value); if (status != JBV_OK) goto done; }
-        jbv_data(array)[index++] = value; used += width;
+        (void)jbv_object(vm, array_ref, &array);   /* boxing may have moved it */
+        jbv_data(array)[index++] = value; jbv_barrier_checked(vm, array, value); used += width;
     }
     status = invoke_handle(vm, ref, array_ref, &value, !exact);
     if (status != JBV_OK) goto done;
     result = jbv_return_type(d);
     if (result.data[0] == 'V') *out = 0;
-    else status = jbv_from_object(vm, value, result, out);
+    /* The result is held only here; the conversion may resolve classes (and collect). */
+    else { (void)jbv_retain(vm, value); status = jbv_from_object(vm, value, result, out); (void)jbv_release(vm, value); }
 done:
     (void)jbv_release(vm, array_ref); return status;
 }

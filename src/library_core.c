@@ -16,7 +16,7 @@ static JbvStatus JBV_CALL core_native(JbvVM *vm, void *user, const int32_t *args
     if (!jbv_assignable(object->type,jbv_find_class(vm,jbv_text("java/lang/Cloneable"))))
         return jbv_throw_named(vm,"java/lang/CloneNotSupportedException",0,JBV_EXCEPTION);
     status = jbv_new(vm,object->type,object->type->array_kind?(int32_t)jbv_length(object):0,&ref);if(status!=JBV_OK)return status;
-    (void)jbv_object(vm,ref,&copy);bytes=jbv_object_bytes(object);
+    (void)jbv_object(vm,args[0],&object);(void)jbv_object(vm,ref,&copy);bytes=jbv_object_bytes(object);
     for(i=0;i<bytes;++i)((volatile uint8_t *)(copy+1))[i]=((uint8_t *)(object+1))[i];
     *out=(uint32_t)ref;return JBV_OK;
 }

@@ -19,6 +19,11 @@ static const uint8_t *skip_value(const uint8_t *p) {
 const uint8_t *jbv_skip_annotations(const uint8_t *p) {
     uint32_t n=jbv_u16(p);p+=2;while(n--)p=skip_annotation(p);return p;
 }
+/* Element producers allocate (objects move): re-fetch the pinned array to store. */
+static void store(JbvVM *vm, int32_t array, uint32_t i, int32_t value) {
+    JbvObject *o;
+    (void)jbv_object(vm,array,&o);jbv_data(o)[i]=value;jbv_barrier_checked(vm,o,value);
+}
 static JbvStatus clone_array(JbvVM *vm, int32_t value, int32_t *out) {
     JbvObject *o, *copy;
     JbvStatus status=jbv_object(vm,value,&o);
@@ -27,7 +32,7 @@ static JbvStatus clone_array(JbvVM *vm, int32_t value, int32_t *out) {
     *out=value;if(!o->type->array_kind)return JBV_OK;
     status=jbv_new(vm,o->type,o->type->array_kind?(int32_t)jbv_length(o):0,out);
     if(status!=JBV_OK)return status;
-    (void)jbv_object(vm,*out,&copy);
+    (void)jbv_object(vm,*out,&copy);(void)jbv_object(vm,value,&o);   /* jbv_new may have moved it */
     for(i=0;i<jbv_object_bytes(o);++i)((volatile uint8_t *)(copy+1))[i]=((const uint8_t *)(o+1))[i];
     return JBV_OK;
 }
@@ -79,13 +84,13 @@ static JbvStatus read_value(JbvVM *vm, JbvClass *owner, const uint8_t **p, JbvTe
         uint32_t i,n=read2(p);JbvObject *o;JbvText component={expected.data+1,(uint16_t)(expected.size-1)};
         status=jbv_type_class(vm,expected,&type);if(status==JBV_OK)status=jbv_new(vm,type,(int32_t)n,ref);
         if(status!=JBV_OK)return status;
-        (void)jbv_retain(vm,*ref);(void)jbv_object(vm,*ref,&o);
+        (void)jbv_retain(vm,*ref);
         for(i=0;i<n&&status==JBV_OK;++i){
             int32_t item=0;uint64_t bits;
             status=jbv_annotation_value(vm,owner,p,component,&item);if(status!=JBV_OK)break;
-            if(type->array_kind=='L')jbv_data(o)[i]=item;
+            if(type->array_kind=='L')store(vm,*ref,i,item);
             else {status=jbv_unbox(vm,item,type->array_kind,0,&bits);if(status!=JBV_OK)break;
-                jbv_array_set(o,i,type->array_kind,bits);}
+                (void)jbv_object(vm,*ref,&o);jbv_array_set(o,i,type->array_kind,bits);}
         }
         (void)jbv_release(vm,*ref);return status;
     }
@@ -108,28 +113,31 @@ JbvStatus jbv_annotation_value(JbvVM *vm, JbvClass *owner, const uint8_t **p, Jb
 }
 static JbvStatus read_annotation(JbvVM *vm, JbvClass *owner, const uint8_t **p, int32_t *ref) {
     JbvClass *type=0,*impl=0,*array_type=0;
-    JbvObject *o,*values;
+    JbvObject *o;
     JbvText desc=owner->pool[read2(p)].text;
     uint32_t i,j,n=read2(p);
-    int32_t array_ref=0,mirror=0;
+    int32_t array_ref=0,mirror=0,item;
     JbvStatus status=jbv_type_class(vm,desc,&type);
     if(status==JBV_OK)status=implementation(vm,type,&impl);
     if(status==JBV_OK)status=jbv_mirror(vm,type,&mirror);
     if(status==JBV_OK)status=jbv_array_class(vm,jbv_find_class(vm,jbv_text("java/lang/Object")),'L',&array_type);
     if(status==JBV_OK)status=jbv_new(vm,array_type,impl->method_count,&array_ref);
     if(status!=JBV_OK)return status;
-    (void)jbv_retain(vm,array_ref);(void)jbv_object(vm,array_ref,&values);
+    (void)jbv_retain(vm,array_ref);
     /* Resolve explicitly supplied values first: an overridden default must not
      * be evaluated (it can mention a type no longer present in the application). */
     for(i=0;i<n;++i){
         JbvText key=owner->pool[read2(p)].text;
         for(j=0;j<impl->method_count&&!jbv_text_eq(impl->methods[j].name,key);++j){}
         if(j==impl->method_count){*p=skip_value(*p);continue;}
-        status=jbv_annotation_value(vm,owner,p,jbv_return_type(impl->methods[j].descriptor),&jbv_data(values)[j]);if(status!=JBV_OK)goto done;
+        status=jbv_annotation_value(vm,owner,p,jbv_return_type(impl->methods[j].descriptor),&item);if(status!=JBV_OK)goto done;
+        store(vm,array_ref,j,item);
     }
-    for(i=0;i<impl->method_count;++i)if(!jbv_data(values)[i]){
-        const uint8_t *d=jbv_attribute(type,impl->methods[i].attributes,"AnnotationDefault");
-        if(d){status=jbv_annotation_value(vm,type,&d,jbv_return_type(impl->methods[i].descriptor),&jbv_data(values)[i]);if(status!=JBV_OK)goto done;}
+    for(i=0;i<impl->method_count;++i){
+        const uint8_t *d;
+        (void)jbv_object(vm,array_ref,&o);if(jbv_data(o)[i])continue;
+        d=jbv_attribute(type,impl->methods[i].attributes,"AnnotationDefault");
+        if(d){status=jbv_annotation_value(vm,type,&d,jbv_return_type(impl->methods[i].descriptor),&item);if(status!=JBV_OK)goto done;store(vm,array_ref,i,item);}
     }
     status=jbv_new(vm,impl,0,ref);if(status==JBV_OK){(void)jbv_object(vm,*ref,&o);jbv_data(o)[0]=mirror;jbv_data(o)[1]=array_ref;}
 done:
@@ -137,13 +145,13 @@ done:
 }
 JbvStatus jbv_annotations(JbvVM *vm, JbvClass *owner, const uint8_t *p, int32_t *ref) {
     JbvClass *type=0;
-    JbvObject *o;
+    int32_t item;
     uint32_t n=p?read2(&p):0,i;
     JbvStatus status=jbv_resolve_class(vm,jbv_text(ANNOTATION),&type);
     if(status==JBV_OK)status=jbv_array_class(vm,type,'L',&type);
     if(status==JBV_OK)status=jbv_new(vm,type,(int32_t)n,ref);
     if(status!=JBV_OK)return status;
-    (void)jbv_retain(vm,*ref);(void)jbv_object(vm,*ref,&o);
-    for(i=0;i<n&&status==JBV_OK;++i)status=read_annotation(vm,owner,&p,&jbv_data(o)[i]);
+    (void)jbv_retain(vm,*ref);
+    for(i=0;i<n&&status==JBV_OK;++i){status=read_annotation(vm,owner,&p,&item);if(status==JBV_OK)store(vm,*ref,i,item);}
     (void)jbv_release(vm,*ref);return status;
 }

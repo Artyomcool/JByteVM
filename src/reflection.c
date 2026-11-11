@@ -19,13 +19,16 @@ const uint8_t *jbv_attribute(JbvClass *owner, const uint8_t *p, const char *key)
     return 0;
 }
 static JbvStatus error(JbvVM *vm, const char *type) { return jbv_throw_named(vm, type, 0, JBV_EXCEPTION); }
-static JbvStatus array(JbvVM *vm, const char *component, uint32_t count, int32_t *ref, JbvObject **object) {
+static JbvStatus array(JbvVM *vm, const char *component, uint32_t count, int32_t *ref) {
     JbvClass *c = 0;
     JbvStatus status = jbv_resolve_class(vm, jbv_text(component), &c);
     if (status == JBV_OK) status = jbv_array_class(vm, c, 'L', &c);
-    if (status == JBV_OK) status = jbv_new(vm, c, (int32_t)count, ref);
-    if (status == JBV_OK) (void)jbv_object(vm, *ref, object);
-    return status;
+    return status == JBV_OK ? jbv_new(vm, c, (int32_t)count, ref) : status;
+}
+/* Element producers allocate (objects move): re-fetch the pinned array to store. */
+static void store(JbvVM *vm, int32_t array, uint32_t i, int32_t value) {
+    JbvObject *o;
+    (void)jbv_object(vm, array, &o); jbv_data(o)[i] = value; jbv_barrier_checked(vm, o, value);
 }
 static JbvStatus unpack(JbvVM *vm, int32_t ref, Member *m, JbvObject **o) {
     JbvStatus status = jbv_object(vm, ref, o);
@@ -45,7 +48,7 @@ static JbvStatus wrap(JbvVM *vm, Member m, int32_t *out) {
     if (status == JBV_OK) {
         (void)jbv_object(vm, *out, &o);
         jbv_put_bits(jbv_data(o), (uint64_t)(uintptr_t)m.target, JBV_LONG);
-        jbv_data(o)[2] = owner; jbv_data(o)[4] = m.kind;
+        jbv_data(o)[2] = owner; jbv_barrier_checked(vm, o, owner); jbv_data(o)[4] = m.kind;
     }
     return status;
 }
@@ -95,19 +98,23 @@ static JbvStatus members(JbvVM *vm, Members *list, JbvClass *c, uint8_t kind, in
     }
     return JBV_OK;
 }
-static JbvStatus parameters_match(JbvVM *vm, JbvText d, JbvObject *params, int *match) {
-    uint32_t pos = 1, i = 0, width;
+static JbvStatus parameters_match(JbvVM *vm, JbvText d, int32_t params, int *match) {
+    uint32_t pos = 1, i = 0, width, n = 0;
+    JbvObject *o = 0;
+    if (params) { (void)jbv_object(vm, params, &o); n = jbv_length(o); }
     *match = 0;
     while (d.data[pos] != ')') {
         uint32_t begin = pos;
         JbvClass *c = 0; JbvText t;
         JbvStatus status;
-        if (!params || i == jbv_length(params)) return JBV_OK;
+        int32_t e;
+        if (i == n) return JBV_OK;
+        (void)jbv_object(vm, params, &o); e = jbv_data(o)[i++];   /* jbv_type_class may move it */
         (void)jbv_descriptor_type(d, &pos, &width); t.data = d.data+begin; t.size = (uint16_t)(pos-begin);
         status = jbv_type_class(vm, t, &c); if (status != JBV_OK) return status;
-        if (c != jbv_mirror_type(vm, jbv_data(params)[i++])) return JBV_OK;
+        if (c != jbv_mirror_type(vm, e)) return JBV_OK;
     }
-    *match = i == (params ? jbv_length(params) : 0); return JBV_OK;
+    *match = i == n; return JBV_OK;
 }
 /* Generic signatures are parsed in Java: jbv.runtime.Generics.ofClass(Class,int). */
 static JbvStatus generics(JbvVM *vm, int32_t mirror, uint32_t what, uint64_t *out) {
@@ -121,13 +128,13 @@ static JbvStatus generics(JbvVM *vm, int32_t mirror, uint32_t what, uint64_t *ou
     m = jbv_find_method(g, jbv_text("ofClass"), jbv_text("(Ljava/lang/Class;I)Ljava/lang/Object;"));
     if (!m) return JBV_LINKAGE_ERROR;
     args[0] = mirror; args[1] = (int32_t)what;
-    return JBV_CALL_OUT(vm, jbv_execute(vm, g, m, args, refs, 2, out));
+    return jbv_execute(vm, g, m, args, refs, 2, out);
 }
 JbvStatus jbv_reflect_class(JbvVM *vm, uint32_t op, const int32_t *a, uint64_t *out) {
     JbvClass *c = 0;
     JbvStatus status = JBV_OK;
-    JbvObject *o, *params = 0;
-    int32_t ref = 0;
+    JbvObject *o;
+    int32_t ref = 0, params = 0, item = 0;
     uint32_t i;
     JbvText text = {0,0};
     *out = 0;
@@ -173,14 +180,15 @@ JbvStatus jbv_reflect_class(JbvVM *vm, uint32_t op, const int32_t *a, uint64_t *
         if (op == 19) return JBV_OK;
         if (op >= 16) { *out = op == 16 ? !!(c->flags & 0x2000) : op == 17 ? !!(c->flags & 0x1000) : !!(c->flags & 0x4000) && c->super && jbv_text_is(c->super->name,"java/lang/Enum"); return JBV_OK; }
         if (op == 1) {
-            status = array(vm, "java/lang/Class", c->array_kind ? 2 : c->interface_count, &ref, &o);
+            status = array(vm, "java/lang/Class", c->array_kind ? 2 : c->interface_count, &ref);
             if (status != JBV_OK) return status;
             (void)jbv_retain(vm, ref);
             for (i = 0; i < (uint32_t)(c->array_kind ? 2 : c->interface_count) && status == JBV_OK; ++i) {
                 JbvClass *face;
                 if (c->array_kind) status=jbv_resolve_class(vm,jbv_text(i?"java/io/Serializable":"java/lang/Cloneable"),&face);
                 else face=c->interfaces[i];
-                if(status==JBV_OK)status=jbv_mirror(vm,face,&jbv_data(o)[i]);
+                if(status==JBV_OK)status=jbv_mirror(vm,face,&item);
+                if(status==JBV_OK)store(vm,ref,i,item);
             }
             (void)jbv_release(vm, ref);
         } else {
@@ -190,8 +198,8 @@ JbvStatus jbv_reflect_class(JbvVM *vm, uint32_t op, const int32_t *a, uint64_t *
             Member *found = 0;
             if (lookup) {
                 if (kind != 2) { status = jbv_text_bytes(vm, a[1], &text); if (status != JBV_OK) return status; }
-                if (kind && a[kind == 2 ? 1 : 2]) {
-                    status = jbv_object(vm, a[kind == 2 ? 1 : 2], &params);
+                if (kind && (params = a[kind == 2 ? 1 : 2]) != 0) {
+                    status = jbv_object(vm, params, &o);
                     if (status != JBV_OK) goto done;
                 }
             }
@@ -214,10 +222,10 @@ JbvStatus jbv_reflect_class(JbvVM *vm, uint32_t op, const int32_t *a, uint64_t *
                 }
                 status = found ? wrap(vm, *found, &ref) : error(vm, kind ? "java/lang/NoSuchMethodException" : "java/lang/NoSuchFieldException");
             } else {
-                status = array(vm, member_names[kind], list.size, &ref, &o);
+                status = array(vm, member_names[kind], list.size, &ref);
                 if (status != JBV_OK) goto done;
                 (void)jbv_retain(vm, ref);
-                for (i = 0; i < list.size && status == JBV_OK; ++i) status = wrap(vm, list.data[i], &jbv_data(o)[i]);
+                for (i = 0; i < list.size && status == JBV_OK; ++i) { status = wrap(vm, list.data[i], &item); if (status == JBV_OK) store(vm, ref, i, item); }
                 (void)jbv_release(vm, ref);
             }
 done:
@@ -237,21 +245,21 @@ static JbvClass *caller(JbvVM *vm) {
     return 0;
 }
 static JbvStatus access(JbvVM *vm, Member m, JbvObject *member, int32_t receiver, int query) {
-    JbvObject *o = 0;
-    JbvClass *from;
+    JbvObject *o;
+    JbvClass *from, *type = 0;
     JbvStatus status;
     if (m.kind == 2 || (flags(m) & JBV_STATIC)) {
         if (query && receiver) return JBV_BAD_ARGUMENT;
     } else {
         if (!receiver) return query ? JBV_BAD_ARGUMENT : JBV_NULL_REFERENCE;
         status = jbv_object(vm, receiver, &o); if (status != JBV_OK) return status;
-        if (!jbv_assignable(o->type,m.owner)) return JBV_BAD_ARGUMENT;
+        type = o->type; if (!jbv_assignable(type,m.owner)) return JBV_BAD_ARGUMENT;
     }
     if (jbv_data(member)[3]) return JBV_OK;
     from = caller(vm);
     if (!from) return flags(m) & m.owner->flags & 1 ? JBV_OK : error(vm,"java/lang/IllegalAccessException");
     status = jbv_class_access(vm, from, m.owner);
-    if (status == JBV_OK) status = jbv_member_access(vm, from, m.owner, flags(m), o ? o->type : 0);
+    if (status == JBV_OK) status = jbv_member_access(vm, from, m.owner, flags(m), type);
     if (status == JBV_LINKAGE_ERROR) { vm->exception = 0; return error(vm,"java/lang/IllegalAccessException"); }
     return status;
 }
@@ -259,6 +267,7 @@ static JbvStatus info(JbvVM *vm, Member m, uint32_t op, int32_t *ref) {
     JbvText d = descriptor(m);
     JbvClass *c = 0;
     JbvObject *o;
+    int32_t item = 0;
     uint32_t i, pos = 1, width, count = 0;
     const uint8_t *p = 0;
     JbvStatus status;
@@ -276,19 +285,20 @@ static JbvStatus info(JbvVM *vm, Member m, uint32_t op, int32_t *ref) {
             if (status == JBV_OK) { (void)jbv_object(vm,*ref,&o); for (i = 0; i < count; ++i) jbv_data(o)[i] = jbv_u16(p+3+4*i); }
             return status;
         }
-        status = array(vm,"java/lang/String",count,ref,&o); if (status != JBV_OK) return status;
+        status = array(vm,"java/lang/String",count,ref); if (status != JBV_OK) return status;
         (void)jbv_retain(vm,*ref);
-        for (i = 0; i < count && status == JBV_OK; ++i) if (jbv_u16(p+1+4*i)) status = jbv_string_mutf(vm,m.owner->pool[jbv_u16(p+1+4*i)].text,&jbv_data(o)[i]);
+        for (i = 0; i < count && status == JBV_OK; ++i) if (jbv_u16(p+1+4*i)) { status = jbv_string_mutf(vm,m.owner->pool[jbv_u16(p+1+4*i)].text,&item); if (status == JBV_OK) store(vm,*ref,i,item); }
         (void)jbv_release(vm,*ref); return status;
     }
     if (op == 3) { p = jbv_attribute(m.owner,attributes(m),"Exceptions"); count = p ? jbv_u16(p) : 0; }
     else while (d.data[pos] != ')') { (void)jbv_descriptor_type(d,&pos,&width); ++count; }
-    status = array(vm,"java/lang/Class",count,ref,&o); if (status != JBV_OK) return status;
+    status = array(vm,"java/lang/Class",count,ref); if (status != JBV_OK) return status;
     (void)jbv_retain(vm,*ref); pos = 1;
     for (i = 0; i < count && status == JBV_OK; ++i) {
         if (p) status = jbv_resolve_class(vm,m.owner->pool[m.owner->pool[jbv_u16(p+2+2*i)].a].text,&c);
         else { JbvText t; uint32_t begin = pos; (void)jbv_descriptor_type(d,&pos,&width); t.data=d.data+begin;t.size=(uint16_t)(pos-begin);status=jbv_type_class(vm,t,&c); }
-        if (status == JBV_OK) status = jbv_mirror(vm,c,&jbv_data(o)[i]);
+        if (status == JBV_OK) status = jbv_mirror(vm,c,&item);
+        if (status == JBV_OK) store(vm,*ref,i,item);
     }
     (void)jbv_release(vm,*ref); return status;
 }
@@ -303,10 +313,10 @@ static JbvStatus invoke(JbvVM *vm, Member m, JbvObject *member, int32_t receiver
     JbvStatus status = access(vm,m,member,receiver,0);
     int32_t *slots = 0, created = 0;
     uint8_t *refs = 0;
-    uint32_t pos = 1, used = !(method->flags & JBV_STATIC), i = 0, width;
+    uint32_t pos = 1, used = !(method->flags & JBV_STATIC), i = 0, width, n = 0;
     uint64_t bits = 0;
     if (status != JBV_OK) return status;
-    if (arguments) { status = jbv_object(vm,arguments,&args); if (status != JBV_OK) return status; }
+    if (arguments) { status = jbv_object(vm,arguments,&args); if (status != JBV_OK) return status; n = jbv_length(args); }
     if (m.kind == 2 && (m.owner->flags & 0x4000)) return JBV_BAD_ARGUMENT;
     if (m.kind == 2 && (m.owner->flags & (JBV_ABSTRACT|JBV_INTERFACE))) return error(vm,"java/lang/InstantiationException");
     slots = (int32_t *)jbv_alloc(vm,(method->argument_slots+1)*sizeof(*slots));
@@ -315,12 +325,13 @@ static JbvStatus invoke(JbvVM *vm, Member m, JbvObject *member, int32_t receiver
     if (used) { slots[0]=receiver;refs[0]=1; }
     while (d.data[pos] != ')') {
         JbvText t; uint32_t begin = pos;
-        if (!args || i == jbv_length(args)) { status=JBV_BAD_ARGUMENT;goto done; }
+        if (i == n) { status=JBV_BAD_ARGUMENT;goto done; }
         (void)jbv_descriptor_type(d,&pos,&width);t.data=d.data+begin;t.size=(uint16_t)(pos-begin);
+        (void)jbv_object(vm,arguments,&args);   /* convert may move it */
         status=convert(vm,jbv_data(args)[i++],t,&bits);if(status!=JBV_OK)goto done;
         refs[used]=(uint8_t)jbv_reference_type(t);jbv_put_bits(slots+used,bits,jbv_kind(t.data[0]));used+=width;
     }
-    if (i != (args ? jbv_length(args) : 0)) { status=JBV_BAD_ARGUMENT;goto done; }
+    if (i != n) { status=JBV_BAD_ARGUMENT;goto done; }
     /* Initialization errors are not target exceptions and must not be wrapped. */
     if (m.kind == 2 || (method->flags & JBV_STATIC)) { status=jbv_initialize(vm,m.owner);if(status!=JBV_OK)goto done; }
     if (m.kind == 2) {
@@ -332,8 +343,7 @@ static JbvStatus invoke(JbvVM *vm, Member m, JbvObject *member, int32_t receiver
         method=jbv_virtual_method(&actual,m.owner,method);m.owner=actual;
     }
     if (!method || (method->flags & JBV_ABSTRACT)) status=error(vm,"java/lang/AbstractMethodError");
-    /* Only refs (in slots) and metadata survive this call: objects may move inside it. */
-    else status=JBV_SAFE_CALL(vm, jbv_execute(vm,m.owner,method,slots,refs,(uint16_t)used,&bits));
+    else status=jbv_execute(vm,m.owner,method,slots,refs,(uint16_t)used,&bits);
     if(status!=JBV_OK) {
         if(vm->exception) status=jbv_throw_named(vm,R "InvocationTargetException",vm->exception,JBV_EXCEPTION);
         goto done;
@@ -349,24 +359,30 @@ static JbvStatus field(JbvVM *vm, Member m, JbvObject *member, const int32_t *a,
     JbvField *f=(JbvField *)m.target;
     JbvObject *o = 0;
     int32_t *location;
-    uint64_t bits;
+    uint64_t bits = 0;
+    int set=a[3] <= 1 && a[3] != 0, override=jbv_data(member)[3];   /* access may move member */
     JbvStatus status=access(vm,m,member,a[1],0);
     if(status!=JBV_OK)return status;
     if(a[3] != 0 && a[3] != 1 && jbv_reference_type(f->descriptor)) return JBV_BAD_ARGUMENT;
-    if(a[3] <= 1 && a[3] != 0 && (f->flags & JBV_FINAL) && (!jbv_data(member)[3] || (f->flags & JBV_STATIC) || jbv_attribute(m.owner,m.owner->attributes,"Record"))) return error(vm,"java/lang/IllegalAccessException");
-    if(f->flags & JBV_STATIC){status=jbv_initialize(vm,m.owner);location=&f->value;}
+    if(set && (f->flags & JBV_FINAL) && (!override || (f->flags & JBV_STATIC) || jbv_attribute(m.owner,m.owner->attributes,"Record"))) return error(vm,"java/lang/IllegalAccessException");
+    if(f->flags & JBV_STATIC){status=jbv_initialize(vm,m.owner);if(status!=JBV_OK)return status;}
+    if(set){status=convert(vm,a[2],f->descriptor,&bits);if(status!=JBV_OK)return status;}
+    /* Locate the slot only after the calls above, which may move the receiver. */
+    if(f->flags & JBV_STATIC)location=&f->value;
     else {(void)jbv_object(vm,a[1],&o);location=jbv_data(o)+f->slot;}
-    if(status!=JBV_OK)return status;
-    if(a[3] <= 1 && a[3] != 0){status=convert(vm,a[2],f->descriptor,&bits);if(status==JBV_OK){jbv_put_bits(location,bits,jbv_kind(f->descriptor.data[0]));if(!(f->flags&JBV_STATIC))jbv_barrier_checked(vm,o,location[0]);}return status;}
+    if(set){jbv_put_bits(location,bits,jbv_kind(f->descriptor.data[0]));if(o)jbv_barrier_checked(vm,o,location[0]);return JBV_OK;}
     bits=jbv_slot_bits(location,jbv_kind(f->descriptor.data[0]));
     if(jbv_reference_type(f->descriptor)){*out=(int32_t)bits;return JBV_OK;}
     return jbv_box(vm,f->descriptor.data[0],bits,out);
 }
+/* sizes[] holds at most 255 dimensions, checked before the copy. */
+__declspec(safebuffers)
 static JbvStatus reflect_array(JbvVM *vm, const int32_t *a, int32_t *out) {
     JbvObject *o, *dims;
     JbvClass *c = 0;
     JbvStatus status;
     uint32_t i, dimensions=0;
+    int32_t sizes[255];
     uint64_t bits;
     uint8_t code;
     if (a[3] == 0 || a[3] == 1) {
@@ -376,8 +392,9 @@ static JbvStatus reflect_array(JbvVM *vm, const int32_t *a, int32_t *out) {
         else {dims=0;dimensions=1;}
         for(i=0;i<c->name.size&&c->name.data[i]=='[';++i){}
         if(dimensions+i>255)return JBV_BAD_ARGUMENT;
-        for(i=0;i<dimensions;++i){if(dims&&jbv_data(dims)[i]<0)return JBV_NEGATIVE_ARRAY_SIZE;status=jbv_array_class(vm,c->primitive?0:c,c->primitive?c->primitive:'L',&c);if(status!=JBV_OK)return status;}
-        return dims?jbv_multi_array(vm,c,jbv_data(dims),(uint8_t)dimensions,out):jbv_new(vm,c,a[1],out);
+        for(i=0;i<dimensions;++i){if(dims&&(sizes[i]=jbv_data(dims)[i])<0)return JBV_NEGATIVE_ARRAY_SIZE;status=jbv_array_class(vm,c->primitive?0:c,c->primitive?c->primitive:'L',&c);if(status!=JBV_OK)return status;}
+        /* jbv_multi_array allocates while reading sizes: pass a copy, not the movable dims data. */
+        return dims?jbv_multi_array(vm,c,sizes,(uint8_t)dimensions,out):jbv_new(vm,c,a[1],out);
     }
     status=jbv_object(vm,a[0],&o);if(status!=JBV_OK)return status;
     c=o->type;code=c->array_kind;if(!code)return JBV_BAD_ARGUMENT;
@@ -389,7 +406,7 @@ static JbvStatus reflect_array(JbvVM *vm, const int32_t *a, int32_t *out) {
         JbvObject *value;
         if(a[2]){status=jbv_object(vm,a[2],&value);if(status!=JBV_OK)return status;if(!jbv_assignable(value->type,c->component))return JBV_BAD_ARGUMENT;}
         bits=(uint32_t)a[2];
-    }else{JbvText t={&code,1};status=convert(vm,a[2],t,&bits);if(status!=JBV_OK)return status;}
+    }else{JbvText t={&code,1};status=convert(vm,a[2],t,&bits);if(status!=JBV_OK)return status;(void)jbv_object(vm,a[0],&o);}
     jbv_array_set(o,(uint32_t)a[1],code,bits);if(code=='L')jbv_barrier_checked(vm,o,(int32_t)(uint32_t)bits);return JBV_OK;
 }
 JbvStatus JBV_CALL jbv_reflect_native(JbvVM *vm, void *user, const int32_t *a, uint16_t count, uint64_t *out) {
@@ -412,17 +429,17 @@ JbvStatus JBV_CALL jbv_reflect_native(JbvVM *vm, void *user, const int32_t *a, u
             const uint8_t *p;
             if(a[1]==-1)status=jbv_annotations(vm,m.owner,jbv_attribute(m.owner,attributes(m),"RuntimeVisibleAnnotations"),&ref);
             else {
-                JbvText d=descriptor(m);uint32_t pos=1,width,n=0,i;JbvObject *outer;const uint8_t *cursor;
+                JbvText d=descriptor(m);uint32_t pos=1,width,n=0,i;const uint8_t *cursor;
                 while(d.data[pos]!=')'){(void)jbv_descriptor_type(d,&pos,&width);++n;}
                 p=jbv_attribute(m.owner,attributes(m),"RuntimeVisibleParameterAnnotations");
-                status=array(vm,"[Ljava/lang/annotation/Annotation;",n,&ref,&outer);
+                status=array(vm,"[Ljava/lang/annotation/Annotation;",n,&ref);
                 if(status!=JBV_OK)return status;
                 (void)jbv_retain(vm,ref);cursor=p?p+1:0;
                 for(i=0;i<n&&status==JBV_OK;++i){
                     /* Decode one annotation table; advance across it using the
                      * reader rather than keeping additional metadata copies. */
                     int32_t item=0;
-                    status=jbv_annotations(vm,m.owner,p&&i<n-*p?0:cursor,&item);if(status==JBV_OK)jbv_data(outer)[i]=item;
+                    status=jbv_annotations(vm,m.owner,p&&i<n-*p?0:cursor,&item);if(status==JBV_OK)store(vm,ref,i,item);
                     if(cursor&&i>=n-*p)cursor=jbv_skip_annotations(cursor);
                 }
                 (void)jbv_release(vm,ref);

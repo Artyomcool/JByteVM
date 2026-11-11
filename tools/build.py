@@ -49,7 +49,7 @@ def main():
     parser.add_argument("--jdk", type=Path)
     parser.add_argument("--test", action="store_true")
     parser.add_argument("--profile", choices=("full","text","core"), default="full")
-    parser.add_argument("--gc-stress", action="store_true", help="collect and move objects at almost every safepoint (testing)")
+    parser.add_argument("--gc-stress", type=int, nargs="?", const=4, default=0, metavar="N", help="testing: collect and move objects every N allocations (default 4)")
     parser.add_argument("--arch", choices=("x86", "x64"), default="x86")
     parser.add_argument("--test-python", type=Path, help="Python matching the target architecture for ctypes tests")
     args = parser.parse_args()
@@ -59,7 +59,7 @@ def main():
     build.mkdir(parents=True, exist_ok=True)
     classpath_bytes, jar_bytes = embed_classpath.build(jdk, build) if args.profile == "full" else (0, 0)
     platform = "Win32" if args.arch == "x86" else "x64"
-    run([cmake, "-S", ROOT, "-B", build, "-G", "Visual Studio 17 2022", "-A", platform, "-DJBV_PROFILE=" + args.profile, "-DJBV_GC_STRESS=" + ("1" if args.gc_stress else "0")])
+    run([cmake, "-S", ROOT, "-B", build, "-G", "Visual Studio 17 2022", "-A", platform, "-DJBV_PROFILE=" + args.profile, "-DJBV_GC_STRESS=" + str(args.gc_stress)])
     run([cmake, "--build", build, "--config", "Release"])
     classes = ROOT / "build/classes"
     classes.mkdir(parents=True, exist_ok=True)

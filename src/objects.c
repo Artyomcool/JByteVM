@@ -261,7 +261,7 @@ JbvStatus jbv_object(JbvVM *vm, int32_t ref, JbvObject **out) {
 }
 JbvStatus jbv_check_reference(JbvVM *vm, int32_t ref, JbvText descriptor) {
     JbvObject *object;
-    JbvClass *type;
+    JbvClass *type, *actual;
     JbvStatus status;
     if (!ref) return JBV_OK;
     status = jbv_object(vm, ref, &object);
@@ -269,9 +269,10 @@ JbvStatus jbv_check_reference(JbvVM *vm, int32_t ref, JbvText descriptor) {
     if (descriptor.size > 2 && descriptor.data[0] == 'L' && descriptor.data[descriptor.size - 1] == ';') {
         ++descriptor.data; descriptor.size -= 2;
     } else if (!descriptor.size || descriptor.data[0] != '[') return JBV_BAD_CLASS;
+    actual = object->type;   /* resolving may throw, i.e. allocate and move objects */
     status = jbv_resolve_class(vm, descriptor, &type);
     if (status != JBV_OK) return status;
-    return jbv_assignable(object->type, type) ? JBV_OK : JBV_CLASS_CAST;
+    return jbv_assignable(actual, type) ? JBV_OK : JBV_CLASS_CAST;
 }
 /* Pins (host/native retains) are rare and short-lived: a small unsorted table. */
 static JbvPin *find_pin(JbvVM *vm, uint32_t index) {
@@ -318,11 +319,10 @@ JBV_API JbvStatus JBV_CALL jbv_release(JbvVM *vm, JbvRef ref) {
  * header payload, the handle word being index << 1 | is_array so the region can be
  * walked. Old generation: chunks (header: next, size) with bump allocation and
  * size-class free lists for blocks up to JBV_SMALL; larger blocks are host allocations.
- * Objects move only at safepoints (bytecode allocations with no C code below that may
- * hold raw object pointers): a minor collection promotes young survivors; a full
- * collection there also slides old objects together and returns empty chunks.
- * Elsewhere collections are non-moving mark-sweep. Refs are handles, so moving an
- * object only rewrites its handle entry. */
+ * Any allocation may collect and move objects (see JBV_GC in internal.h): a minor
+ * collection promotes young survivors; a full collection also slides old objects
+ * together and returns emptied chunks. Refs are handles, so moving an object only
+ * rewrites its handle entry. */
 #define JBV_SMALL 512u
 #define JBV_CHUNK_HEADER (2 * sizeof(void *))
 #define JBV_YOUNG_MAX 262144u
@@ -511,12 +511,15 @@ static JbvStatus minor(JbvVM *vm) {
         p += size;
     }
     vm->heap_bytes -= (size_t)(vm->nursery_top - vm->nursery);
+#if JBV_GC_STRESS
+    { uint8_t *q; for (q = vm->nursery; q < vm->nursery_top; ++q) *q = 0xcd; }   /* poison: stale pointers read garbage */
+#endif
     vm->nursery_top = vm->nursery;
     vm->remembered_count = vm->recent_count = 0; vm->remembered_overflow = 0;
     return JBV_OK;
 }
 
-/* ---- Full collection; at safepoints old objects are slid together afterwards. ---- */
+/* ---- Full collection: mark, sweep, then slide old objects together. ---- */
 static uintptr_t address(JbvVM *vm, uint32_t i) { return (uintptr_t)block_start((JbvObject *)vm->handles[i]); }
 static void sift(JbvVM *vm, uint32_t *a, uint32_t i, uint32_t n) {
     uint32_t x = a[i], c;
@@ -587,7 +590,7 @@ static JbvStatus collect(JbvVM *vm, int moving) {
 JBV_API JbvStatus JBV_CALL jbv_collect(JbvVM *vm) {
     if (!vm) return JBV_BAD_ARGUMENT;
     /* From the host with no Java running nothing holds raw pointers: compact. */
-    return collect(vm, !vm->depth && !vm->unsafe);
+    return collect(vm, 1);
 }
 static JbvStatus grow_handles(JbvVM *vm) {
     uint32_t old = vm->handle_capacity, capacity = old ? old * 2 : 255, words, i;
@@ -614,8 +617,7 @@ static JbvStatus grow_handles(JbvVM *vm) {
     vm->handle_capacity = capacity;
     return JBV_OK;
 }
-/* Out of host memory: give the young region back (after promoting it, which needs a
- * safepoint) and continue with the old generation only. */
+/* Out of host memory: promote everything, give the young region back, continue old-only. */
 static int drop_young(JbvVM *vm, int moving) {
     if (!vm->nursery || (vm->nursery_top != vm->nursery && (!moving || minor(vm) != JBV_OK))) return 0;
     jbv_free(vm, vm->nursery);
@@ -629,8 +631,7 @@ JbvStatus jbv_new(JbvVM *vm, JbvClass *type, int32_t length, int32_t *ref) {
     uint64_t payload;
     size_t bytes, pre = 0;
     uint8_t *block = 0;
-    int moving = vm->safepoint && !vm->unsafe, in_young = 0;
-    vm->safepoint = 0;
+    int moving = 1, in_young = 0;
     if (type->array_kind) {
         if (length < 0) return JBV_NEGATIVE_ARRAY_SIZE;
         payload = (uint64_t)(uint32_t)length * jbv_element_bytes(type->array_kind);
@@ -643,8 +644,9 @@ JbvStatus jbv_new(JbvVM *vm, JbvClass *type, int32_t length, int32_t *ref) {
     bytes = align_size(pre + sizeof(*object) + (size_t)payload);
     if (bytes > vm->heap_limit) return JBV_OUT_OF_MEMORY;
 #if JBV_GC_STRESS
-    /* Stress mode: move everything at every safepoint to expose stale pointers and missing barriers. */
-    if (moving && vm->handles) (void)(++vm->stress % 32 ? minor(vm) : collect(vm, 1));
+    /* Stress mode: move objects at every allocation to expose stale pointers and missing barriers. */
+    /* JBV_GC_STRESS = N: a minor collection every N allocations, a full compacting one every 32 of those. */
+    if (vm->handles && !(++vm->stress % JBV_GC_STRESS)) (void)(vm->stress % (32u * JBV_GC_STRESS) ? minor(vm) : collect(vm, 1));
 #endif
     if (vm->heap_bytes > vm->heap_limit || bytes > vm->heap_limit - vm->heap_bytes || !vm->free_handle) {
         (void)collect(vm, moving);
@@ -719,13 +721,13 @@ JbvStatus jbv_multi_array(JbvVM *vm, JbvClass *type, const int32_t *sizes, uint8
     if (status != JBV_OK) { --vm->depth; return status; }
     status = jbv_retain(vm, parent);
     if (status != JBV_OK) { --vm->depth; return status; }
-    status = jbv_object(vm, parent, &object);
-    if (status == JBV_OK && dimensions > 1)
-        for (i = 0; i < jbv_length(object); ++i) {
+    if (dimensions > 1)
+        for (i = 0; i < (uint32_t)sizes[0]; ++i) {
             int32_t child = 0;
             status = jbv_multi_array(vm, type->component, sizes + 1, dimensions - 1, &child);
             if (status != JBV_OK) break;
-            jbv_data(object)[i] = child;
+            (void)jbv_object(vm, parent, &object);   /* the child allocation may have moved it */
+            jbv_data(object)[i] = child; jbv_barrier(vm, object, child);
         }
     (void)jbv_release(vm, parent);
     --vm->depth;

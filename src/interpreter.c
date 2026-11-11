@@ -211,11 +211,7 @@ JbvStatus jbv_execute(JbvVM *vm, JbvClass *c, JbvMethod *m,
     if (m->flags & JBV_NATIVE) {
         if (!vm->remaining) { status = JBV_LIMIT_EXCEEDED; goto finish; }
         --vm->remaining;
-        /* Built-in natives may hold raw object pointers: no moving below them unless they
-         * say otherwise. Host natives only ever see refs. */
-        if (m->intrinsic) ++vm->unsafe;
         status = jbv_native_call(vm, m, locals, count, &value);
-        if (m->intrinsic) --vm->unsafe;
         if (status == JBV_OK && returns <= 1) value = returns ? (uint32_t)jbv_narrow(jbv_i32((uint32_t)value), m->descriptor.data[m->descriptor.size - 1]) : 0;
         goto finish;
     }
@@ -577,15 +573,11 @@ resume:
             if (op == 187) {
                 if (type->flags & (JBV_INTERFACE | JBV_ABSTRACT)) FAIL(jbv_throw_named(vm, "java/lang/InstantiationError", 0, JBV_LINKAGE_ERROR));
                 status = jbv_initialize(vm, type);
-                vm->safepoint = 1;   /* the interpreter holds no object pointers here */
                 if (status == JBV_OK) status = jbv_new(vm, type, 0, &ref);
-                vm->safepoint = 0;
                 if (status != JBV_OK) goto finish;
                 PUSH_KIND(ref, 1);
             } else {
-                vm->safepoint = 1;
                 status = jbv_new(vm, type, stack[sp - 1], &ref);
-                vm->safepoint = 0;
                 if (status != JBV_OK) goto finish;
                 stack[sp - 1] = ref; stack_refs[sp - 1] = 1;
             }

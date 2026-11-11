@@ -73,7 +73,7 @@ static JbvStatus JBV_CALL exception_native(JbvVM *vm, void *user, const int32_t 
     if (throwable && throwable->instance_slots > 3 && id <= E_OPTIONS) {
         JbvMethod *ctor = jbv_find_method(throwable, jbv_text("<init>"), jbv_text(methods[id].descriptor));
         uint64_t ignored;
-        return ctor ? JBV_CALL_OUT(vm, jbv_execute(vm, throwable, ctor, a, 0, count, &ignored)) : JBV_NOT_FOUND;
+        return ctor ? jbv_execute(vm, throwable, ctor, a, 0, count, &ignored) : JBV_NOT_FOUND;
     }
     switch (id) {
     case E_INIT: case E_MESSAGE: case E_CAUSE_INIT: case E_BOTH: case E_OPTIONS:
@@ -105,6 +105,9 @@ static JbvStatus JBV_CALL exception_native(JbvVM *vm, void *user, const int32_t 
     if (status == JBV_OK) status = jbv_new(vm, array_type, (int32_t)(length + (id == E_ADD_SUPPRESSED)), &ref);
     if (status == JBV_OK) status = jbv_object(vm, ref, &array);
     if (status != JBV_OK) return status;
+    /* jbv_new may have moved everything: fetch the receiver and the old array again. */
+    (void)jbv_object(vm, a[0], &object); fields = jbv_data(object);
+    if (length) (void)jbv_object(vm, fields[2], &old);
     for (i = 0; i < length; ++i) jbv_data(array)[i] = jbv_data(old)[i];
     if (id == E_ADD_SUPPRESSED) { jbv_data(array)[length] = a[1]; jbv_barrier_checked(vm, array, a[1]); fields[2] = ref; jbv_barrier_checked(vm, object, ref); }
     else *out = ref;
@@ -177,9 +180,14 @@ JbvStatus jbv_throw_named(JbvVM *vm, const char *name, int32_t cause, JbvStatus 
     vm->exception = ref; vm->exception_status = status;
     if (emergency) vm->emergency_oom = ref;
     if (jbv_object(vm, ref, &object) == JBV_OK) {
-        int32_t *fields=jbv_data(object);
+        int32_t *fields=jbv_data(object), trace = 0;
         fields[1] = cause ? cause : ref;
-        if (type->instance_slots > 3) { fields[4]=fields[5]=1; (void)jbv_capture_trace(vm,&fields[3]); }
+        jbv_barrier_checked(vm, object, fields[1]);
+        if (type->instance_slots > 3) {
+            fields[4]=fields[5]=1;
+            /* Capturing allocates (the exception stays rooted in vm->exception): store afterwards. */
+            if (jbv_capture_trace(vm,&trace) == JBV_OK && jbv_object(vm, ref, &object) == JBV_OK) { jbv_data(object)[3] = trace; jbv_barrier_checked(vm, object, trace); }
+        }
     }
     return status;
 }

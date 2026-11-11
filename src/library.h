@@ -15,11 +15,11 @@ enum { O_INIT, O_EQUALS, O_HASH, O_CLASS, O_TEXT, O_NOTIFY, O_CLONE,
     A_SET_CHAR, A_TEXT, A_SUBSTRING, A_REVERSE, A_COMPARE, A_INSERT, A_DELETE, A_DELETE_CHAR, A_REPLACE, A_CODEPOINT, A_TRIM };
 typedef struct JbvTextView { uint16_t *data; uint32_t length; } JbvTextView;
 JbvStatus jbv_string_view(JbvVM *vm, int32_t ref, JbvTextView *out);
-JbvStatus jbv_string_alloc(JbvVM *vm, uint32_t length, int32_t *ref, uint16_t **data);
-JbvStatus jbv_string_mutf(JbvVM *vm, JbvText text, int32_t *out);
+JBV_GC JbvStatus jbv_string_alloc(JbvVM *vm, uint32_t length, int32_t *ref, uint16_t **data);
+JBV_GC JbvStatus jbv_string_mutf(JbvVM *vm, JbvText text, int32_t *out);
 JbvStatus jbv_string_intern(JbvVM *vm, int32_t ref, int32_t *out);
-JbvStatus jbv_object_text(JbvVM *vm, int32_t ref, int32_t *out);
-JbvStatus jbv_text_native(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *args, uint16_t count, uint64_t *out);
+JBV_GC JbvStatus jbv_object_text(JbvVM *vm, int32_t ref, int32_t *out);
+JBV_GC JbvStatus jbv_text_native(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *args, uint16_t count, uint64_t *out);
 uint32_t jbv_integer_text(uint64_t magnitude, int negative, uint32_t radix, uint16_t *out);
 uint32_t jbv_decimal_text(uint64_t bits, int single, uint16_t *out);
 #endif

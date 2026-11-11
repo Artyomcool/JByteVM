@@ -189,6 +189,7 @@ static JbvStatus class_name_string(JbvVM *vm, JbvClass *c, int prefix, int32_t *
     (void)jbv_retain(vm, ref);
     status = jbv_string_alloc(vm, n + name.length, out, &data);
     if (status != JBV_OK) { (void)jbv_release(vm, ref); return status; }
+    (void)jbv_string_view(vm, ref, &name);   /* the allocation may have moved it */
     for (i = 0; i < n; ++i) data[i] = p[i];
     for (i = 0; i < name.length; ++i) data[n+i] = name.data[i];
     (void)jbv_release(vm, ref);
@@ -219,7 +220,7 @@ static JbvStatus JBV_CALL library_native(JbvVM *vm, void *user, const int32_t *a
             return jbv_throw_named(vm, "java/lang/CloneNotSupportedException", 0, JBV_EXCEPTION);
         status = jbv_new(vm, o->type, o->type->array_kind ? (int32_t)jbv_length(o) : 0, &ref);
         if (status != JBV_OK) return status;
-        (void)jbv_object(vm, ref, &other);
+        (void)jbv_object(vm, a[0], &o); (void)jbv_object(vm, ref, &other);
         bytes = jbv_object_bytes(o);
         for (i = 0; i < bytes; ++i) ((volatile uint8_t *)(other+1))[i] = ((uint8_t *)(o+1))[i];
         *out = (uint32_t)ref; return JBV_OK;
@@ -232,17 +233,18 @@ static JbvStatus JBV_CALL library_native(JbvVM *vm, void *user, const int32_t *a
         uint32_t n, i;
         uint64_t hash_result;
         JbvMethodId method;
-        JbvClass *owner = o->type;
+        JbvClass *owner = o->type, *type = o->type;
         method.method = jbv_lookup_method(&owner, jbv_text("hashCode"), jbv_text("()I")); method.owner = owner;
         if (!method.method) return JBV_NOT_FOUND;
-        status = jbv_invoke(vm, &method, a, 1, &hash_result);
+        status = jbv_invoke(vm, &method, a, 1, &hash_result);   /* Java code: `o` is stale after this */
         if (status != JBV_OK) return status;
         n = jbv_integer_text((uint32_t)hash_result, 0, 16, hash);
-        status = jbv_string_mutf(vm, o->type->name, &name_ref);
+        status = jbv_string_mutf(vm, type->name, &name_ref);
         if (status != JBV_OK) return status;
         (void)jbv_retain(vm, name_ref);
         (void)jbv_string_view(vm, name_ref, &name);
         status = jbv_string_alloc(vm, name.length + 1 + n, &ref, &data);
+        (void)jbv_string_view(vm, name_ref, &name);
         if (status == JBV_OK) {
             for (i = 0; i < name.length; ++i) data[i] = name.data[i] == '/' ? '.' : name.data[i];
             data[i++] = '@';
@@ -315,9 +317,8 @@ static JbvStatus JBV_CALL java_native(JbvVM *vm, void *user, const int32_t *a, u
         if (!h || !(h->flags & JBV_STATIC)) return JBV_LINKAGE_ERROR;
         m->lines = (const uint8_t *)(uintptr_t)h;
     }
-    /* Arguments are refs in the native frame; no raw pointer is held across the call. */
-    if (!init) return JBV_SAFE_CALL(vm, jbv_execute(vm, helper, h, a, 0, count, out));
-    status = JBV_SAFE_CALL(vm, jbv_execute(vm, helper, h, a + 1, 0, (uint16_t)(count - 1), out));
+    if (!init) return jbv_execute(vm, helper, h, a, 0, count, out);
+    status = jbv_execute(vm, helper, h, a + 1, 0, (uint16_t)(count - 1), out);
     if (status == JBV_OK) status = jbv_object(vm, a[0], &self);
     if (status == JBV_OK) status = jbv_object(vm, (int32_t)(uint32_t)*out, &made);
     if (status == JBV_OK) for (i = 0; i < self->type->instance_slots; ++i) { jbv_data(self)[i] = jbv_data(made)[i]; jbv_barrier_checked(vm, self, jbv_data(self)[i]); }

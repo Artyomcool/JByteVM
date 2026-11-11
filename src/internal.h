@@ -2,6 +2,12 @@
 #define JBV_INTERNAL_H
 #include "jbytevm_native.h"
 
+/* JBV_GC marks functions that may allocate on the Java heap or run Java code, and so
+ * may collect and MOVE objects. Rule: a raw JbvObject pointer (or a pointer into its
+ * data, e.g. jbv_data/jbv_chars/JbvTextView) is invalid after any JBV_GC call;
+ * keep the ref and fetch the pointer again with jbv_object. Refs that are not on the
+ * Java stack, in a field or pinned (jbv_retain) may also be freed by such a call. */
+#define JBV_GC
 #define JBV_STATIC 0x0008
 #define JBV_NATIVE 0x0100
 #define JBV_ABSTRACT 0x0400
@@ -131,8 +137,6 @@ struct JbvVM {
     uint8_t remembered_overflow;
     void **recent;            /* old objects allocated since the last minor collection */
     uint32_t recent_count, recent_capacity;
-    uint8_t safepoint;        /* set by bytecode allocation: objects may move */
-    uint32_t unsafe;          /* C code below may hold raw object pointers: no moving */
     uint32_t stress;
     size_t heap_bytes, heap_limit;
     uint64_t collections;
@@ -167,31 +171,31 @@ JbvStatus jbv_classpath_find(JbvVM *vm, JbvText name, const uint8_t **data, uint
 JbvStatus jbv_archive_open(JbvVM *vm, JbvArchive *archive, const uint8_t *jar, size_t size, int verify);
 JbvStatus jbv_archive_find(const JbvArchive *archive, JbvText name, const uint8_t **data, uint32_t *size);
 /* Built-in library class, then a class of the application JAR (linked). */
-JbvStatus jbv_lazy_class(JbvVM *vm, JbvText name, JbvClass **out);
+JBV_GC JbvStatus jbv_lazy_class(JbvVM *vm, JbvText name, JbvClass **out);
 void jbv_free_image(JbvVM *vm, uint8_t *image);
 uint8_t jbv_library_id(JbvText name);
-JbvStatus jbv_library_class(JbvVM *vm, JbvText name, JbvClass **out);
+JBV_GC JbvStatus jbv_library_class(JbvVM *vm, JbvText name, JbvClass **out);
 JbvStatus jbv_library_initialize(JbvVM *vm, JbvClass *type);
-JbvStatus jbv_literal(JbvVM *vm, JbvClass *owner, uint16_t index, int32_t *out);
-JbvStatus jbv_mirror(JbvVM *vm, JbvClass *type, int32_t *out);
-JbvStatus jbv_link(JbvVM *vm, JbvClass *c, uint32_t depth);
-JbvStatus jbv_resolve_class(JbvVM *vm, JbvText name, JbvClass **out);
+JBV_GC JbvStatus jbv_literal(JbvVM *vm, JbvClass *owner, uint16_t index, int32_t *out);
+JBV_GC JbvStatus jbv_mirror(JbvVM *vm, JbvClass *type, int32_t *out);
+JBV_GC JbvStatus jbv_link(JbvVM *vm, JbvClass *c, uint32_t depth);
+JBV_GC JbvStatus jbv_resolve_class(JbvVM *vm, JbvText name, JbvClass **out);
 JbvStatus jbv_array_class(JbvVM *vm, JbvClass *component, uint8_t kind, JbvClass **out);
-JbvStatus jbv_class_constant(JbvVM *vm, JbvClass *c, uint16_t index, JbvClass **out);
+JBV_GC JbvStatus jbv_class_constant(JbvVM *vm, JbvClass *c, uint16_t index, JbvClass **out);
 int jbv_assignable(JbvClass *from, JbvClass *to);
 JbvMethod *jbv_lookup_method(JbvClass **owner, JbvText name, JbvText descriptor);
 JbvField *jbv_lookup_field(JbvClass **owner, JbvText name, JbvText descriptor);
 int jbv_same_package(JbvClass *a, JbvClass *b);
-JbvStatus jbv_class_access(JbvVM *vm, JbvClass *caller, JbvClass *target);
-JbvStatus jbv_member_access(JbvVM *vm, JbvClass *caller, JbvClass *owner, uint16_t flags, JbvClass *receiver);
+JBV_GC JbvStatus jbv_class_access(JbvVM *vm, JbvClass *caller, JbvClass *target);
+JBV_GC JbvStatus jbv_member_access(JbvVM *vm, JbvClass *caller, JbvClass *owner, uint16_t flags, JbvClass *receiver);
 JbvMethod *jbv_virtual_method(JbvClass **owner, JbvClass *resolved, JbvMethod *method);
-JbvStatus jbv_constant(JbvVM *vm, JbvClass *owner, uint16_t index, uint64_t *out, uint8_t *kind);
-JbvStatus jbv_dynamic_native(JbvVM *vm, uint32_t op, const int32_t *args, uint64_t *out);
-JbvStatus jbv_polymorphic(JbvVM *vm, int32_t handle, JbvText descriptor, const int32_t *args, int exact, uint64_t *out);
+JBV_GC JbvStatus jbv_constant(JbvVM *vm, JbvClass *owner, uint16_t index, uint64_t *out, uint8_t *kind);
+JBV_GC JbvStatus jbv_dynamic_native(JbvVM *vm, uint32_t op, const int32_t *args, uint64_t *out);
+JBV_GC JbvStatus jbv_polymorphic(JbvVM *vm, int32_t handle, JbvText descriptor, const int32_t *args, int exact, uint64_t *out);
 int jbv_reference_type(JbvText descriptor);
-JbvStatus jbv_check_reference(JbvVM *vm, int32_t ref, JbvText descriptor);
-JbvStatus jbv_new(JbvVM *vm, JbvClass *type, int32_t length, int32_t *ref);
-JbvStatus jbv_multi_array(JbvVM *vm, JbvClass *type, const int32_t *sizes, uint8_t dimensions, int32_t *ref);
+JBV_GC JbvStatus jbv_check_reference(JbvVM *vm, int32_t ref, JbvText descriptor);
+JBV_GC JbvStatus jbv_new(JbvVM *vm, JbvClass *type, int32_t length, int32_t *ref);
+JBV_GC JbvStatus jbv_multi_array(JbvVM *vm, JbvClass *type, const int32_t *sizes, uint8_t dimensions, int32_t *ref);
 JbvStatus jbv_object(JbvVM *vm, int32_t ref, JbvObject **out);
 void jbv_free_heap(JbvVM *vm);
 void jbv_free_class(JbvVM *vm, JbvClass *c);
@@ -203,17 +207,17 @@ int jbv_descriptor_type(JbvText descriptor, uint32_t *pos, uint32_t *width);
 void jbv_prepare_method(JbvMethod *method);
 void jbv_begin_call(JbvVM *vm);
 JbvStatus jbv_typed_call(JbvVM *vm, JbvMethod *method, const int32_t *args, uint16_t count, uint64_t *out);
-JbvStatus jbv_native_call(JbvVM *vm, JbvMethod *method, const int32_t *args, uint16_t count, uint64_t *out);
+JBV_GC JbvStatus jbv_native_call(JbvVM *vm, JbvMethod *method, const int32_t *args, uint16_t count, uint64_t *out);
 void jbv_fp_enter(JbvFPEnv *state);
 void jbv_fp_restore(const JbvFPEnv *state);
 JbvStatus jbv_monitor(JbvVM *vm, JbvClass *type, int32_t ref, int action);
 void jbv_release_monitors(JbvVM *vm, JbvFrame *frame);
 int32_t jbv_narrow(int32_t value, uint8_t type);
 JbvText jbv_return_type(JbvText descriptor);
-JbvStatus jbv_arguments(JbvVM *vm, JbvClass *owner, JbvMethod *method,
+JBV_GC JbvStatus jbv_arguments(JbvVM *vm, JbvClass *owner, JbvMethod *method,
     const int32_t *args, uint16_t count, uint8_t *refs, int pin);
-JbvStatus jbv_initialize(JbvVM *vm, JbvClass *c);
-JbvStatus jbv_execute(JbvVM *vm, JbvClass *c, JbvMethod *m,
+JBV_GC JbvStatus jbv_initialize(JbvVM *vm, JbvClass *c);
+JBV_GC JbvStatus jbv_execute(JbvVM *vm, JbvClass *c, JbvMethod *m,
     const int32_t *args, const uint8_t *refs, uint16_t count, uint64_t *result);
 enum { JBV_INT, JBV_REF, JBV_LONG, JBV_HIGH, JBV_FLOAT, JBV_DOUBLE, JBV_DHIGH, JBV_TOP };
 uint8_t jbv_kind(uint8_t descriptor);
@@ -235,13 +239,6 @@ JBV_INLINE void jbv_barrier(JbvVM *vm, JbvObject *owner, int32_t value) {
     if (value && (uintptr_t)owner - (uintptr_t)vm->nursery >= vm->nursery_size &&
         vm->handles[(uint32_t)value & JBV_HANDLE_MASK] - (uintptr_t)vm->nursery < vm->nursery_size) jbv_remember(vm, owner);
 }
-/* Calls from C into Java while C may hold raw object pointers: objects must not move. */
-#define JBV_CALL_OUT(vm, expression) (++(vm)->unsafe, jbv_call_out_done((vm), (expression)))
-JBV_INLINE JbvStatus jbv_call_out_done(JbvVM *vm, JbvStatus status) { --vm->unsafe; return status; }
-/* A built-in native that keeps no raw object pointers across this Java call lifts its
- * own no-moving mark for the call's duration (objects may move inside). */
-#define JBV_SAFE_CALL(vm, expression) (--(vm)->unsafe, jbv_safe_call_done((vm), (expression)))
-JBV_INLINE JbvStatus jbv_safe_call_done(JbvVM *vm, JbvStatus status) { ++vm->unsafe; return status; }
 JBV_INLINE uint16_t *jbv_chars(JbvObject *object) { return (uint16_t *)(object + 1); }
 /* Preserve the modulo-2^32 result without an out-of-line call at every
  * integer operation. Both supported Windows ABIs use two's complement. */
@@ -283,13 +280,13 @@ JBV_INLINE void jbv_array_set(JbvObject *array, uint32_t i, uint8_t kind, uint64
 uint32_t jbv_numeric_types(uint8_t op);
 JbvStatus jbv_numeric(uint8_t op, uint64_t a, uint64_t b, uint64_t *out);
 int jbv_exception_name(JbvText name);
-JbvStatus jbv_exception_class(JbvVM *vm, JbvText name, JbvClass **out);
-JbvStatus jbv_raise(JbvVM *vm, JbvStatus status);
-JbvStatus jbv_capture_trace(JbvVM *vm, int32_t *out);
-JbvStatus jbv_throw_named(JbvVM *vm, const char *name, int32_t cause, JbvStatus status);
+JBV_GC JbvStatus jbv_exception_class(JbvVM *vm, JbvText name, JbvClass **out);
+JBV_GC JbvStatus jbv_raise(JbvVM *vm, JbvStatus status);
+JBV_GC JbvStatus jbv_capture_trace(JbvVM *vm, int32_t *out);
+JBV_GC JbvStatus jbv_throw_named(JbvVM *vm, const char *name, int32_t cause, JbvStatus status);
 /* Like jbv_throw_named with detail message owner[.member][descriptor]; '/' in owner
  * becomes '.' when dots is set. The core profile has no strings: no message. */
-JbvStatus jbv_throw_detail(JbvVM *vm, const char *name, JbvText owner, JbvText member, JbvText descriptor, int dots, JbvStatus status);
+JBV_GC JbvStatus jbv_throw_detail(JbvVM *vm, const char *name, JbvText owner, JbvText member, JbvText descriptor, int dots, JbvStatus status);
 uint16_t jbv_u16(const uint8_t *p);
 uint32_t jbv_u32(const uint8_t *p);
 #endif

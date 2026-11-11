@@ -36,18 +36,29 @@ JbvStatus jbv_string_alloc(JbvVM *vm, uint32_t length, int32_t *ref, uint16_t **
     (void)jbv_retain(vm, value);
     if (length) {
         status = char_array(vm, length, &array, data);
-        if (status == JBV_OK) { (void)jbv_object(vm, value, &s); jbv_data(s)[0] = array; }
+        if (status == JBV_OK) { (void)jbv_object(vm, value, &s); jbv_data(s)[0] = array; jbv_barrier_checked(vm, s, array); }   /* s may have been promoted meanwhile */
     }
     (void)jbv_release(vm, value);
     if (status == JBV_OK) *ref = value;
     return status;
 }
-static JbvStatus copy_string(JbvVM *vm, const uint16_t *data, uint32_t n, int32_t *out) {
+static JbvStatus array_view(JbvVM *vm, int32_t ref, JbvTextView *view) {
+    JbvObject *o;
+    JbvStatus status = jbv_object(vm, ref, &o);
+    if (status != JBV_OK) return status;
+    if (o->type->array_kind != 'C') return JBV_CLASS_CAST;
+    view->data = jbv_chars(o); view->length = jbv_length(o); return JBV_OK;
+}
+/* Copies n units at start of String or char[] src (rooted) into a new string. */
+static JbvStatus copy_string(JbvVM *vm, int32_t src, uint32_t start, uint32_t n, int32_t *out) {
+    JbvTextView view;
     uint16_t *to;
     uint32_t i;
     JbvStatus status = jbv_string_alloc(vm, n, out, &to);
-    if (status == JBV_OK) for (i = 0; i < n; ++i) to[i] = data[i];
-    return status;
+    if (status != JBV_OK || !n) return status;
+    if (jbv_string_view(vm, src, &view) != JBV_OK) (void)array_view(vm, src, &view);
+    for (i = 0; i < n; ++i) to[i] = view.data[start+i];
+    return JBV_OK;
 }
 /* MUTF-8 is supplied by trusted classfiles: NUL is C0 80, supplementary
  * characters are two independently encoded surrogate code units. */
@@ -109,6 +120,8 @@ static JbvStatus value_string(JbvVM *vm, uint8_t kind, const int32_t *a, int32_t
     uint16_t text[32];
     uint32_t n;
     uint64_t bits;
+    uint16_t *to;
+    JbvStatus status;
     if (kind == 'L' || kind == 'O') return jbv_object_text(vm, a[0], out);
     if (kind == 'Z') return jbv_string_mutf(vm, jbv_text(a[0] ? "true" : "false"), out);
     if (kind == 'C') { text[0] = (uint16_t)a[0]; n = 1; }
@@ -118,21 +131,16 @@ static JbvStatus value_string(JbvVM *vm, uint8_t kind, const int32_t *a, int32_t
         bits = kind == 'J' ? jbv_slot_bits(a, JBV_LONG) : (uint64_t)(int64_t)a[0];
         n = jbv_integer_text(negative ? 0 - bits : bits, negative, 10, text);
     }
-    return copy_string(vm, text, n, out);
+    status = jbv_string_alloc(vm, n, out, &to);
+    if (status == JBV_OK) while (n--) to[n] = text[n];
+    return status;
 }
 static JbvStatus string_bounds(JbvVM *vm) {
     return jbv_throw_named(vm, "java/lang/StringIndexOutOfBoundsException", 0, JBV_ARRAY_BOUNDS);
 }
-static JbvStatus array_view(JbvVM *vm, int32_t ref, JbvTextView *view) {
-    JbvObject *o;
-    JbvStatus status = jbv_object(vm, ref, &o);
-    if (status != JBV_OK) return status;
-    if (o->type->array_kind != 'C') return JBV_CLASS_CAST;
-    view->data = jbv_chars(o); view->length = jbv_length(o); return JBV_OK;
-}
 static JbvStatus sequence_string(JbvVM *vm, int32_t ref, int sliced, int32_t start, int32_t end, int32_t *out) {
     JbvObject *o;
-    JbvClass *owner;
+    JbvClass *owner, *type;
     JbvMethodId id;
     uint64_t length, ch;
     int32_t args[2], value;
@@ -153,11 +161,11 @@ static JbvStatus sequence_string(JbvVM *vm, int32_t ref, int sliced, int32_t sta
         if (!sliced) { *out = ref; status = JBV_OK; }
         else if (start < 0 || end < start || (uint32_t)end > text.length)
             status = jbv_throw_named(vm, "java/lang/IndexOutOfBoundsException", 0, JBV_ARRAY_BOUNDS);
-        else status = copy_string(vm, text.data ? text.data + start : 0, (uint32_t)(end - start), out);
+        else status = copy_string(vm, ref, (uint32_t)start, (uint32_t)(end - start), out);
         if (pinned) (void)jbv_release(vm, ref);
         return status;
     }
-    owner = o->type;
+    owner = type = o->type;
     id.method = jbv_lookup_method(&owner, jbv_text("length"), jbv_text("()I")); id.owner = owner;
     if (!id.method) return JBV_NOT_FOUND;
     status = jbv_invoke(vm, &id, &ref, 1, &length);
@@ -168,25 +176,27 @@ static JbvStatus sequence_string(JbvVM *vm, int32_t ref, int sliced, int32_t sta
     status = jbv_string_alloc(vm, (uint32_t)(end - start), &value, &data);
     if (status != JBV_OK) return status;
     (void)jbv_retain(vm, value);
-    owner = o->type;
+    owner = type;
     id.method = jbv_lookup_method(&owner, jbv_text("charAt"), jbv_text("(I)C")); id.owner = owner;
     args[0] = ref;
     if (!id.method) status = JBV_NOT_FOUND;
     for (i = 0; status == JBV_OK && i < (uint32_t)(end - start); ++i) {
         args[1] = start + (int32_t)i;
         status = jbv_invoke(vm, &id, args, 2, &ch);
-        if (status == JBV_OK) data[i] = (uint16_t)ch;
+        if (status == JBV_OK) { (void)jbv_string_view(vm, value, &text); text.data[i] = (uint16_t)ch; }
     }
     (void)jbv_release(vm, value);
     if (status == JBV_OK) *out = value;
     return status;
 }
-static JbvStatus builder_buffer(JbvVM *vm, JbvObject *o, uint32_t minimum, JbvTextView *view) {
-    int32_t *fields = jbv_data(o), ref;
+static JbvStatus builder_buffer(JbvVM *vm, int32_t builder, uint32_t minimum, JbvTextView *view) {
+    JbvObject *o;
+    int32_t *fields, ref;
     uint16_t *data;
     JbvStatus status;
     uint32_t n, i;
     view->data = 0; view->length = 0;
+    (void)jbv_object(vm, builder, &o); fields = jbv_data(o);
     if (fields[0]) { status = array_view(vm, fields[0], view); if (status != JBV_OK) return status; }
     if (minimum <= view->length) return JBV_OK;
     if (minimum > INT32_MAX) return JBV_OUT_OF_MEMORY;
@@ -194,8 +204,10 @@ static JbvStatus builder_buffer(JbvVM *vm, JbvObject *o, uint32_t minimum, JbvTe
     if (n < minimum) n = minimum;
     status = char_array(vm, n, &ref, &data);
     if (status != JBV_OK) return status;
+    (void)jbv_object(vm, builder, &o); fields = jbv_data(o);
+    if (fields[0]) (void)array_view(vm, fields[0], view);
     for (i = 0; i < (uint32_t)fields[1]; ++i) data[i] = view->data[i];
-    fields[0] = ref; jbv_barrier_checked(vm, (JbvObject *)fields - 1, ref); view->data = data; view->length = n;
+    fields[0] = ref; jbv_barrier_checked(vm, o, ref); view->data = data; view->length = n;
     return JBV_OK;
 }
 static JbvStatus builder_call(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *a, uint16_t count, int32_t *out) {
@@ -207,7 +219,7 @@ static JbvStatus builder_call(JbvVM *vm, uint32_t op, uint8_t kind, const int32_
     const int32_t *v = a + (op == A_INSERT ? 2 : 1);
     if (status != JBV_OK) return status;
     fields = jbv_data(o); length = (uint32_t)fields[1];
-    status = builder_buffer(vm, o, 0, &buffer);
+    status = builder_buffer(vm, a[0], 0, &buffer);
     if (status != JBV_OK) return status;
     *out = 0;
     switch (op) {
@@ -215,8 +227,9 @@ static JbvStatus builder_call(JbvVM *vm, uint32_t op, uint8_t kind, const int32_
         if (buffer.length == length) return JBV_OK;
         status = char_array(vm, length, &ref, &text.data);
         if (status != JBV_OK) return status;
+        (void)jbv_object(vm, a[0], &o); fields = jbv_data(o); (void)builder_buffer(vm, a[0], 0, &buffer);
         for (i = 0; i < length; ++i) text.data[i] = buffer.data[i];
-        fields[0] = ref; jbv_barrier_checked(vm, (JbvObject *)fields - 1, ref); return JBV_OK;
+        fields[0] = ref; jbv_barrier_checked(vm, o, ref); return JBV_OK;
     case A_DELETE: case A_DELETE_CHAR:
         start = a[1]; end = op == A_DELETE_CHAR ? start : a[2];
         if (start < 0 || (uint32_t)start > length || end < start || (op == A_DELETE_CHAR && (uint32_t)start == length)) return string_bounds(vm);
@@ -245,7 +258,7 @@ static JbvStatus builder_call(JbvVM *vm, uint32_t op, uint8_t kind, const int32_
         if (status != JBV_OK) return status;
         if (other->type->builtin != B_BUILDER) return JBV_CLASS_CAST;
         other_length = (uint32_t)jbv_data(other)[1];
-        status = builder_buffer(vm, other, 0, &text);
+        status = builder_buffer(vm, a[1], 0, &text);
         if (status != JBV_OK) return status;
         for (i = 0; i < length && i < other_length && buffer.data[i] == text.data[i]; ++i) {}
         *out = i < length && i < other_length ? buffer.data[i] - text.data[i] : (int32_t)length - (int32_t)other_length;
@@ -257,17 +270,17 @@ static JbvStatus builder_call(JbvVM *vm, uint32_t op, uint8_t kind, const int32_
         if ((uint32_t)a[1] >= length) return string_bounds(vm);
         if (op == A_CHAR) *out = buffer.data[a[1]]; else buffer.data[a[1]] = (uint16_t)a[2];
         return JBV_OK;
-    case A_ENSURE: return a[1] <= 0 ? JBV_OK : builder_buffer(vm, o, (uint32_t)a[1], &buffer);
+    case A_ENSURE: return a[1] <= 0 ? JBV_OK : builder_buffer(vm, a[0], (uint32_t)a[1], &buffer);
     case A_SET_LENGTH:
         if (a[1] < 0) return string_bounds(vm);
-        status = builder_buffer(vm, o, (uint32_t)a[1], &buffer);
-        if (status == JBV_OK) { for (i = length; i < (uint32_t)a[1]; ++i) buffer.data[i] = 0; fields[1] = a[1]; }
+        status = builder_buffer(vm, a[0], (uint32_t)a[1], &buffer);
+        if (status == JBV_OK) { for (i = length; i < (uint32_t)a[1]; ++i) buffer.data[i] = 0; (void)jbv_object(vm, a[0], &o); jbv_data(o)[1] = a[1]; }
         return status;
     case A_TEXT: case A_SUBSTRING:
         end = (int32_t)length;
         if (op == A_SUBSTRING) { start = a[1]; if (count == 3) end = a[2]; }
         if (start < 0 || end < start || (uint32_t)end > length) return string_bounds(vm);
-        return copy_string(vm, buffer.data ? buffer.data + start : 0, (uint32_t)(end - start), out);
+        return copy_string(vm, fields[0], (uint32_t)start, (uint32_t)(end - start), out);
     case A_REVERSE:
         for (i = 0; i < length / 2; ++i) { uint16_t t = buffer.data[i]; buffer.data[i] = buffer.data[length - 1 - i]; buffer.data[length - 1 - i] = t; }
         for (i = 0; i + 1 < length; ++i)
@@ -283,7 +296,7 @@ static JbvStatus builder_call(JbvVM *vm, uint32_t op, uint8_t kind, const int32_
             if (capacity < 0) return JBV_NEGATIVE_ARRAY_SIZE;
             /* Constructor capacity is exact, unlike ensureCapacity growth. */
             status = char_array(vm, (uint32_t)capacity, &ref, &buffer.data);
-            if (status == JBV_OK) { fields[0] = ref; fields[1] = 0; jbv_barrier_checked(vm, (JbvObject *)fields - 1, ref); }
+            if (status == JBV_OK) { (void)jbv_object(vm, a[0], &o); fields = jbv_data(o); fields[0] = ref; fields[1] = 0; jbv_barrier_checked(vm, o, ref); }
             return status;
         }
         if (!a[1]) return JBV_NULL_REFERENCE;
@@ -297,9 +310,9 @@ static JbvStatus builder_call(JbvVM *vm, uint32_t op, uint8_t kind, const int32_
         if (status != JBV_OK) return status;
         if (count == 4) {
             if (v[1] < 0 || v[2] < 0 || (uint32_t)v[1] > text.length || (uint32_t)v[2] > text.length - (uint32_t)v[1]) return JBV_ARRAY_BOUNDS;
-            text.data += v[1]; text.length = (uint32_t)v[2];
+            start = v[1]; text.length = (uint32_t)v[2];
         }
-        status = copy_string(vm, text.data, text.length, &ref);
+        status = copy_string(vm, v[0], (uint32_t)start, text.length, &ref);
     } else if (kind == 'Q') status = sequence_string(vm, v[0], count == 4, count == 4 ? v[1] : 0, count == 4 ? v[2] : 0, &ref);
     else status = value_string(vm, kind, v, &ref);
     if (status != JBV_OK) return status;
@@ -309,13 +322,15 @@ materialized:
     status = jbv_string_view(vm, ref, &text);
     if (status != JBV_OK) goto done;
     /* User toString/CharSequence calls may have reentered and modified this
-     * very builder. Append after its current content, not the pre-call length. */
-    length = (uint32_t)fields[1];
+     * very builder (and the GC may have moved it). Append after its current
+     * content, not the pre-call length. */
+    (void)jbv_object(vm, a[0], &o); length = (uint32_t)jbv_data(o)[1];
     at = op == A_INSERT || op == A_REPLACE ? (uint32_t)a[1] : length;
     if (at > length) { status = string_bounds(vm); goto done; }
     if (text.length > INT32_MAX - (length-removed) || (op == A_INIT && text.length > INT32_MAX - 16u)) { status = JBV_OUT_OF_MEMORY; goto done; }
-    status = builder_buffer(vm, o, length - removed + text.length + (op == A_INIT ? 16u : 0u), &buffer);
+    status = builder_buffer(vm, a[0], length - removed + text.length + (op == A_INIT ? 16u : 0u), &buffer);
     if (status == JBV_OK) {
+        (void)jbv_string_view(vm, ref, &text); (void)jbv_object(vm, a[0], &o); fields = jbv_data(o); /* growth may move both */
         if (text.length > removed) { i = length; while (i > at+removed) { --i; buffer.data[i+text.length-removed] = buffer.data[i]; } }
         else for (i = at+removed; i < length; ++i) buffer.data[i+text.length-removed] = buffer.data[i];
         /* CharSequence insertion reads charAt after making room. Preserve the
@@ -335,8 +350,8 @@ static int text_match(JbvTextView text, uint32_t at, JbvTextView pattern) {
     for (i = 0; i < pattern.length; ++i) if (text.data[at+i] != pattern.data[i]) return 0;
     return 1;
 }
-static JbvStatus replace_sequence(JbvVM *vm, JbvTextView text, const int32_t *a, int32_t *out, int contains) {
-    JbvTextView pattern, replacement;
+static JbvStatus replace_sequence(JbvVM *vm, const int32_t *a, int32_t *out, int contains) {
+    JbvTextView text, pattern, replacement = {0, 0};
     int32_t p = 0, r = 0;
     uint16_t *data;
     uint32_t i, j, hits = 0, next = 0;
@@ -345,19 +360,24 @@ static JbvStatus replace_sequence(JbvVM *vm, JbvTextView text, const int32_t *a,
     if (!a[1] || (!contains && !a[2])) return JBV_NULL_REFERENCE;
     status = sequence_string(vm, a[1], 0, 0, 0, &p);
     if (status != JBV_OK) return status;
-    (void)jbv_retain(vm, p); (void)jbv_string_view(vm, p, &pattern);
+    (void)jbv_retain(vm, p);
+    if (!contains) {
+        status = sequence_string(vm, a[2], 0, 0, 0, &r);
+        if (status != JBV_OK) goto done;
+        (void)jbv_retain(vm, r);
+    }
+    (void)jbv_string_view(vm, a[0], &text); (void)jbv_string_view(vm, p, &pattern);
     for (i = 0; i <= text.length; ++i) if (text_match(text, i, pattern)) {
         ++hits; if (pattern.length) i += pattern.length-1;
     }
     if (contains) { *out = hits != 0; goto done; }
-    status = sequence_string(vm, a[2], 0, 0, 0, &r);
-    if (status != JBV_OK) goto done;
-    (void)jbv_retain(vm, r); (void)jbv_string_view(vm, r, &replacement);
     if (!hits) { *out = a[0]; goto done; }
+    (void)jbv_string_view(vm, r, &replacement);
     length = text.length - (uint64_t)hits*pattern.length + (uint64_t)hits*replacement.length;
     if (length > INT32_MAX) { status = JBV_OUT_OF_MEMORY; goto done; }
     status = jbv_string_alloc(vm, (uint32_t)length, out, &data);
     if (status != JBV_OK) goto done;
+    (void)jbv_string_view(vm, a[0], &text); (void)jbv_string_view(vm, p, &pattern); (void)jbv_string_view(vm, r, &replacement);
     for (i = 0; i <= text.length;) {
         if (text_match(text, i, pattern)) {
             for (j = 0; j < replacement.length; ++j) data[next++] = replacement.data[j];
@@ -388,7 +408,7 @@ JbvStatus jbv_text_native(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *a
             if (status != JBV_OK) return status;
             start = count == 3 ? a[1] : 0; end = count == 3 ? a[2] : (int32_t)text.length;
             if (start < 0 || end < 0 || (uint32_t)start > text.length || (uint32_t)end > text.length - (uint32_t)start) return string_bounds(vm);
-            status = copy_string(vm, text.data + start, (uint32_t)end, &result);
+            status = copy_string(vm, a[0], (uint32_t)start, (uint32_t)end, &result);
         }
         if (status == JBV_OK) *out = (uint32_t)result;
         return status;
@@ -401,14 +421,15 @@ JbvStatus jbv_text_native(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *a
         while (start < end && text.data[start] <= 32) ++start;
         while (start < end && text.data[end-1] <= 32) --end;
         if (!start && (uint32_t)end == text.length) result = a[0];
-        else { status = copy_string(vm, text.data ? text.data+start : 0, (uint32_t)(end-start), &result); if (status != JBV_OK) return status; }
+        else { status = copy_string(vm, a[0], (uint32_t)start, (uint32_t)(end-start), &result); if (status != JBV_OK) return status; }
         break;
     case S_REPLACE: case S_CONTAINS:
-        if (!kind) { status = replace_sequence(vm, text, a, &result, op == S_CONTAINS); if (status != JBV_OK) return status; break; }
+        if (!kind) { status = replace_sequence(vm, a, &result, op == S_CONTAINS); if (status != JBV_OK) return status; break; }
         for (i = 0; i < text.length && text.data[i] != (uint16_t)a[1]; ++i) {}
         if (i == text.length || a[1] == a[2]) { result = a[0]; break; }
         status = jbv_string_alloc(vm, text.length, &result, &data);
         if (status != JBV_OK) return status;
+        (void)jbv_string_view(vm, a[0], &text);
         for (i = 0; i < text.length; ++i) data[i] = text.data[i] == (uint16_t)a[1] ? (uint16_t)a[2] : text.data[i];
         break;
     case S_REPEAT:
@@ -417,6 +438,7 @@ JbvStatus jbv_text_native(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *a
         if (a[1] && text.length > INT32_MAX / (uint32_t)a[1]) return JBV_OUT_OF_MEMORY;
         status = jbv_string_alloc(vm, text.length*(uint32_t)a[1], &result, &data);
         if (status != JBV_OK) return status;
+        (void)jbv_string_view(vm, a[0], &text);
         if (text.length) for (i = 0; i < (uint32_t)a[1]; ++i) for (j = 0; j < text.length; ++j) data[i*text.length+j] = text.data[j];
         break;
     case S_INIT:
@@ -433,6 +455,7 @@ JbvStatus jbv_text_native(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *a
         if (start < 0 || end < 0 || (uint32_t)start > other.length || (uint32_t)end > other.length - (uint32_t)start) return string_bounds(vm);
         status = char_array(vm, (uint32_t)end, &result, &data);
         if (status != JBV_OK) return status;
+        (void)jbv_object(vm, a[0], &s); (void)array_view(vm, a[1], &other);
         for (i = 0; i < (uint32_t)end; ++i) data[i] = other.data[start+i];
         jbv_data(s)[0] = result; jbv_barrier_checked(vm, s, result); result = 0; break;
     case S_LENGTH: result = (int32_t)text.length; break;
@@ -457,11 +480,12 @@ JbvStatus jbv_text_native(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *a
         start = a[1]; end = count == 3 ? a[2] : (int32_t)text.length;
         if (start < 0 || end < start || (uint32_t)end > text.length) return string_bounds(vm);
         if (!start && (uint32_t)end == text.length) result = a[0];
-        else { status = copy_string(vm, text.data ? text.data + start : 0, (uint32_t)(end - start), &result); if (status != JBV_OK) return status; }
+        else { status = copy_string(vm, a[0], (uint32_t)start, (uint32_t)(end - start), &result); if (status != JBV_OK) return status; }
         break;
     case S_CHARS:
         status = char_array(vm, text.length, &result, &data);
         if (status != JBV_OK) return status;
+        (void)jbv_string_view(vm, a[0], &text);
         for (i = 0; i < text.length; ++i) data[i] = text.data[i];
         break;
     case S_GET_CHARS:
@@ -478,6 +502,7 @@ JbvStatus jbv_text_native(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *a
         if (other.length > INT32_MAX - text.length) return JBV_OUT_OF_MEMORY;
         status = jbv_string_alloc(vm, text.length + other.length, &result, &data);
         if (status != JBV_OK) return status;
+        (void)jbv_string_view(vm, a[0], &text); (void)jbv_string_view(vm, a[1], &other);
         for (i = 0; i < text.length; ++i) data[i] = text.data[i];
         for (j = 0; j < other.length; ++j) data[i+j] = other.data[j];
         break;
