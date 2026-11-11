@@ -43,4 +43,47 @@ public final class Character implements java.io.Serializable, Comparable<Charact
     public static boolean isWhitespace(char c) { return isWhitespace((int)c); }
     public static boolean isWhitespace(int c) { return (c>=9&&c<=13)||(c>=28&&c<=32)||c==0x1680||(c>=0x2000&&c<=0x2006)||(c>=0x2008&&c<=0x200a)||c==0x2028||c==0x2029||c==0x205f||c==0x3000; }
     public static char reverseBytes(char c) { return (char)((c<<8)|(c>>>8)); }
+
+    public static final byte UNASSIGNED=0, UPPERCASE_LETTER=1, LOWERCASE_LETTER=2, TITLECASE_LETTER=3, MODIFIER_LETTER=4, OTHER_LETTER=5,
+        NON_SPACING_MARK=6, ENCLOSING_MARK=7, COMBINING_SPACING_MARK=8, DECIMAL_DIGIT_NUMBER=9, LETTER_NUMBER=10, OTHER_NUMBER=11,
+        SPACE_SEPARATOR=12, LINE_SEPARATOR=13, PARAGRAPH_SEPARATOR=14, CONTROL=15, FORMAT=16, PRIVATE_USE=18, SURROGATE=19,
+        DASH_PUNCTUATION=20, START_PUNCTUATION=21, END_PUNCTUATION=22, CONNECTOR_PUNCTUATION=23, OTHER_PUNCTUATION=24, MATH_SYMBOL=25,
+        CURRENCY_SYMBOL=26, MODIFIER_SYMBOL=27, OTHER_SYMBOL=28, INITIAL_QUOTE_PUNCTUATION=29, FINAL_QUOTE_PUNCTUATION=30;
+    // Unicode properties come from run-length tables generated from the build JDK (jbv.runtime.Unicode).
+    public static int getType(char c) { return jbv.runtime.Unicode.type(c); }
+    public static int getType(int c) { return jbv.runtime.Unicode.type(c); }
+    public static boolean isDefined(char c) { return getType(c)!=UNASSIGNED; }
+    public static boolean isDefined(int c) { return getType(c)!=UNASSIGNED; }
+    public static boolean isLetter(char c) { return isLetter((int)c); }
+    public static boolean isLetter(int c) { int t=getType(c); return t>=UPPERCASE_LETTER&&t<=OTHER_LETTER; }
+    public static boolean isLetterOrDigit(char c) { return isLetterOrDigit((int)c); }
+    public static boolean isLetterOrDigit(int c) { int t=getType(c); return t>=UPPERCASE_LETTER&&t<=OTHER_LETTER||t==DECIMAL_DIGIT_NUMBER; }
+    public static boolean isAlphabetic(int c) { return jbv.runtime.Unicode.isAlphabetic(c); }
+    public static boolean isUpperCase(char c) { return jbv.runtime.Unicode.isUpperCase(c); }
+    public static boolean isUpperCase(int c) { return jbv.runtime.Unicode.isUpperCase(c); }
+    public static boolean isLowerCase(char c) { return jbv.runtime.Unicode.isLowerCase(c); }
+    public static boolean isLowerCase(int c) { return jbv.runtime.Unicode.isLowerCase(c); }
+    public static boolean isTitleCase(char c) { return getType(c)==TITLECASE_LETTER; }
+    public static boolean isTitleCase(int c) { return getType(c)==TITLECASE_LETTER; }
+    public static boolean isSpaceChar(char c) { return isSpaceChar((int)c); }
+    public static boolean isSpaceChar(int c) { int t=getType(c); return t>=SPACE_SEPARATOR&&t<=PARAGRAPH_SEPARATOR; }
+    public static boolean isISOControl(char c) { return isISOControl((int)c); }
+    public static boolean isISOControl(int c) { return c>=0&&c<=0x1f||c>=0x7f&&c<=0x9f; }
+    public static boolean isIdentifierIgnorable(char c) { return isIdentifierIgnorable((int)c); }
+    public static boolean isIdentifierIgnorable(int c) { return c>=0&&c<=8||c>=0xe&&c<=0x1b||c>=0x7f&&c<=0x9f||getType(c)==FORMAT; }
+    public static boolean isJavaIdentifierStart(char c) { return isJavaIdentifierStart((int)c); }
+    public static boolean isJavaIdentifierStart(int c) { int t=getType(c); return t>=UPPERCASE_LETTER&&t<=OTHER_LETTER||t==LETTER_NUMBER||t==CURRENCY_SYMBOL||t==CONNECTOR_PUNCTUATION; }
+    public static boolean isJavaIdentifierPart(char c) { return isJavaIdentifierPart((int)c); }
+    public static boolean isJavaIdentifierPart(int c) { int t=getType(c); return isJavaIdentifierStart(c)||t==DECIMAL_DIGIT_NUMBER||t==COMBINING_SPACING_MARK||t==NON_SPACING_MARK||isIdentifierIgnorable(c); }
+    public static char toUpperCase(char c) { return (char)jbv.runtime.Unicode.toUpper(c); }
+    public static int toUpperCase(int c) { return jbv.runtime.Unicode.toUpper(c); }
+    public static char toLowerCase(char c) { return (char)jbv.runtime.Unicode.toLower(c); }
+    public static int toLowerCase(int c) { return jbv.runtime.Unicode.toLower(c); }
+    public static char toTitleCase(char c) { return (char)jbv.runtime.Unicode.toTitle(c); }
+    public static int toTitleCase(int c) { return jbv.runtime.Unicode.toTitle(c); }
+    public static int getNumericValue(char c) { return jbv.runtime.Unicode.numeric(c); }
+    public static int getNumericValue(int c) { return jbv.runtime.Unicode.numeric(c); }
+    public static int codePointAt(CharSequence s,int i) { char a=s.charAt(i); if(isHighSurrogate(a)&&i+1<s.length()){char b=s.charAt(i+1);if(isLowSurrogate(b))return toCodePoint(a,b);} return a; }
+    public static int codePointAt(char[] s,int i) { char a=s[i]; if(isHighSurrogate(a)&&i+1<s.length){char b=s[i+1];if(isLowSurrogate(b))return toCodePoint(a,b);} return a; }
+    public static int codePointBefore(CharSequence s,int i) { char b=s.charAt(i-1); if(isLowSurrogate(b)&&i>1){char a=s.charAt(i-2);if(isHighSurrogate(a))return toCodePoint(a,b);} return b; }
 }

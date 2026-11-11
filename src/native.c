@@ -327,8 +327,8 @@ JBV_API JbvStatus JBV_CALL jbv_array_read(JbvVM *vm, JbvRef ref, uint32_t start,
     if (count && !out) return JBV_BAD_ARGUMENT;
     status = array_range(vm, ref, start, count, &array);
     if (status != JBV_OK) return status;
-    if (array->type->array_kind == 'C') {
-        for (i = 0; i < count; ++i) out[i] = jbv_chars(array)[start+i];
+    if (array->type->array_kind != 'L') {
+        for (i = 0; i < count; ++i) out[i] = jbv_array_get(array, start + i, array->type->array_kind);
         return JBV_OK;
     }
     kind = jbv_kind(array->type->array_kind); width = jbv_width(kind);
@@ -355,8 +355,12 @@ JBV_API JbvStatus JBV_CALL jbv_array_write(JbvVM *vm, JbvRef ref, uint32_t start
     if (count && !values) return JBV_BAD_ARGUMENT;
     status = array_range(vm, ref, start, count, &array);
     if (status != JBV_OK) return status;
-    if (array->type->array_kind == 'C') {
-        for (i = 0; i < count; ++i) jbv_chars(array)[start+i] = (uint16_t)values[i];
+    if (array->type->array_kind != 'L') {
+        for (i = 0; i < count; ++i) {
+            uint64_t value = values[i];
+            if (jbv_kind(array->type->array_kind) == JBV_INT) value = (uint32_t)jbv_narrow(jbv_i32((uint32_t)value), array->type->array_kind);
+            jbv_array_set(array, start + i, array->type->array_kind, value);
+        }
         return JBV_OK;
     }
     type = array->type->array_kind; kind = jbv_kind(type); width = jbv_width(kind);
@@ -371,11 +375,8 @@ JBV_API JbvStatus JBV_CALL jbv_array_write(JbvVM *vm, JbvRef ref, uint32_t start
             if (!jbv_assignable(object->type, array->type->component)) return JBV_ARRAY_STORE;
         }
     }
-    for (i = 0; i < count; ++i) {
-        uint64_t value = values[i];
-        if (kind == JBV_INT) value = (uint32_t)jbv_narrow(jbv_i32((uint32_t)value), type);
-        jbv_put_bits(data + i * width, value, kind);
-    }
+    for (i = 0; i < count; ++i) data[i] = jbv_i32((uint32_t)values[i]);
+    (void)type; (void)width;
     return JBV_OK;
 }
 

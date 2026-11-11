@@ -106,7 +106,7 @@ def main():
         actual_size = run([python, "-c", "import struct; print(struct.calcsize('P'))"], capture_output=True, text=True).stdout.strip()
         if actual_size != str(pointer_size):
             raise SystemExit(f"{python} does not match the {args.arch} target; pass --test-python PATH.")
-        suites = ["test_vm.py", "test_numbers.py", "test_native.py", "test_strings.py", "test_library.py", "test_collections.py", "test_access.py", "test_dynamic.py", "test_reflection.py", "test_diagnostics.py", "test_lambdas.py", "test_util.py", "test_generics.py", "test_prepare.py"]
+        suites = ["test_vm.py", "test_numbers.py", "test_native.py", "test_strings.py", "test_library.py", "test_collections.py", "test_access.py", "test_dynamic.py", "test_reflection.py", "test_diagnostics.py", "test_lambdas.py", "test_util.py", "test_collections2.py", "test_stringvalues.py", "test_text.py", "test_generics.py", "test_prepare.py"]
         if args.profile != "full":
             suites = ["test_vm.py", "test_numbers.py", "test_native.py", "test_access.py"]
             if args.profile == "text": suites.append("test_strings.py")

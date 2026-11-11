@@ -12,6 +12,7 @@ public final class Generics {
 
     /** Class.getGenericSuperclass(0) / getGenericInterfaces(1) / getTypeParameters(2) / getTypeName(3). */
     public static Object ofClass(Class<?> c,int what){
+        if(what>=4)return names(c,what);
         if(what==3){if(!c.isArray())return c.getName();int n=0;while(c.isArray()){c=c.getComponentType();n++;}StringBuilder s=new StringBuilder(c.getName());while(n-->0)s.append("[]");return s.toString();}
         String sig=Reflection.classSignature(c);
         if(sig==null){if(what==0)return c.getSuperclass();if(what==1){Class<?>[] f=c.getInterfaces();Type[] r=new Type[f.length];System.arraycopy(f,0,r,0,f.length);return r;}return new TypeVariable[0];}
@@ -21,6 +22,37 @@ public final class Generics {
         if(what==0)return c.getSuperclass()==null?null:parent;
         java.util.ArrayList<Type> faces=new java.util.ArrayList<>();while(p.more())faces.add(p.type());
         return faces.toArray(new Type[faces.size()]);
+    }
+    /** Class names and nesting, derived from binary names (no InnerClasses lookup):
+     * 4 simple, 5 package, 6 enum constants, 7 canonical, 8 member?, 9 anonymous?, 10 record?,
+     * 11 nest host, 12 declaring class, 13 enclosing class. A '$' in a top-level name reads as nesting. */
+    static Object names(Class<?> c,int what){
+        if(what==5){while(c.isArray())c=c.getComponentType();if(c.isPrimitive())return "java.lang";String n=c.getName();int dot=n.lastIndexOf('.');return dot<0?"":n.substring(0,dot);}
+        if(what==6){
+            if(!c.isEnum())return null;
+            try{Method values=c.getDeclaredMethod("values");values.setAccessible(true);return values.invoke(null);}
+            catch(ReflectiveOperationException e){return null;}
+        }
+        if(what==10)return Boolean.valueOf(c.getSuperclass()==Record.class&&(c.getModifiers()&Modifier.FINAL)!=0);
+        if(c.isArray()){
+            if(what==4)return names(c.getComponentType(),4)+"[]";
+            if(what==7){Object inner=names(c.getComponentType(),7);return inner==null?null:inner+"[]";}
+            return what==8||what==9?(Object)Boolean.FALSE:what==11?c:null;
+        }
+        String n=c.getName();int cut=n.lastIndexOf('$');
+        Class<?> outer=c.isPrimitive()||cut<0?null:outer(c);
+        String tail=outer==null?null:n.substring(cut+1);
+        int digits=0;while(tail!=null&&digits<tail.length()&&tail.charAt(digits)>='0'&&tail.charAt(digits)<='9')digits++;
+        boolean member=tail!=null&&digits==0,anonymous=tail!=null&&digits==tail.length();
+        switch(what){
+        case 4:return tail!=null?tail.substring(digits):n.substring(n.lastIndexOf('.')+1);
+        case 7:if(outer==null)return n;if(!member)return null;{Object o=names(outer,7);return o==null?null:o+"."+tail;}
+        case 8:return Boolean.valueOf(member);
+        case 9:return Boolean.valueOf(anonymous);
+        case 11:{Class<?> host=c;for(Class<?> o=outer;o!=null;o=outer(o))host=o;return host;}
+        case 12:return member?outer:null;
+        default:return outer;
+        }
     }
     /** Field.getGenericType(0), Method.getGenericReturnType(1), parameters(2), exceptions(3), type parameters(4). */
     public static Object member(AccessibleObject m,int what){

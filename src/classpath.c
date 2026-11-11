@@ -16,10 +16,12 @@ static JbvStatus arraycopy(JbvVM *vm, const int32_t *a) {
     if (!from->type->array_kind || from->type->array_kind != to->type->array_kind) return JBV_ARRAY_STORE;
     if (a[1] < 0 || a[3] < 0 || a[4] < 0 || (uint32_t)a[1] > from->length || (uint32_t)a[3] > to->length ||
         (uint32_t)a[4] > from->length - (uint32_t)a[1] || (uint32_t)a[4] > to->length - (uint32_t)a[3]) return JBV_ARRAY_BOUNDS;
-    if (from->type->array_kind == 'C') {
-        uint16_t *s = jbv_chars(from) + a[1], *d = jbv_chars(to) + a[3];
-        if (from == to && a[3] > a[1]) { i = (uint32_t)a[4]; while (i--) d[i] = s[i]; }
-        else for (i = 0; i < (uint32_t)a[4]; ++i) d[i] = s[i];
+    width = jbv_element_bytes(from->type->array_kind);
+    if (width < 4) {   /* packed boolean/byte/char/short: copy bytes, backwards on overlap */
+        uint8_t *s = (uint8_t *)(from + 1) + (uint32_t)a[1] * width, *d = (uint8_t *)(to + 1) + (uint32_t)a[3] * width;
+        uint32_t n = (uint32_t)a[4] * width;
+        if (from == to && a[3] > a[1]) { i = n; while (i--) d[i] = s[i]; }
+        else for (i = 0; i < n; ++i) d[i] = s[i];
         return JBV_OK;
     }
     width = jbv_width(jbv_kind(from->type->array_kind));
@@ -103,7 +105,7 @@ static JbvStatus JBV_CALL hook(JbvVM *vm, void *user, const int32_t *a, uint16_t
 }
 JbvStatus jbv_classpath_find(JbvVM *vm, JbvText name, const uint8_t **data, uint32_t *size) {
     if (!vm->library.data) {
-        JbvStatus status = jbv_archive_open(vm, &vm->library, jbv_library_jar, jbv_library_jar_size);
+        JbvStatus status = jbv_archive_open(vm, &vm->library, jbv_library_jar, jbv_library_jar_size, 0);
         if (status != JBV_OK) return status;
     }
     return jbv_archive_find(&vm->library, name, data, size);

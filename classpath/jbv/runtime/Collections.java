@@ -74,7 +74,7 @@ public final class Collections {
         public void add(int i,E e){position(i);list.add(size()-i,e);}
         public E remove(int i){return list.remove(size()-1-Objects.checkIndex(i,size()));}
         public List<E> reversed(){return list;}
-        public List<E> subList(int from,int to){if(from>to)throw new IllegalArgumentException();Objects.checkFromToIndex(from,to,size());return list.subList(size()-to,size()-from).reversed();}
+        public List<E> subList(int from,int to){Objects.checkFromToIndex(from,to,size());return list.subList(size()-to,size()-from).reversed();}
         public ListIterator<E> listIterator(int index){position(index);ListIterator<E> it=list.listIterator(size()-index);return new ListIterator<E>(){
             boolean writable;
             public boolean hasNext(){return it.hasPrevious();}public boolean hasPrevious(){return it.hasNext();}

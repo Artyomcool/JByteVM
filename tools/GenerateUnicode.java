@@ -1,11 +1,138 @@
 import java.nio.file.*;
+import java.util.*;
+import java.util.function.IntUnaryOperator;
+import java.util.function.IntPredicate;
+
+/** Generates jbv.runtime.Unicode from the build JDK's character data: run-length tables
+ * stored as String constants (they compress well inside the library JAR) plus a small
+ * decoder. The generator decodes its own output and checks every code point. */
 public class GenerateUnicode {
+    static final int MAX = Character.MAX_CODE_POINT;
+    /* 15-bit little-endian varint in chars; bit 15 marks a continuation. */
+    static void put(StringBuilder s, int n) { while (n >= 0x8000) { s.append((char) (0x8000 | (n & 0x7fff))); n >>>= 15; } s.append((char) n); }
+    static int zig(int d) { return d < 0 ? (-d << 1) | 1 : d << 1; }
+
+    static String runs(IntUnaryOperator f) {               // (length, value) pairs over 0..MAX
+        StringBuilder s = new StringBuilder(); int start = 0, prev = f.applyAsInt(0);
+        for (int c = 1; c <= MAX + 1; c++) { int v = c > MAX ? Integer.MIN_VALUE : f.applyAsInt(c); if (v != prev) { put(s, c - start); put(s, zig(prev)); start = c; prev = v; } }
+        return s.toString();
+    }
+    static String mapping(IntUnaryOperator f) {           // (gap, count, stride, delta) entries
+        StringBuilder s = new StringBuilder(); boolean[] done = new boolean[MAX + 1]; int last = 0;
+        for (int c = 0; c <= MAX; c++) {
+            if (done[c]) continue; int d = f.applyAsInt(c) - c; if (d == 0) continue;
+            int stride = c + 2 <= MAX && f.applyAsInt(c + 2) - (c + 2) == d && f.applyAsInt(c + 1) - (c + 1) != d ? 2 : 1, n = 0;
+            for (int x = c; x <= MAX && f.applyAsInt(x) - x == d; x += stride) { done[x] = true; n++; }
+            put(s, c - last); put(s, n); put(s, stride); put(s, zig(d)); last = c;
+        }
+        return s.toString();
+    }
+    static String special(boolean upper) {                 // code point -> expansion where String casing differs
+        StringBuilder s = new StringBuilder();
+        for (int c = 0; c <= MAX; c++) {
+            if (c >= 0xD800 && c <= 0xDFFF) continue;
+            String one = new String(Character.toChars(c)), mapped = upper ? one.toUpperCase(Locale.ROOT) : one.toLowerCase(Locale.ROOT);
+            String simple = new String(Character.toChars(upper ? Character.toUpperCase(c) : Character.toLowerCase(c)));
+            if (c == 0x3A3 && !upper) continue;            // final sigma: context rule in Strings
+            if (!mapped.equals(simple)) { put(s, c); put(s, mapped.length()); s.append(mapped); }
+        }
+        return s.toString();
+    }
+    static String literal(String s) {
+        StringBuilder b = new StringBuilder("\"");
+        // Unicode escapes are translated before lexing: line breaks, quote and backslash need plain escapes.
+        for (char ch : s.toCharArray()) b.append(ch == '\n' ? "\\n" : ch == '\r' ? "\\r" : ch == '"' ? "\\\"" : ch == '\\' ? "\\\\"
+            : ch >= 0x20 && ch < 0x7f ? String.valueOf(ch) : String.format("\\u%04x", (int) ch));
+        return b.append('"').toString();
+    }
+
     public static void main(String[] args) throws Exception {
-        StringBuilder b=new StringBuilder("// Generated from the build JDK's Unicode digit data.\npackage jbv.runtime;\npublic final class Unicode {\n    private Unicode() {}\n    public static final int[] DIGIT_ZEROS={");
-        boolean first=true;
-        for(int c=0;c<=Character.MAX_CODE_POINT;c++)if(Character.digit(c,10)==0){if(!first)b.append(',');b.append(c);first=false;}
-        b.append("};\n}\n");
-        Path p=Path.of(args[0]);Files.createDirectories(p.getParent());
-        if(!Files.exists(p)||!Files.readString(p).equals(b.toString()))Files.writeString(p,b.toString());
+        IntPredicate upperByType = c -> Character.getType(c) == Character.UPPERCASE_LETTER;
+        IntPredicate lowerByType = c -> Character.getType(c) == Character.LOWERCASE_LETTER;
+        IntPredicate alphaByType = c -> { int t = Character.getType(c); return t >= 1 && t <= 5 || t == Character.LETTER_NUMBER; };
+        String types = runs(Character::getType);
+        // Properties that differ from the type-derived default, as toggles.
+        String flags = runs(c -> (Character.isUpperCase(c) != upperByType.test(c) ? 1 : 0) | (Character.isLowerCase(c) != lowerByType.test(c) ? 2 : 0)
+            | (Character.isAlphabetic(c) != alphaByType.test(c) ? 4 : 0));
+        String numeric = runs(c -> { int v = Character.getNumericValue(c); return v; });
+        String upper = mapping(Character::toUpperCase), lower = mapping(Character::toLowerCase);
+        // Title case equals upper case except for a few digraphs: store only those.
+        String title = mapping(c -> c + Character.toTitleCase(c) - Character.toUpperCase(c));   // offset from upper case
+        StringBuilder digits = new StringBuilder();
+        for (int c = 0; c <= MAX; c++) if (Character.digit(c, 10) == 0) { if (digits.length() > 0) digits.append(','); digits.append(c); }
+        String src = "// Generated by tools/GenerateUnicode.java from the build JDK's character data.\npackage jbv.runtime;\n"
+            + "public final class Unicode {\n    private Unicode() {}\n"
+            + "    public static final int[] DIGIT_ZEROS={" + digits + "};\n"
+            + "    static final String TYPES=" + literal(types) + ";\n"
+            + "    static final String FLAGS=" + literal(flags) + ";\n"
+            + "    static final String NUMERIC=" + literal(numeric) + ";\n"
+            + "    static final String UPPER=" + literal(upper) + ";\n"
+            + "    static final String LOWER=" + literal(lower) + ";\n"
+            + "    static final String TITLE=" + literal(title) + ";\n"
+            + "    static final String SPECIAL_UPPER=" + literal(special(true)) + ";\n"
+            + "    static final String SPECIAL_LOWER=" + literal(special(false)) + ";\n"
+            + DECODER + "}\n";
+        Path p = Path.of(args[0]); Files.createDirectories(p.getParent());
+        if (!Files.exists(p) || !Files.readString(p).equals(src)) Files.writeString(p, src);
+        verify(types, flags, numeric, upper, lower, title, upperByType, lowerByType, alphaByType);
+    }
+
+    /** Runtime decoder, emitted verbatim into Unicode.java (and mirrored by verify()). */
+    static final String DECODER = """
+        private static int at;
+        private static int next(String s){int n=0,shift=0;char c;do{c=s.charAt(at++);n|=(c&0x7fff)<<shift;shift+=15;}while((c&0x8000)!=0);return n;}
+        private static int unzig(int n){return (n&1)!=0?-(n>>>1):n>>>1;}
+        /** Run tables: starts[i]..starts[i+1]-1 have values[i]. */
+        static int[][] runs(String s){int n=0;at=0;while(at<s.length()){next(s);next(s);n++;}int[] starts=new int[n],values=new int[n];at=0;int c=0;
+            for(int i=0;i<n;i++){starts[i]=c;c+=next(s);values[i]=unzig(next(s));}return new int[][]{starts,values};}
+        static int lookup(int[][] t,int c){int[] s=t[0];int lo=0,hi=s.length-1;while(lo<hi){int mid=(lo+hi+1)>>>1;if(s[mid]<=c)lo=mid;else hi=mid-1;}return t[1][lo];}
+        /** Mapping tables: entries (start,count,stride,delta), sorted by start; ranges may interleave. */
+        static int[] mapping(String s){int n=0;at=0;while(at<s.length()){next(s);next(s);next(s);next(s);n++;}int[] r=new int[n*4];at=0;int c=0;
+            for(int i=0;i<n;i++){c+=next(s);r[4*i]=c;r[4*i+1]=next(s);r[4*i+2]=next(s);r[4*i+3]=unzig(next(s));}return r;}
+        static int map(int[] m,int c){int lo=0,hi=m.length/4-1;if(hi<0||c<m[0])return c;while(lo<hi){int mid=(lo+hi+1)>>>1;if(m[4*mid]<=c)lo=mid;else hi=mid-1;}
+            for(int i=lo;i>=0&&i>lo-16;i--){int s=m[4*i],d=c-s,st=m[4*i+2];if(d>=0&&d%st==0&&d/st<m[4*i+1])return c+m[4*i+3];}return c;}
+        private static int[][] types,flags,numeric;private static int[] upper,lower,title;
+        public static int type(int c){if(types==null)types=runs(TYPES);return c<0||c>0x10FFFF?0:lookup(types,c);}
+        public static int flags(int c){if(flags==null)flags=runs(FLAGS);return c<0||c>0x10FFFF?0:lookup(flags,c);}
+        public static int numeric(int c){if(numeric==null)numeric=runs(NUMERIC);return c<0||c>0x10FFFF?-1:lookup(numeric,c);}
+        public static int toUpper(int c){if(upper==null)upper=mapping(UPPER);return map(upper,c);}
+        public static int toLower(int c){if(lower==null)lower=mapping(LOWER);return map(lower,c);}
+        public static int toTitle(int c){if(title==null)title=mapping(TITLE);return toUpper(c)+map(title,c)-c;}
+        /** Multi-char String casing (SpecialCasing) for code point c, or null. */
+        public static String special(int c,boolean upper){String s=upper?SPECIAL_UPPER:SPECIAL_LOWER;at=0;while(at<s.length()){int cp=next(s),n=next(s);if(cp==c)return s.substring(at,at+n);at+=n;}return null;}
+        public static boolean isUpperCase(int c){return (type(c)==1)!=((flags(c)&1)!=0);}
+        public static boolean isLowerCase(int c){return (type(c)==2)!=((flags(c)&2)!=0);}
+        public static boolean isAlphabetic(int c){int t=type(c);return (t>=1&&t<=5||t==10)!=((flags(c)&4)!=0);}
+    """;
+
+    /* Re-implements the decoder in the generator and checks all code points. */
+    static int at;
+    static int next(String s) { int n = 0, shift = 0; char c; do { c = s.charAt(at++); n |= (c & 0x7fff) << shift; shift += 15; } while ((c & 0x8000) != 0); return n; }
+    static int unzig(int n) { return (n & 1) != 0 ? -(n >>> 1) : n >>> 1; }
+    static int[] expand(String s) { int[] r = new int[MAX + 1]; at = 0; int c = 0; while (at < s.length()) { int n = next(s), v = unzig(next(s)); Arrays.fill(r, c, c + n, v); c += n; } if (c != MAX + 1) throw new IllegalStateException("runs"); return r; }
+    /* Same lookup as the runtime decoder (binary search, then a bounded backward scan). */
+    static int[] apply(String s) {
+        int count = 0; at = 0; while (at < s.length()) { next(s); next(s); next(s); next(s); count++; }
+        int[] m = new int[count * 4]; at = 0; int c = 0;
+        for (int i = 0; i < count; i++) { c += next(s); m[4 * i] = c; m[4 * i + 1] = next(s); m[4 * i + 2] = next(s); m[4 * i + 3] = unzig(next(s)); }
+        int[] r = new int[MAX + 1];
+        for (int x = 0; x <= MAX; x++) {
+            int lo = 0, hi = count - 1, v = x;
+            if (hi >= 0 && x >= m[0]) {
+                while (lo < hi) { int mid = (lo + hi + 1) >>> 1; if (m[4 * mid] <= x) lo = mid; else hi = mid - 1; }
+                for (int i = lo; i >= 0 && i > lo - 16; i--) { int st = m[4 * i + 2], d = x - m[4 * i]; if (d >= 0 && d % st == 0 && d / st < m[4 * i + 1]) { v = x + m[4 * i + 3]; break; } }
+            }
+            r[x] = v;
+        }
+        return r;
+    }
+    static void verify(String types, String flags, String numeric, String upper, String lower, String title, IntPredicate up, IntPredicate lo, IntPredicate al) {
+        int[] t = expand(types), f = expand(flags), n = expand(numeric), u = apply(upper), l = apply(lower), ti = apply(title);
+        for (int c = 0; c <= MAX; c++) ti[c] = u[c] + ti[c] - c;
+        for (int c = 0; c <= MAX; c++) {
+            if (t[c] != Character.getType(c) || n[c] != Character.getNumericValue(c) || u[c] != Character.toUpperCase(c) || l[c] != Character.toLowerCase(c) || ti[c] != Character.toTitleCase(c)
+                || (up.test(c) != ((f[c] & 1) != 0)) != Character.isUpperCase(c) || (lo.test(c) != ((f[c] & 2) != 0)) != Character.isLowerCase(c) || (al.test(c) != ((f[c] & 4) != 0)) != Character.isAlphabetic(c))
+                throw new IllegalStateException("Unicode table mismatch at U+" + Integer.toHexString(c));
+        }
     }
 }

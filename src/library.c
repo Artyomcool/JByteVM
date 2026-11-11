@@ -14,6 +14,8 @@ typedef struct MethodSpec {
 #define K(n,d,o,k) {n,d,o,k,0}
 #define V(d,k) {"valueOf",d,S_VALUE,k,JBV_STATIC}
 #define A(d,k) K("append",d,A_APPEND,k)
+#define J(n,d) {n,d,O_JAVA,0,0}
+#define JB(n,d) {n,d,O_JAVA,'B',0} /* receiver is a StringBuilder */
 static const MethodSpec object_methods[] = {
     M("<init>","()V",O_INIT), M("equals","(" OBJ ")Z",O_EQUALS),
     M("hashCode","()I",O_HASH), M("getClass","()" CLS,O_CLASS), M("toString","()" STR,O_TEXT),
@@ -45,7 +47,10 @@ static const MethodSpec class_methods[] = {
     K("isAnnotation","()Z",C_REFLECT,16), K("isSynthetic","()Z",C_REFLECT,17),
     K("isEnum","()Z",C_REFLECT,18), K("getClassLoader","()Ljava/lang/ClassLoader;",C_REFLECT,19), K("getDeclaredAnnotations","()[Ljava/lang/annotation/Annotation;",C_REFLECT,20),
     K("getGenericSuperclass","()Ljava/lang/reflect/Type;",C_REFLECT,22), K("getGenericInterfaces","()[Ljava/lang/reflect/Type;",C_REFLECT,23),
-    K("getTypeParameters","()[Ljava/lang/reflect/TypeVariable;",C_REFLECT,24), K("getTypeName","()" STR,C_REFLECT,25)
+    K("getTypeParameters","()[Ljava/lang/reflect/TypeVariable;",C_REFLECT,24), K("getTypeName","()" STR,C_REFLECT,25),
+    K("getSimpleName","()" STR,C_REFLECT,26), K("getPackageName","()" STR,C_REFLECT,27), K("getEnumConstants","()[" OBJ,C_REFLECT,28),
+    K("getCanonicalName","()" STR,C_REFLECT,29), K("isMemberClass","()Z",C_REFLECT,30), K("isAnonymousClass","()Z",C_REFLECT,31),
+    K("isRecord","()Z",C_REFLECT,32), K("getNestHost","()" CLS,C_REFLECT,33), K("getDeclaringClass","()" CLS,C_REFLECT,34), K("getEnclosingClass","()" CLS,C_REFLECT,35)
 #endif
 };
 static const MethodSpec string_methods[] = {
@@ -69,6 +74,23 @@ static const MethodSpec string_methods[] = {
     V("(" OBJ ")" STR,'L'), V("([C)" STR,'['), V("([CII)" STR,'['),
     V("(Z)" STR,'Z'), V("(C)" STR,'C'), V("(I)" STR,'I'), V("(J)" STR,'J'),
     V("(F)" STR,'F'), V("(D)" STR,'D')
+#if JBV_PROFILE_FULL
+    /* Implemented in Java by jbv.runtime.Strings (receiver first, see java_native). */
+    ,J("toLowerCase","()" STR), J("toUpperCase","()" STR), J("equalsIgnoreCase","(" STR ")Z"),
+    J("compareToIgnoreCase","(" STR ")I"), J("regionMatches","(I" STR "II)Z"), J("regionMatches","(ZI" STR "II)Z"),
+    J("split","(" STR ")[" STR), J("split","(" STR "I)[" STR), J("matches","(" STR ")Z"),
+    J("replaceAll","(" STR STR ")" STR), J("replaceFirst","(" STR STR ")" STR),
+    J("strip","()" STR), J("stripLeading","()" STR), J("stripTrailing","()" STR), J("isBlank","()Z"),
+    J("codePointAt","(I)I"), J("codePointBefore","(I)I"), J("codePointCount","(II)I"), J("contentEquals","(" SEQ ")Z"),
+    J("getBytes","()[B"), J("getBytes","(" STR ")[B"), J("getBytes","(Ljava/nio/charset/Charset;)[B"),
+    J("formatted","([" OBJ ")" STR), J("indent","(I)" STR),
+    J("toLowerCase","(Ljava/util/Locale;)" STR), J("toUpperCase","(Ljava/util/Locale;)" STR),
+    {"format","(Ljava/util/Locale;" STR "[" OBJ ")" STR,O_JAVA,0,JBV_STATIC},
+    {"join","(" SEQ "[" SEQ ")" STR,O_JAVA,0,JBV_STATIC}, {"join","(" SEQ "Ljava/lang/Iterable;)" STR,O_JAVA,0,JBV_STATIC},
+    {"format","(" STR "[" OBJ ")" STR,O_JAVA,0,JBV_STATIC}, {"copyValueOf","([C)" STR,O_JAVA,0,JBV_STATIC},
+    J("<init>","([B)V"), J("<init>","([BII)V"), J("<init>","([B" STR ")V"), J("<init>","([BLjava/nio/charset/Charset;)V"),
+    J("<init>","([BIILjava/nio/charset/Charset;)V"), J("<init>","(" SB ")V"), J("<init>","([III)V")
+#endif
 };
 static const MethodSpec builder_methods[] = {
     M("<init>","()V",A_INIT), K("<init>","(I)V",A_INIT,'I'),
@@ -83,6 +105,9 @@ static const MethodSpec builder_methods[] = {
     K("insert","(I" STR ")" SB,A_INSERT,'L'), K("insert","(I" OBJ ")" SB,A_INSERT,'O'),
     K("insert","(I" SEQ ")" SB,A_INSERT,'Q'), K("insert","(I" SEQ "II)" SB,A_INSERT,'Q'),
     K("insert","(I[C)" SB,A_INSERT,'['), K("insert","(I[CII)" SB,A_INSERT,'['),
+#if JBV_PROFILE_FULL
+    JB("indexOf","(" STR ")I"), JB("indexOf","(" STR "I)I"), JB("lastIndexOf","(" STR ")I"), JB("lastIndexOf","(" STR "I)I"),
+#endif
     K("insert","(IZ)" SB,A_INSERT,'Z'), K("insert","(IC)" SB,A_INSERT,'C'),
     K("insert","(II)" SB,A_INSERT,'I'), K("insert","(IJ)" SB,A_INSERT,'J'),
     K("insert","(IF)" SB,A_INSERT,'F'), K("insert","(ID)" SB,A_INSERT,'D'),
@@ -257,6 +282,48 @@ static JbvStatus JBV_CALL library_native(JbvVM *vm, void *user, const int32_t *a
     if (status == JBV_OK) *out = (uint32_t)ref;
     return status;
 }
+#if JBV_PROFILE_FULL
+/* Built-in members written in Java: a static method of the same name in
+ * jbv.runtime.Strings whose descriptor prepends the receiver; constructors map to
+ * a static "init" returning a new instance whose fields are copied into this.
+ * Native methods never use line tables, so `lines` caches the resolved helper. */
+static JbvStatus JBV_CALL java_native(JbvVM *vm, void *user, const int32_t *a, uint16_t count, uint64_t *out) {
+    JbvMethod *m = (JbvMethod *)user, *h = (JbvMethod *)(uintptr_t)m->lines;
+    JbvClass *helper;
+    JbvObject *self = 0, *made = 0;
+    JbvStatus status = jbv_resolve_class(vm, jbv_text("jbv/runtime/Strings"), &helper);
+    int init = m->name.data[0] == '<';
+    uint32_t i;
+    if (status == JBV_OK) status = jbv_initialize(vm, helper);
+    if (status != JBV_OK) return status;
+    if (!h) {
+        JbvText name, descriptor;
+        uint8_t *text;
+        uint32_t n = 0, close;
+        if (m->descriptor.size > 0xff00) return JBV_LINKAGE_ERROR;
+        text = (uint8_t *)jbv_alloc(vm, (size_t)m->descriptor.size + sizeof(SB));
+        if (!text) return JBV_OUT_OF_MEMORY;
+        text[n++] = '(';
+        if (!(m->flags & JBV_STATIC) && !init) { const char *receiver = m->line_count == 'B' ? SB : STR; while (*receiver) text[n++] = (uint8_t)*receiver++; }
+        for (close = 1; m->descriptor.data[close] != ')'; ++close) text[n++] = m->descriptor.data[close];
+        if (init) { text[n++] = ')'; for (i = 0; i < sizeof(STR) - 1; ++i) text[n++] = (uint8_t)STR[i]; }
+        else for (i = close; i < m->descriptor.size; ++i) text[n++] = m->descriptor.data[i];
+        descriptor.data = text; descriptor.size = (uint16_t)n;
+        name = init ? jbv_text("init") : m->name;
+        h = jbv_find_method(helper, name, descriptor);
+        jbv_free(vm, text);
+        if (!h || !(h->flags & JBV_STATIC)) return JBV_LINKAGE_ERROR;
+        m->lines = (const uint8_t *)(uintptr_t)h;
+    }
+    if (!init) return jbv_execute(vm, helper, h, a, 0, count, out);
+    status = jbv_object(vm, a[0], &self);
+    if (status == JBV_OK) status = jbv_execute(vm, helper, h, a + 1, 0, (uint16_t)(count - 1), out);
+    if (status == JBV_OK) status = jbv_object(vm, (int32_t)(uint32_t)*out, &made);
+    if (status == JBV_OK) for (i = 0; i < self->type->instance_slots; ++i) jbv_data(self)[i] = jbv_data(made)[i];
+    *out = 0;
+    return status;
+}
+#endif
 static JbvStatus install_methods(JbvVM *vm, JbvClass *c, const MethodSpec *spec, uint32_t count) {
     uint32_t i;
     c->methods = (JbvMethod *)jbv_alloc(vm, count * sizeof(*c->methods));
@@ -268,6 +335,9 @@ static JbvStatus install_methods(JbvVM *vm, JbvClass *c, const MethodSpec *spec,
         m->flags = (uint16_t)((spec[i].flags & 7 ? 0 : 1) | spec[i].flags | (c->flags & JBV_INTERFACE ? JBV_ABSTRACT : JBV_NATIVE));
         m->intrinsic = spec[i].op == O_INIT ? 1 : 3;
         m->native_slots = library_native; m->native_user = (void *)(uintptr_t)(spec[i].op | ((uint32_t)spec[i].kind << 8));
+#if JBV_PROFILE_FULL
+        if (spec[i].op == O_JAVA) { m->native_slots = java_native; m->native_user = m; m->intrinsic = 3; m->line_count = spec[i].kind; }
+#endif
         jbv_prepare_method(m);
     }
     return JBV_OK;

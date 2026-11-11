@@ -213,6 +213,12 @@ javac на диске остаётся пригодным для стандар�
 | Функции | Используемые коллекциями и лямбдами Function/BiFunction/Consumer/BiConsumer/Predicate/Supplier/Runnable, операторы и часть примитивных специализаций, Comparator (comparing*/thenComparing*/nullsFirst/Last), Objects |
 | Generics в рефлексии | Type, ParameterizedType, TypeVariable, WildcardType, GenericArrayType; Class.getGenericSuperclass/Interfaces/getTypeParameters/getTypeName, Field.getGenericType, Method/Constructor getGeneric*Types, getTypeParameters, getParameters (имена — при компиляции с `-parameters`). Сигнатуры разбираются по запросу, без кэша |
 | Исключения IO | java.io.IOException/UncheckedIOException, InterruptedException, TypeNotPresentException (без самого IO) |
+| Коллекции | Queue/Deque, ArrayDeque, PriorityQueue (тот же порядок кучи, что в JDK), LinkedList, LinkedHashMap/Set (в т.ч. access order и removeEldestEntry), TreeMap/TreeSet (treap) с Navigable-представлениями, EnumMap/EnumSet |
+| Строки | toLowerCase/toUpperCase (полный Unicode, SpecialCasing, final sigma), equalsIgnoreCase/compareToIgnoreCase/regionMatches как в JDK, split/matches/replaceAll, strip/isBlank/indent, join, format/formatted, кодовые точки, getBytes/new String с UTF-8/UTF-16/ISO-8859-1/US-ASCII (правила замены как в JDK); StringBuilder.indexOf. Методы реализованы на Java в `jbv.runtime.Strings` и подключены к встроенному String |
+| Character | getType, isLetter/isLetterOrDigit/isUpperCase/isLowerCase/isAlphabetic/isSpaceChar/isJavaIdentifier*, toUpperCase/toLowerCase/toTitleCase, getNumericValue — по таблицам из JDK сборки (`tools/GenerateUnicode.java` проверяет все кодовые точки) |
+| Регулярные выражения | java.util.regex Pattern/Matcher: классы символов, \d\w\s, якоря, группы (в т.ч. именованные), жадные/ленивые квантификаторы, флаги; split/replaceAll с JDK-семантикой |
+| Форматирование | String.format/formatted: %s %d %x %o %c %b %e %f %g %h %n, ширина/точность/флаги/индексы, точное округление; всегда как Locale.ROOT |
+| Прочее | Charset/StandardCharsets, минимальный Locale (не влияет на результат), Record, MatchException; Class.getSimpleName/getCanonicalName/getPackageName/getEnumConstants/isRecord/getDeclaringClass |
 | System | arraycopy с overlap/type/bounds/частичной reference-копией, identityHashCode, gc, lineSeparator, часы и PrintStream через хозяина |
 
 `jbv_set_host_services` задаёт часы и текстовый вывод, не добавляя DLL-импортов.
@@ -493,15 +499,16 @@ Windows x86, MSVC 19.44, Release /O1, без упаковки исполняем
 
 | Runtime | Байты | КиБ |
 |---|---:|---:|
-| full, со всей встроенной библиотекой (JAR, один поток) | **158 720** | **155,0** |
+| full, со всей встроенной библиотекой (JAR, один поток) | **221 184** | **216,0** |
+| full до коллекций/строк/regex/Unicode | 158 720 | 155,0 |
 | full до Arrays/Collections/StrictMath/generics | 129 024 | 126,0 |
 | full, JAR с отдельной записью на класс | 178 176 | 174,0 |
 | full, несжатые class-файлы | 259 584 | 253,5 |
-| text | **57 856** | **56,5** |
-| core | **38 912** | **38,0** |
+| text | **58 368** | **57,0** |
+| core | **39 936** | **39,0** |
 | Базовая DLL до версии 0.8 | 46 592 | 45,5 |
 
-В full встроен JAR 75 826 байт: все классы библиотеки (261 386 байт class-файлов)
+В full встроен JAR 133 984 байта (прирост над 155 КиБ: regex ~15 КБ, коллекции ~19 КБ, Unicode ~9 КБ, строки/кодировки ~8 КБ, форматирование ~7 КБ). Ранее — JAR 75 826 байт: все классы библиотеки (261 386 байт class-файлов)
 в одной записи. Из прироста над 126 КиБ: StrictMath ~9 КиБ, Arrays, Collections и
 разбор generics — по ~5 КиБ. Распаковщик DEFLATE и чтение ZIP занимают около 2,5 КиБ кода; внешние классы библиотеки и runtime DLL-зависимости не нужны.
 Цель меньше 256 КиБ соблюдена. Цель **32 КиБ пока не достигнута**:
@@ -518,7 +525,7 @@ RAM считается отдельно. Измерения `tools/measure_ram.p
 размеров, запрошенных у аллокатора хозяина: без его служебных заголовков,
 OS page overhead и C-стека. В full при 16384 слотах начальное состояние VM
 занимает около 83 КБ; при 2048 слотах — около 11,4 КБ. `char[1024]` занимает
-2068 байт вместе с заголовком вместо прежних 4116; `int[1024]` — 4116.
+2068 байт вместе с заголовком вместо прежних 4116; `int[1024]` — 4116. `boolean[]`/`byte[]` хранят 1 байт на элемент, `short[]`/`char[]` — 2.
 После загрузки тестовых классов коллекций, их инициализации и GC замер дал
 около 425 КБ живых аллокаций, из них 4100 байт Java-объектов; пик — около
 470 КБ. Тесты рефлексии и аннотаций в отдельной VM дали 384 390 байт после GC,
@@ -584,7 +591,7 @@ VM сразу распаковывает классы в свою память (
 при ошибке результат не создаётся. Подписанные и multi-release JAR нужно сначала
 пересобрать/привести к одной версии.
 
-`--lower-lambdas` преобразует LambdaMetafactory/altMetafactory в обычные классы
+`--lower-lambdas` преобразует LambdaMetafactory/altMetafactory в обычные классы, а records (ObjectMethods) и switch с паттернами (SwitchBootstraps.typeSwitch/enumSwitch) — в обычный байткод с той же семантикой, что у JDK,
 и удаляет InvokeDynamic из constant pool. Произвольные bootstrap для indy
 не поддерживаются. Serializable-лямбды получают marker interface, но протокол
 Java serialization/SerializedLambda не реализован. Замыкания и их nest host

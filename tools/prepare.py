@@ -1,5 +1,6 @@
 """Prepare mods for JByteVM: one or more class directories/JARs become one
-shared application JAR (jbv_load_jar). Lambdas and condy can be lowered;
+shared application JAR (jbv_load_jar). Lambdas, record methods, pattern switches
+and condy can be lowered;
 invokedynamic, non-Java-25 classes, duplicates and library packages are refused."""
 import argparse
 from pathlib import Path
@@ -61,7 +62,7 @@ def prepare(sources,output,jdk,lower,condy=False):
             if not name.endswith('.class'):resources.append((name,data));continue
             if name.startswith(RESERVED):raise ValueError(f'{name}: package is reserved for the runtime library.')
             if has_constant(data,17):raise ValueError(f'{name} contains CONSTANT_Dynamic; use --lower-condy.')
-            if has_indy(data):raise ValueError(f'{name} contains invokedynamic; try --lower-lambdas and compile string concatenation with -XDstringConcat=inline.')
+            if has_indy(data):raise ValueError(f'{name} contains invokedynamic; use --lower-lambdas (lambdas, records, pattern switches).')
             if int.from_bytes(data[6:8],'big')!=69 or int.from_bytes(data[4:6],'big')!=0:raise ValueError('Only non-preview Java 25 class files are supported: '+name)
             classes.append((name[:-6],data))
         result=staging/'result.jar'
@@ -72,7 +73,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('inputs',type=Path,nargs='+',help='class directories or JARs')
     parser.add_argument('-o','--output',type=Path,required=True,help='the shared application JAR')
-    parser.add_argument('--lower-lambdas',action='store_true');parser.add_argument('--jdk',type=Path)
+    parser.add_argument('--lower-lambdas',action='store_true',help='lower lambdas, record methods and pattern switches (string concatenation needs javac -XDstringConcat=inline)');parser.add_argument('--jdk',type=Path)
     parser.add_argument('--lower-condy',action='store_true')
     parser.add_argument('--unpack',action='store_true',help='expand an existing JByteVM JAR (single input) into the output directory')
     args=parser.parse_args()

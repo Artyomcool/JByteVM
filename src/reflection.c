@@ -153,7 +153,12 @@ JbvStatus jbv_reflect_class(JbvVM *vm, uint32_t op, const int32_t *a, uint64_t *
             if (status == JBV_OK) *out = (uint32_t)ref;
             return status;
         }
-        if (op >= 22) return generics(vm, a[0], op - 22, out);
+        if (op >= 22) {
+            status = generics(vm, a[0], op - 22, out);
+            /* isMemberClass/isAnonymousClass/isRecord come back as Boolean. */
+            if (status == JBV_OK && op >= 30 && op <= 32) status = jbv_unbox(vm, (int32_t)(uint32_t)*out, 'Z', 0, out);
+            return status;
+        }
         if (op == 0) {
             const uint8_t *inner = jbv_attribute(c, c->attributes, "InnerClasses");
             uint16_t f = c->flags & ~0x20;
@@ -378,13 +383,13 @@ static JbvStatus reflect_array(JbvVM *vm, const int32_t *a, int32_t *out) {
     if((a[3]<0||a[3]>4)&&code=='L')return JBV_BAD_ARGUMENT;
     if(a[3]==2)return jbv_box(vm,'I',o->length,out);
     if(a[1]<0||(uint32_t)a[1]>=o->length)return JBV_ARRAY_BOUNDS;
-    if(a[3]==3||a[3]>4){bits=code=='C'?jbv_chars(o)[a[1]]:jbv_slot_bits(jbv_data(o)+a[1]*jbv_width(jbv_kind(code)),jbv_kind(code));if(code=='L'){*out=(int32_t)bits;return JBV_OK;}return jbv_box(vm,code,bits,out);}
+    if(a[3]==3||a[3]>4){bits=jbv_array_get(o,(uint32_t)a[1],code);if(code=='L'){*out=(int32_t)bits;return JBV_OK;}return jbv_box(vm,code,bits,out);}
     if(code=='L'){
         JbvObject *value;
         if(a[2]){status=jbv_object(vm,a[2],&value);if(status!=JBV_OK)return status;if(!jbv_assignable(value->type,c->component))return JBV_BAD_ARGUMENT;}
         bits=(uint32_t)a[2];
     }else{JbvText t={&code,1};status=convert(vm,a[2],t,&bits);if(status!=JBV_OK)return status;}
-    if(code=='C')jbv_chars(o)[a[1]]=(uint16_t)bits;else jbv_put_bits(jbv_data(o)+a[1]*jbv_width(jbv_kind(code)),bits,jbv_kind(code));return JBV_OK;
+    jbv_array_set(o,(uint32_t)a[1],code,bits);return JBV_OK;
 }
 JbvStatus JBV_CALL jbv_reflect_native(JbvVM *vm, void *user, const int32_t *a, uint16_t count, uint64_t *out) {
     uint32_t op=(uint32_t)(uintptr_t)user;

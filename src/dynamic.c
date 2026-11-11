@@ -155,8 +155,7 @@ static JbvStatus invoke_handle(JbvVM *vm, int32_t ref, int32_t array_ref, int32_
             for (j = 0; j < remaining; ++j) {
                 status = jbv_from_object(vm, jbv_data(array)[argc++], component, &bits);
                 if (status != JBV_OK) goto done;
-                if (array_type->array_kind == 'C') jbv_chars(tail)[j] = (uint16_t)bits;
-                else jbv_put_bits(jbv_data(tail)+j*jbv_width(jbv_kind(component.data[0])), bits, jbv_kind(component.data[0]));
+                jbv_array_set(tail, j, array_type->array_kind, bits);
             }
             argument = varargs_ref;
         } else {

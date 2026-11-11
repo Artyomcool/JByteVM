@@ -143,7 +143,8 @@ JbvStatus jbv_classpath_find(JbvVM *vm, JbvText name, const uint8_t **data, uint
 #else /* No embedded library. */
 #define jbv_classpath_find(vm, name, data, size) JBV_NOT_FOUND
 #endif
-JbvStatus jbv_archive_open(JbvVM *vm, JbvArchive *archive, const uint8_t *jar, size_t size);
+/* verify: check the entry CRC-32 (host-supplied JARs; the embedded library is trusted). */
+JbvStatus jbv_archive_open(JbvVM *vm, JbvArchive *archive, const uint8_t *jar, size_t size, int verify);
 JbvStatus jbv_archive_find(const JbvArchive *archive, JbvText name, const uint8_t **data, uint32_t *size);
 /* Built-in library class, then a class of the application JAR (linked). */
 JbvStatus jbv_lazy_class(JbvVM *vm, JbvText name, JbvClass **out);
@@ -217,6 +218,28 @@ JBV_INLINE uint64_t jbv_slot_bits(const int32_t *slots, uint8_t kind) {
 JBV_INLINE void jbv_put_bits(int32_t *slots, uint64_t bits, uint8_t kind) {
     slots[0] = jbv_i32((uint32_t)bits);
     if (jbv_width(kind) == 2) slots[1] = jbv_i32((uint32_t)(bits >> 32));
+}
+/* Array element storage: Z/B one byte, C/S two bytes, I/F/L one slot, J/D two slots.
+ * Values travel as slot bits: int kinds sign- (B/S) or zero-extended (C), Z is 0/1. */
+JBV_INLINE uint32_t jbv_element_bytes(uint8_t kind) { return kind == 'Z' || kind == 'B' ? 1u : kind == 'C' || kind == 'S' ? 2u : kind == 'J' || kind == 'D' ? 8u : 4u; }
+JBV_INLINE uint64_t jbv_array_get(JbvObject *array, uint32_t i, uint8_t kind) {
+    switch (kind) {
+    case 'Z': return ((uint8_t *)(array + 1))[i];
+    case 'B': return (uint32_t)(int32_t)((int8_t *)(array + 1))[i];
+    case 'C': return ((uint16_t *)(array + 1))[i];
+    case 'S': return (uint32_t)(int32_t)((int16_t *)(array + 1))[i];
+    case 'J': case 'D': return jbv_slot_bits((int32_t *)(array + 1) + 2 * i, JBV_LONG);
+    default: return (uint32_t)((int32_t *)(array + 1))[i];
+    }
+}
+JBV_INLINE void jbv_array_set(JbvObject *array, uint32_t i, uint8_t kind, uint64_t bits) {
+    switch (kind) {
+    case 'Z': ((uint8_t *)(array + 1))[i] = (uint8_t)(bits & 1); break;
+    case 'B': ((uint8_t *)(array + 1))[i] = (uint8_t)bits; break;
+    case 'C': case 'S': ((uint16_t *)(array + 1))[i] = (uint16_t)bits; break;
+    case 'J': case 'D': jbv_put_bits((int32_t *)(array + 1) + 2 * i, bits, JBV_LONG); break;
+    default: ((int32_t *)(array + 1))[i] = jbv_i32((uint32_t)bits);
+    }
 }
 uint32_t jbv_numeric_types(uint8_t op);
 JbvStatus jbv_numeric(uint8_t op, uint64_t a, uint64_t b, uint64_t *out);

@@ -104,7 +104,7 @@ static JbvStatus inflate(const uint8_t *in, size_t in_size, uint8_t *out, size_t
 static uint32_t le16(const uint8_t *p) { return p[0] | (uint32_t)p[1] << 8; }
 static uint32_t le32(const uint8_t *p) { return le16(p) | le16(p + 2) << 16; }
 
-JbvStatus jbv_jar_read(JbvVM *vm, const uint8_t *jar, size_t size, JbvText name, const char *suffix, uint8_t **out, size_t *out_size) {
+JbvStatus jbv_jar_read(JbvVM *vm, const uint8_t *jar, size_t size, JbvText name, const char *suffix, uint8_t **out, size_t *out_size, int verify) {
     const uint8_t *eocd, *entry, *local, *end;
     uint32_t count, method, packed, plain, length, offset, i, k;
     size_t tail = 0;
@@ -134,6 +134,11 @@ JbvStatus jbv_jar_read(JbvVM *vm, const uint8_t *jar, size_t size, JbvText name,
         if (!data) return JBV_OUT_OF_MEMORY;
         if (method == 8) status = inflate(local, packed, data, plain);
         else { for (i = 0; i < plain; ++i) data[i] = local[i]; status = JBV_OK; }
+        if (status == JBV_OK && verify) {   /* CRC-32 of the entry: catches damage DEFLATE itself cannot see */
+            uint32_t crc = 0xffffffffu, bit;
+            for (i = 0; i < plain; ++i) { crc ^= data[i]; for (bit = 0; bit < 8; ++bit) crc = (crc >> 1) ^ (0xedb88320u & (0u - (crc & 1u))); }
+            if (~crc != le32(entry + 16)) status = JBV_BAD_CLASS;
+        }
         if (status != JBV_OK) { jbv_free(vm, data); return status; }
         *out = data; *out_size = plain;
         return JBV_OK;
@@ -142,8 +147,8 @@ JbvStatus jbv_jar_read(JbvVM *vm, const uint8_t *jar, size_t size, JbvText name,
 }
 
 /* jbv/classes.bin: u32 count, count x {u32 offset, u32 size, u8 length, name}, class images. */
-JbvStatus jbv_archive_open(JbvVM *vm, JbvArchive *archive, const uint8_t *jar, size_t size) {
-    JbvStatus status = jbv_jar_read(vm, jar, size, jbv_text("jbv/classes"), ".bin", &archive->data, &archive->size);
+JbvStatus jbv_archive_open(JbvVM *vm, JbvArchive *archive, const uint8_t *jar, size_t size, int verify) {
+    JbvStatus status = jbv_jar_read(vm, jar, size, jbv_text("jbv/classes"), ".bin", &archive->data, &archive->size, verify);
     return status == JBV_NOT_FOUND ? JBV_BAD_CLASS : status;
 }
 JbvStatus jbv_archive_find(const JbvArchive *archive, JbvText name, const uint8_t **data, uint32_t *size) {

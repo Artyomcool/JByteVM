@@ -622,12 +622,10 @@ resume:
                         if (!jbv_assignable(element->type, array->type->component)) FAIL(JBV_ARRAY_STORE);
                     }
                 }
-                if (kind == 'C') jbv_chars(array)[a] = (uint16_t)stack[sp-1];
-                else for (i = 0; i < width; ++i)
-                    jbv_data(array)[(uint32_t)a * width + i] = tag == JBV_INT ? jbv_narrow(stack[sp - width + i], kind) : stack[sp - width + i];
+                jbv_array_set(array, (uint32_t)a, kind, jbv_slot_bits(stack + sp - width, tag));
                 sp -= offset;
             } else {
-                uint64_t bits = kind == 'C' ? jbv_chars(array)[a] : jbv_slot_bits(jbv_data(array) + (uint32_t)a * width, tag);
+                uint64_t bits = jbv_array_get(array, (uint32_t)a, kind);
                 sp -= 2;
                 PUSH_VALUE(bits, tag);
             }

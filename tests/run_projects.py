@@ -62,7 +62,7 @@ def main():
         classes, jar = WORK / project.name / "classes", WORK / project.name / "app.jar"
         ok, log = compile_project(project, classes)
         if not ok: row.update(stage="javac", detail=log.splitlines()[0] if log else ""); rows.append(row); continue
-        hs = subprocess.run([str(JAVA), "-cp", str(classes), "jbvharness.Harness", package + ".Main"], capture_output=True, text=True, timeout=120)
+        hs = subprocess.run([str(JAVA), "-Duser.language=en", "-Duser.country=US", "-cp", str(classes), "jbvharness.Harness", package + ".Main"], capture_output=True, text=True, timeout=120)
         expected = (project / "expected.txt").read_text().strip() if (project / "expected.txt").exists() else hs.stdout
         row["expected"] = expected
         try: prepare(classes, jar, JAVA.parent.parent, True, True)

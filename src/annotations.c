@@ -85,7 +85,7 @@ static JbvStatus read_value(JbvVM *vm, JbvClass *owner, const uint8_t **p, JbvTe
             status=jbv_annotation_value(vm,owner,p,component,&item);if(status!=JBV_OK)break;
             if(type->array_kind=='L')jbv_data(o)[i]=item;
             else {status=jbv_unbox(vm,item,type->array_kind,0,&bits);if(status!=JBV_OK)break;
-                if(type->array_kind=='C')jbv_chars(o)[i]=(uint16_t)bits;else jbv_put_bits(jbv_data(o)+i*jbv_width(jbv_kind(type->array_kind)),bits,jbv_kind(type->array_kind));}
+                jbv_array_set(o,i,type->array_kind,bits);}
         }
         (void)jbv_release(vm,*ref);return status;
     }

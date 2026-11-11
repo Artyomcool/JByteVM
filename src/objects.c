@@ -381,7 +381,7 @@ JbvStatus jbv_new(JbvVM *vm, JbvClass *type, int32_t length, int32_t *ref) {
     if (type->array_kind) {
         if (length < 0) return JBV_NEGATIVE_ARRAY_SIZE;
         count = (uint32_t)length;
-        if (type->array_kind == 'C') count = (count + 1u) / 2u;
+        if (jbv_element_bytes(type->array_kind) < 4) count = (uint32_t)(((uint64_t)count * jbv_element_bytes(type->array_kind) + 3u) / 4u);
         if (type->array_kind == 'J' || type->array_kind == 'D') {
             if (count > UINT32_MAX / 2) return JBV_OUT_OF_MEMORY;
             count *= 2;

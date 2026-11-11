@@ -148,7 +148,7 @@ JBV_API JbvStatus JBV_CALL jbv_destroy(JbvVM *vm) {
 JBV_API JbvStatus JBV_CALL jbv_load_jar(JbvVM *vm, const void *bytes, size_t size) {
     if (!vm || !bytes || vm->app.data) return JBV_BAD_ARGUMENT;
     if (vm->depth) return JBV_BUSY;
-    return jbv_archive_open(vm, &vm->app, (const uint8_t *)bytes, size);
+    return jbv_archive_open(vm, &vm->app, (const uint8_t *)bytes, size, 1);
 }
 JBV_API JbvStatus JBV_CALL jbv_load_class(JbvVM *vm, const void *bytes, size_t size) {
     JbvClass *c = 0;
