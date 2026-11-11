@@ -62,6 +62,19 @@ JbvStatus jbv_array_class(JbvVM *vm, JbvClass *component, uint8_t kind, JbvClass
     return JBV_OK;
 }
 
+JbvStatus jbv_lazy_class(JbvVM *vm, JbvText name, JbvClass **out) {
+    const uint8_t *image;
+    uint32_t size;
+    JbvClass *c = 0;
+    JbvStatus status = jbv_library_class(vm, name, out);
+    if (status != JBV_NOT_FOUND || !vm->app.data) return status;
+    status = jbv_archive_find(&vm->app, name, &image, &size);
+    if (status == JBV_OK) status = jbv_parse_owned(vm, (uint8_t *)image, size, &c);
+    if (status != JBV_OK) return status;
+    if (!jbv_text_eq(c->name, name)) { jbv_free_class(vm, c); return JBV_LINKAGE_ERROR; }
+    c->next = vm->classes; vm->classes = c; *out = c;
+    return jbv_link(vm, c, 0);
+}
 JbvStatus jbv_resolve_class(JbvVM *vm, JbvText name, JbvClass **out) {
     JbvClass *c, *component;
     JbvStatus status;
@@ -70,7 +83,7 @@ JbvStatus jbv_resolve_class(JbvVM *vm, JbvText name, JbvClass **out) {
     if (jbv_exception_name(name)) return jbv_exception_class(vm, name, out);
     c = jbv_find_class(vm, name);
     if (c) { *out = c; return jbv_link(vm, c, 0); }
-    status = jbv_library_class(vm, name, out);
+    status = jbv_lazy_class(vm, name, out);
     if (status != JBV_NOT_FOUND) return status;
     if (!name.size || name.data[0] != '[') return JBV_NOT_FOUND;
     while (dimensions < name.size && name.data[dimensions] == '[') ++dimensions;
@@ -112,7 +125,7 @@ JbvStatus jbv_link(JbvVM *vm, JbvClass *c, uint32_t depth) {
     if (!c->super_name.size) { status = JBV_LINKAGE_ERROR; goto fail; }
     c->super = jbv_find_class(vm, c->super_name);
     if (!c->super) {
-        status = jbv_library_class(vm, c->super_name, &c->super);
+        status = jbv_lazy_class(vm, c->super_name, &c->super);
         if (status != JBV_OK && status != JBV_NOT_FOUND) goto fail;
     }
     if (!c->super && jbv_exception_name(c->super_name)) {
@@ -136,7 +149,7 @@ JbvStatus jbv_link(JbvVM *vm, JbvClass *c, uint32_t depth) {
         JbvConstant *name = &c->pool[entry->a];
         c->interfaces[i] = jbv_find_class(vm, name->text);
         if (!c->interfaces[i]) {
-            status = jbv_library_class(vm, name->text, &c->interfaces[i]);
+            status = jbv_lazy_class(vm, name->text, &c->interfaces[i]);
             if (status != JBV_OK && status != JBV_NOT_FOUND) goto fail;
         }
         if (!c->interfaces[i]) { status = JBV_NOT_FOUND; goto fail; }

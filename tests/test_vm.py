@@ -48,6 +48,7 @@ class Config(C.Structure):
 LIB.jbv_create.argtypes = [C.POINTER(Config), C.POINTER(C.c_void_p)]
 LIB.jbv_destroy.argtypes = [C.c_void_p]
 LIB.jbv_load_class.argtypes = [C.c_void_p, C.c_void_p, C.c_size_t]
+LIB.jbv_load_jar.argtypes = [C.c_void_p, C.c_void_p, C.c_size_t]
 LIB.jbv_call.argtypes = [C.c_void_p, C.c_char_p, C.c_char_p, C.c_char_p, C.POINTER(C.c_int32), C.c_uint16, C.POINTER(C.c_int32)]
 LIB.jbv_bind_native.argtypes = [C.c_void_p, C.c_char_p, C.c_char_p, C.c_char_p, NATIVE, C.c_void_p]
 LIB.jbv_status_string.argtypes = [C.c_int]
@@ -101,6 +102,10 @@ class VM:
         self.config = Config(self.alloc, self.free, None, slots, depth, instructions, memory, heap)
         self.handle = C.c_void_p()
         self.status = LIB.jbv_create(C.byref(self.config), C.byref(self.handle))
+
+    def load_jar(self, data):
+        buffer = C.create_string_buffer(data)
+        return LIB.jbv_load_jar(self.handle, buffer, len(data))
 
     def load(self, data):
         buffer = C.create_string_buffer(data)
@@ -411,6 +416,19 @@ class RuntimeTests(unittest.TestCase):
             if completed:
                 break
         self.assertTrue(completed)
+
+    def test_shared_jar_loads_lazily(self):
+        import jar_pack
+        jar = jar_pack.pack_classes([("Core", (CLASSES / "Core.class").read_bytes())])
+        with VM() as vm:
+            before = vm.live_bytes
+            self.assertEqual(vm.load_jar(jar), OK)
+            self.assertEqual(vm.call("negate", 5), (OK, -5))
+            self.assertGreater(vm.live_bytes, before)
+            self.assertNotEqual(vm.load_jar(jar), OK)
+        with VM() as vm:
+            self.assertNotEqual(vm.load_jar(jar[:len(jar) // 2]), OK)
+            self.assertNotEqual(vm.call("negate", 5)[0], OK)
 
     def test_runtime_image_imports(self):
         # The runtime DLL may not hide its size in a redistributable CRT DLL.

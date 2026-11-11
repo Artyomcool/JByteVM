@@ -50,7 +50,7 @@ JBV_API JbvStatus JBV_CALL jbv_register_natives(JbvVM *vm, const char *class_nam
     if (!vm || !class_name || (count && !entries)) return JBV_BAD_ARGUMENT;
     if (vm->depth) return JBV_BUSY;
     c = jbv_find_class(vm, jbv_text(class_name));
-    if (!c) return JBV_NOT_FOUND;
+    if (!c) { JbvStatus status = jbv_lazy_class(vm, jbv_text(class_name), &c); if (status != JBV_OK) return status; }
     if (count > c->method_count) return JBV_BAD_ARGUMENT;
     /* Validate the entire table before mutating any method. No allocations,
      * class initialization or callbacks occur between these two passes. */

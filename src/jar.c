@@ -140,3 +140,27 @@ JbvStatus jbv_jar_read(JbvVM *vm, const uint8_t *jar, size_t size, JbvText name,
     }
     return JBV_NOT_FOUND;
 }
+
+/* jbv/classes.bin: u32 count, count x {u32 offset, u32 size, u8 length, name}, class images. */
+JbvStatus jbv_archive_open(JbvVM *vm, JbvArchive *archive, const uint8_t *jar, size_t size) {
+    JbvStatus status = jbv_jar_read(vm, jar, size, jbv_text("jbv/classes"), ".bin", &archive->data, &archive->size);
+    return status == JBV_NOT_FOUND ? JBV_BAD_CLASS : status;
+}
+JbvStatus jbv_archive_find(const JbvArchive *archive, JbvText name, const uint8_t **data, uint32_t *size) {
+    const uint8_t *p = archive->data;
+    size_t at = 4, total = archive->size;
+    uint32_t count, length, k;
+    if (!p) return JBV_NOT_FOUND;
+    if (total < 4) return JBV_BAD_CLASS;
+    for (count = le32(p); count--; at += 9 + length) {
+        if (total - at < 9 || total - at - 9 < (length = p[at + 8])) return JBV_BAD_CLASS;
+        if (length != name.size) continue;
+        for (k = 0; k < length && p[at + 9 + k] == name.data[k]; ++k) {}
+        if (k < length) continue;
+        k = le32(p + at);
+        if (k > total || le32(p + at + 4) > total - k) return JBV_BAD_CLASS;
+        if (data) { *data = p + k; *size = le32(p + at + 4); }
+        return JBV_OK;
+    }
+    return JBV_NOT_FOUND;
+}

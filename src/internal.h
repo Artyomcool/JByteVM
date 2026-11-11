@@ -11,6 +11,8 @@
 #define JBV_TYPED_NATIVE 0x8000 /* VM-only method flag; native_slots holds typed address. */
 
 typedef struct JbvText { const uint8_t *data; uint16_t size; } JbvText;
+/* Inflated jbv/classes.bin of a JAR; parsed classes reference it in place. */
+typedef struct JbvArchive { uint8_t *data; size_t size; } JbvArchive;
 typedef struct JbvConstant {
     uint8_t tag;
     uint16_t a, b;
@@ -121,8 +123,7 @@ struct JbvVM {
     uint8_t fp_ready;
     JbvMonitor *monitors;
     uint32_t monitor_capacity;
-    uint8_t *library; /* Inflated class library; library class images point into it. */
-    size_t library_size;
+    JbvArchive library, app; /* Built-in class library and the application JAR. */
 };
 
 void *jbv_alloc(JbvVM *vm, size_t bytes);
@@ -139,11 +140,14 @@ JbvStatus jbv_library_object(JbvVM *vm, JbvClass *type);
 #if JBV_PROFILE_FULL
 /* JBV_OK if the built-in library has the class, JBV_NOT_FOUND, or a load error. */
 JbvStatus jbv_classpath_find(JbvVM *vm, JbvText name, const uint8_t **data, uint32_t *size);
-void jbv_free_image(JbvVM *vm, uint8_t *image);
-#else /* No embedded library: nothing to inflate or share. */
+#else /* No embedded library. */
 #define jbv_classpath_find(vm, name, data, size) JBV_NOT_FOUND
-#define jbv_free_image jbv_free
 #endif
+JbvStatus jbv_archive_open(JbvVM *vm, JbvArchive *archive, const uint8_t *jar, size_t size);
+JbvStatus jbv_archive_find(const JbvArchive *archive, JbvText name, const uint8_t **data, uint32_t *size);
+/* Built-in library class, then a class of the application JAR (linked). */
+JbvStatus jbv_lazy_class(JbvVM *vm, JbvText name, JbvClass **out);
+void jbv_free_image(JbvVM *vm, uint8_t *image);
 uint8_t jbv_library_id(JbvText name);
 JbvStatus jbv_library_class(JbvVM *vm, JbvText name, JbvClass **out);
 JbvStatus jbv_library_initialize(JbvVM *vm, JbvClass *type);

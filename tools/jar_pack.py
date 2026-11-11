@@ -45,6 +45,43 @@ def _seven_zip(entries):
         return _raw_streams(Path(tmp) / 'out.zip')
 
 
+CLASSES = 'jbv/classes.bin'
+
+
+def classes_blob(classes):
+    """classes: list of (internal name, bytes). Sorted by name: neighbours share
+    the most strings inside DEFLATE's 32 KiB window. Read by jbv_archive_find."""
+    classes = sorted(classes)
+    names = [n.encode('utf-8') for n, _ in classes]
+    if len(set(names)) != len(names): raise ValueError('Duplicate class in one JAR.')
+    offset = 4 + sum(9 + len(n) for n in names)
+    index = bytearray(struct.pack('<I', len(classes)))
+    for n, (_, data) in zip(names, classes):
+        if len(n) > 255: raise ValueError(f'Class name too long: {n.decode()}')
+        index += struct.pack('<IIB', offset, len(data), len(n)) + n
+        offset += len(data)
+    return bytes(index) + b''.join(d for _, d in classes)
+
+
+def pack_classes(classes, resources=()):
+    """JByteVM JAR: all classes in one solid entry, resources as ordinary entries."""
+    return pack([(CLASSES, classes_blob(classes)), *sorted(resources)])
+
+
+def unpack(jar, directory):
+    """Expand a JByteVM JAR into a plain class directory (for HotSpot and tools)."""
+    with zipfile.ZipFile(jar) as z:
+        for name in z.namelist():
+            data = z.read(name)
+            if name != CLASSES:
+                (directory / name).parent.mkdir(parents=True, exist_ok=True); (directory / name).write_bytes(data); continue
+            count = struct.unpack_from('<I', data)[0]; at = 4
+            for _ in range(count):
+                offset, size, length = struct.unpack_from('<IIB', data, at)
+                target = directory / (data[at + 9:at + 9 + length].decode() + '.class'); at += 9 + length
+                target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data[offset:offset + size])
+
+
 def pack(entries):
     """entries: list of (name, bytes). Returns the JAR image."""
     better = _seven_zip(entries)

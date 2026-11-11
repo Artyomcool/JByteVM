@@ -12,9 +12,9 @@ if(NOT MSVC OR NOT WIN32 OR NOT CMAKE_GENERATOR_PLATFORM MATCHES "^(Win32|x64)$"
     message(FATAL_ERROR "Configure MSVC with -A Win32 (default via build.py) or -A x64.")
 endif()
 
-add_library(jbytevm SHARED src/vm.c src/classfile.c src/interpreter.c src/objects.c src/memory.c src/exceptions.c src/numeric.c src/native.c src/monitors.c src/access.c src/services.c)
+add_library(jbytevm SHARED src/vm.c src/classfile.c src/interpreter.c src/objects.c src/memory.c src/exceptions.c src/numeric.c src/native.c src/monitors.c src/access.c src/services.c src/jar.c)
 if(JBV_PROFILE STREQUAL "full")
-    target_sources(jbytevm PRIVATE src/library.c src/text.c src/decimal.c src/classpath.c src/jar.c src/dynamic.c src/values.c src/reflection.c src/annotations.c src/trace.c "${CMAKE_BINARY_DIR}/generated_classpath.c")
+    target_sources(jbytevm PRIVATE src/library.c src/text.c src/decimal.c src/classpath.c src/dynamic.c src/values.c src/reflection.c src/annotations.c src/trace.c "${CMAKE_BINARY_DIR}/generated_classpath.c")
     target_compile_definitions(jbytevm PRIVATE JBV_PROFILE_FULL=1 JBV_PROFILE_CORE=0)
 else()
     target_sources(jbytevm PRIVATE src/classpath_stub.c)

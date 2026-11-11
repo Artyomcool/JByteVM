@@ -6,7 +6,7 @@ import zipfile
 
 # The full profile inflates its class library once per VM, inside the budget.
 JAR=BUILD/'classpath.jar'
-LIBRARY=zipfile.ZipFile(JAR).getinfo('jbv/library.bin').file_size+64 if JAR.is_file() else 0
+LIBRARY=zipfile.ZipFile(JAR).getinfo('jbv/classes.bin').file_size+64 if JAR.is_file() else 0
 
 class MemoryStats(C.Structure):
     _fields_=[('used',C.c_size_t),('peak',C.c_size_t),('limit',C.c_size_t)]

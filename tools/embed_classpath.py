@@ -2,7 +2,6 @@
 from pathlib import Path
 import subprocess
 import shutil
-import struct
 import jar_pack
 import generate_wrappers
 import generate_functions
@@ -34,17 +33,8 @@ def build(jdk,build_dir):
         image_bytes+=len(data)
         if has_indy(data): raise ValueError(f'Library must not contain invokedynamic: {path}')
         entries.append((path.relative_to(classes).as_posix(),data))
-    # One solid DEFLATE stream: repeated names and descriptors across classes
-    # compress together. Layout is read by jbv_classpath_find (classpath.c).
-    entries.sort()
-    names=[n[:-6].encode() for n,_ in entries]
-    offset=4+sum(9+len(n) for n in names)
-    index=bytearray(struct.pack('<I',len(entries)))
-    for n,(_,data) in zip(names,entries):
-        if len(n)>255: raise ValueError(f'Class name too long for library index: {n}')
-        index+=struct.pack('<IIB',offset,len(data),len(n))+n; offset+=len(data)
-    library=bytes(index)+b''.join(d for _,d in entries)
-    jar=jar_pack.pack([('jbv/library.bin',library)])
+    # One solid DEFLATE stream: names and descriptors repeat across classes.
+    jar=jar_pack.pack_classes([(n[:-6],d) for n,d in entries])
     (build_dir/'classpath.jar').write_bytes(jar)
     lines=['/* Generated: the class library as a deflated JAR (also written to classpath.jar). */','#include "classpath.h"',
            f'const uint32_t jbv_library_jar_size={len(jar)};','const uint8_t jbv_library_jar[]={']

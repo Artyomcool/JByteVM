@@ -1,5 +1,4 @@
 #include "classpath.h"
-#include "jar.h"
 
 enum { H_PRIMITIVE,H_COPY,H_ARRAY,H_HASH,H_CLOCK,H_WRITE,H_COLLECT,H_FBITS,H_FVALUE,H_DBITS,H_DVALUE,H_PARSE,H_SQRT,H_ROUND };
 static const char *const hooks[] = {"primitive","arraycopy","newArrayLike","identityHash","clock","write","collect",
@@ -102,32 +101,12 @@ static JbvStatus JBV_CALL hook(JbvVM *vm, void *user, const int32_t *a, uint16_t
     default: return jbv_dynamic_native(vm, op-H_ROUND-1, a, out);
     }
 }
-static uint32_t le32(const uint8_t *p) { return p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
-/* jbv/library.bin: u32 count, count x {u32 offset, u32 size, u8 length, name}, class images.
- * It is inflated once per VM on first use; parsed classes reference it in place. */
 JbvStatus jbv_classpath_find(JbvVM *vm, JbvText name, const uint8_t **data, uint32_t *size) {
-    const uint8_t *p;
-    size_t at = 4, total;
-    uint32_t count, length, k;
-    if (!vm->library) {
-        uint8_t *image;
-        JbvStatus status = jbv_jar_read(vm, jbv_library_jar, jbv_library_jar_size, jbv_text("jbv/library"), ".bin", &image, &total);
-        if (status != JBV_OK) return status == JBV_NOT_FOUND ? JBV_BAD_CLASS : status;
-        vm->library = image; vm->library_size = total;
+    if (!vm->library.data) {
+        JbvStatus status = jbv_archive_open(vm, &vm->library, jbv_library_jar, jbv_library_jar_size);
+        if (status != JBV_OK) return status;
     }
-    p = vm->library; total = vm->library_size;
-    if (total < 4) return JBV_BAD_CLASS;
-    for (count = le32(p); count--; at += 9 + length) {
-        if (total - at < 9 || total - at - 9 < (length = p[at + 8])) return JBV_BAD_CLASS;
-        if (length != name.size) continue;
-        for (k = 0; k < length && p[at + 9 + k] == name.data[k]; ++k) {}
-        if (k < length) continue;
-        k = le32(p + at);
-        if (k > total || le32(p + at + 4) > total - k) return JBV_BAD_CLASS;
-        if (data) { *data = p + k; *size = le32(p + at + 4); }
-        return JBV_OK;
-    }
-    return JBV_NOT_FOUND;
+    return jbv_archive_find(&vm->library, name, data, size);
 }
 JbvStatus jbv_classpath_load(JbvVM *vm, JbvText name, JbvClass **out) {
     JbvClass *c;

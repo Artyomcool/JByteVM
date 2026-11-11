@@ -84,11 +84,10 @@ JbvField *jbv_find_field(JbvClass *c, JbvText name, JbvText descriptor) {
             jbv_text_eq(c->fields[i].descriptor, descriptor)) return &c->fields[i];
     return 0;
 }
-#if JBV_PROFILE_FULL
+static int inside(const JbvArchive *a, const uint8_t *p) { return a->data && p >= a->data && p < a->data + a->size; }
 void jbv_free_image(JbvVM *vm, uint8_t *image) {
-    if (!vm->library || image < vm->library || image >= vm->library + vm->library_size) jbv_free(vm, image);
+    if (!inside(&vm->library, image) && !inside(&vm->app, image)) jbv_free(vm, image);
 }
-#endif
 void jbv_free_class(JbvVM *vm, JbvClass *c) {
     if (!c) return;
     jbv_free(vm, c->methods);
@@ -139,13 +138,17 @@ JBV_API JbvStatus JBV_CALL jbv_destroy(JbvVM *vm) {
     jbv_free_heap(vm);
     jbv_free(vm, vm->monitors);
     for (c = vm->classes; c; c = next) { next = c->next; jbv_free_class(vm, c); }
-#if JBV_PROFILE_FULL
-    jbv_free(vm, vm->library);
-#endif
+    jbv_free(vm, vm->library.data);
+    jbv_free(vm, vm->app.data);
     jbv_free(vm, vm->slots);
     jbv_free(vm, vm->slot_refs);
     vm->config.free(vm->config.allocator_user, vm);
     return JBV_OK;
+}
+JBV_API JbvStatus JBV_CALL jbv_load_jar(JbvVM *vm, const void *bytes, size_t size) {
+    if (!vm || !bytes || vm->app.data) return JBV_BAD_ARGUMENT;
+    if (vm->depth) return JBV_BUSY;
+    return jbv_archive_open(vm, &vm->app, (const uint8_t *)bytes, size);
 }
 JBV_API JbvStatus JBV_CALL jbv_load_class(JbvVM *vm, const void *bytes, size_t size) {
     JbvClass *c = 0;
@@ -157,7 +160,8 @@ JBV_API JbvStatus JBV_CALL jbv_load_class(JbvVM *vm, const void *bytes, size_t s
     /* Built-in layouts are owned by the runtime, including before lazy creation. */
     status = jbv_classpath_find(vm, c->name, 0, 0);
     if (status != JBV_OK && status != JBV_NOT_FOUND) { jbv_free_class(vm, c); return status; }
-    if (jbv_find_class(vm, c->name) || jbv_library_id(c->name) || status == JBV_OK || jbv_exception_name(c->name)) {
+    if (jbv_find_class(vm, c->name) || jbv_library_id(c->name) || status == JBV_OK || jbv_exception_name(c->name) ||
+        jbv_archive_find(&vm->app, c->name, 0, 0) == JBV_OK) {
         jbv_free_class(vm, c); return JBV_LINKAGE_ERROR;
     }
     c->next = vm->classes;
@@ -171,7 +175,7 @@ static JbvStatus bind_native(JbvVM *vm, const char *class_name,
     if (!vm || !class_name || !name || !descriptor || (!callback && !wide)) return JBV_BAD_ARGUMENT;
     if (vm->depth) return JBV_BUSY;
     c = jbv_find_class(vm, jbv_text(class_name));
-    if (!c) return JBV_NOT_FOUND;
+    if (!c) { JbvStatus status = jbv_lazy_class(vm, jbv_text(class_name), &c); if (status != JBV_OK) return status; }
     m = jbv_find_method(c, jbv_text(name), jbv_text(descriptor));
     if (!m) return JBV_NOT_FOUND;
     if (!(m->flags & JBV_NATIVE) || m->intrinsic) return JBV_LINKAGE_ERROR;

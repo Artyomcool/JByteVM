@@ -110,6 +110,10 @@ JBV_API JbvStatus JBV_CALL jbv_destroy(JbvVM *vm);
  * correct. Malformed executable bytecode has undefined behavior.
  * Loading/binding during execution is BUSY. */
 JBV_API JbvStatus JBV_CALL jbv_load_class(JbvVM *vm, const void *bytes, size_t size);
+/* Opens the application JAR made by tools/prepare.py (one per VM, BAD_ARGUMENT
+ * for a second one). Its classes are inflated now and loaded lazily on first
+ * use; the host buffer is not retained. Same trust rules as jbv_load_class. */
+JBV_API JbvStatus JBV_CALL jbv_load_jar(JbvVM *vm, const void *bytes, size_t size);
 /* Instance native methods return UNSUPPORTED_FEATURE without changing binding. */
 JBV_API JbvStatus JBV_CALL jbv_bind_native(JbvVM *vm, const char *class_name,
     const char *name, const char *descriptor, JbvNative callback, void *user);
