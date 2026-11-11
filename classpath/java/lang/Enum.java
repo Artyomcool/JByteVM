@@ -9,5 +9,9 @@ public abstract class Enum<E extends Enum<E>> implements Comparable<E>,java.io.S
     public final int compareTo(E other){if(getDeclaringClass()!=other.getDeclaringClass())throw new ClassCastException();return ordinal-other.ordinal();}
     @SuppressWarnings("unchecked") public final Class<E> getDeclaringClass(){Class<?> c=getClass();return (Class<E>)(c.getSuperclass()==Enum.class?c:c.getSuperclass());}
     protected final Object clone()throws CloneNotSupportedException{throw new CloneNotSupportedException();}
-    @SuppressWarnings("unchecked") public static <T extends Enum<T>> T valueOf(Class<T> type,String name){return (T)jbv.runtime.Support.enumValue(type,name);}
+    @SuppressWarnings("unchecked") public static <T extends Enum<T>> T valueOf(Class<T> type,String name){
+        if(name==null)throw new NullPointerException("Name is null");
+        try{return (T)jbv.runtime.Support.enumValue(type,name);}
+        catch(IllegalArgumentException e){throw new IllegalArgumentException("No enum constant "+type.getName().replace('$','.')+"."+name);}
+    }
 }

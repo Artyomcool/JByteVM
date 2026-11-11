@@ -1,0 +1,1 @@
+total=135 direct=301 clamp=0

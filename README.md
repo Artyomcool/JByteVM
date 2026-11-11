@@ -546,6 +546,20 @@ size-report.json, image-breakdown.json, timing-report.json, core-profile.json
 и ram-report.json сохраняются в каталоге соответствующей сборки. Размеры
 секций точные; распределение кода по функциям из linker map приблизительное.
 
+## Пробные проекты
+
+`tests/projects/pNN_*` — небольшие «моды» (инвентарь, события на лямбдах, enum,
+исключения, рефлексия-плагины, JSON-парсер, физика, поиск пути и т.д.). Каждый
+компилируется, проходит `prepare.py` в общий JAR и запускается в JByteVM; результат
+`pNN.Main.run()` сравнивается с HotSpot. Часть проектов намеренно использует ещё
+не поддержанные API (records, switch с паттернами, streams, EnumMap, PriorityQueue,
+String.split/format) — это список пробелов, а не регрессии.
+
+```powershell
+.tools/python-x86/python.exe tests/run_projects.py --jdk .tools/jdk-25.0.5+8 [p05_enumcollections ...]
+build/x86/Release/jbytevm-bench.exe app.jar pkg/Class method 5   # время статического ()I метода, хост на malloc
+```
+
 ## Сборка модов без indy
 
 ```powershell

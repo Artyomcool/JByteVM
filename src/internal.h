@@ -225,6 +225,9 @@ JbvStatus jbv_exception_class(JbvVM *vm, JbvText name, JbvClass **out);
 JbvStatus jbv_raise(JbvVM *vm, JbvStatus status);
 JbvStatus jbv_capture_trace(JbvVM *vm, int32_t *out);
 JbvStatus jbv_throw_named(JbvVM *vm, const char *name, int32_t cause, JbvStatus status);
+/* Like jbv_throw_named with detail message owner[.member][descriptor]; '/' in owner
+ * becomes '.' when dots is set. The core profile has no strings: no message. */
+JbvStatus jbv_throw_detail(JbvVM *vm, const char *name, JbvText owner, JbvText member, JbvText descriptor, int dots, JbvStatus status);
 uint16_t jbv_u16(const uint8_t *p);
 uint32_t jbv_u32(const uint8_t *p);
 #endif

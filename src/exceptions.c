@@ -182,13 +182,36 @@ JbvStatus jbv_throw_named(JbvVM *vm, const char *name, int32_t cause, JbvStatus 
     }
     return status;
 }
+JbvStatus jbv_throw_detail(JbvVM *vm, const char *name, JbvText owner, JbvText member, JbvText descriptor, int dots, JbvStatus status) {
+#if JBV_PROFILE_CORE
+    (void)owner; (void)member; (void)descriptor; (void)dots;
+    return jbv_throw_named(vm, name, 0, status);
+#else
+    JbvObject *object;
+    JbvText text;
+    uint8_t *buffer;
+    int32_t message;
+    uint32_t size = (uint32_t)owner.size + member.size + descriptor.size + 1, i, n = 0;
+    status = jbv_throw_named(vm, name, 0, status);
+    if (!vm->exception || vm->exception == vm->emergency_oom || size > 0xffff) return status;
+    buffer = (uint8_t *)jbv_alloc(vm, size);
+    if (!buffer) return status;
+    for (i = 0; i < owner.size; ++i) buffer[n++] = dots && owner.data[i] == '/' ? '.' : owner.data[i];
+    if (member.size) { buffer[n++] = '.'; for (i = 0; i < member.size; ++i) buffer[n++] = member.data[i]; }
+    for (i = 0; i < descriptor.size; ++i) buffer[n++] = descriptor.data[i];
+    text.data = buffer; text.size = (uint16_t)n;
+    if (jbv_string_mutf(vm, text, &message) == JBV_OK && jbv_object(vm, vm->exception, &object) == JBV_OK) jbv_data(object)[0] = message;
+    jbv_free(vm, buffer);
+    return status;
+#endif
+}
 JbvStatus jbv_raise(JbvVM *vm, JbvStatus status) {
     const char *name;
     if (vm->exception && vm->exception_status == status) return status;
     vm->exception = 0; vm->exception_status = JBV_OK;
     switch (status) {
     case JBV_OUT_OF_MEMORY: name = L "OutOfMemoryError"; break;
-    case JBV_DIVIDE_BY_ZERO: name = L "ArithmeticException"; break;
+    case JBV_DIVIDE_BY_ZERO: { JbvText none = {0, 0}; return jbv_throw_detail(vm, L "ArithmeticException", jbv_text("/ by zero"), none, none, 0, status); }
     case JBV_NULL_REFERENCE: name = L "NullPointerException"; break;
     case JBV_ARRAY_BOUNDS: name = L "ArrayIndexOutOfBoundsException"; break;
     case JBV_NEGATIVE_ARRAY_SIZE: name = L "NegativeArraySizeException"; break;

@@ -11,21 +11,26 @@ public final class Numbers {
         a ^= Long.MIN_VALUE; b ^= Long.MIN_VALUE;
         return a<b?-1:a==b?0:1;
     }
+    /** The JDK's NumberFormatException.forInputString message. */
+    static NumberFormatException bad(String text,int radix){return new NumberFormatException("For input string: \""+text+"\""+(radix==10?"":" under radix "+radix));}
     public static long parse(String text,int radix,int bits,boolean unsigned) {
-        if (text==null || radix<2 || radix>36 || text.isEmpty()) throw new NumberFormatException();
+        if (text==null) throw new NumberFormatException("Cannot parse null string: null");
+        if (radix<2 || radix>36) throw new NumberFormatException("radix "+radix+(radix<2?" less than Character.MIN_RADIX":" greater than Character.MAX_RADIX"));
+        if (text.isEmpty()) throw bad(text,radix);
         int i=0, length=text.length(); boolean negative=false;
         char first=text.charAt(0);
         if (first=='-' || first=='+') { negative=first=='-'; i++; }
-        if (i==length || (unsigned && negative)) throw new NumberFormatException();
+        if (unsigned && negative) throw new NumberFormatException("Illegal leading minus sign on unsigned string "+text+".");
+        if (i==length) throw bad(text,radix);
         long limit=bits==64?Long.MIN_VALUE:-(1L<<(bits-1));
         if (!unsigned) {
             if (!negative) limit++;
             long cutoff=limit/radix, value=0;
             for (;i<length;i++) {
                 int digit=Character.digit(text.charAt(i),radix);
-                if (digit<0 || value<cutoff) throw new NumberFormatException();
+                if (digit<0 || value<cutoff) throw bad(text,radix);
                 value*=radix;
-                if (value<limit+digit) throw new NumberFormatException();
+                if (value<limit+digit) throw bad(text,radix);
                 value-=digit;
             }
             return negative?value:-value;
@@ -35,7 +40,8 @@ public final class Numbers {
         for (;i<length;i++) {
             int digit=Character.digit(text.charAt(i),radix);
             int compare=unsignedCompare(value,cutoff);
-            if (digit<0 || compare>0 || (compare==0 && digit>remainder)) throw new NumberFormatException();
+            if (digit<0) throw bad(text,radix);
+            if (compare>0 || (compare==0 && digit>remainder)) throw new NumberFormatException("String value "+text+" exceeds range of unsigned "+(bits==64?"long":"int")+".");
             value=value*radix+digit;
         }
         return value;

@@ -458,7 +458,7 @@ resume:
             status = resolve(vm, c, (uint16_t)index, &owner, &name, &descriptor);
             if (status != JBV_OK) goto finish;
             field = jbv_lookup_field(&owner, name, descriptor);
-            if (!field) FAIL(jbv_throw_named(vm, "java/lang/NoSuchFieldError", 0, JBV_NOT_FOUND));
+            if (!field) FAIL(jbv_throw_detail(vm, "java/lang/NoSuchFieldError", owner ? owner->name : name, owner ? name : descriptor, descriptor, 1, JBV_NOT_FOUND));
             status = jbv_member_access(vm, c, owner, field->flags, 0);
             if (status != JBV_OK) goto finish;
             if (!!(field->flags & JBV_STATIC) != is_static) FAIL(jbv_throw_named(vm, "java/lang/IncompatibleClassChangeError", 0, JBV_LINKAGE_ERROR));
@@ -517,7 +517,8 @@ resume:
             if (!!(symbolic->flags & JBV_INTERFACE) != (c->pool[index].tag == 11))
                 FAIL(jbv_throw_named(vm, "java/lang/IncompatibleClassChangeError", 0, JBV_LINKAGE_ERROR));
             callee = jbv_lookup_method(&owner, name, descriptor);
-            if (!callee) FAIL(jbv_throw_named(vm, owner ? "java/lang/NoSuchMethodError" : "java/lang/IncompatibleClassChangeError", 0, owner ? JBV_NOT_FOUND : JBV_LINKAGE_ERROR));
+            if (!callee) FAIL(owner ? jbv_throw_detail(vm, "java/lang/NoSuchMethodError", owner->name, name, descriptor, 1, JBV_NOT_FOUND)
+                                    : jbv_throw_named(vm, "java/lang/IncompatibleClassChangeError", 0, JBV_LINKAGE_ERROR));
             resolved = owner;
             status = jbv_member_access(vm, c, owner, symbolic->array_kind && jbv_text_is(name, "clone") ? 1 : callee->flags, 0);
             if (status != JBV_OK) goto finish;

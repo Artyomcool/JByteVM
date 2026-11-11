@@ -110,7 +110,7 @@ JbvStatus jbv_class_constant(JbvVM *vm, JbvClass *c, uint16_t index, JbvClass **
      * pointer; its bits still hold the independently cached Java Class mirror. */
     if (entry->text.data) { *out = (JbvClass *)entry->text.data; return JBV_OK; }
     status = jbv_resolve_class(vm, c->pool[entry->a].text, out);
-    if (status == JBV_NOT_FOUND) return jbv_throw_named(vm, "java/lang/NoClassDefFoundError", 0, status);
+    if (status == JBV_NOT_FOUND) { JbvText none = {0, 0}; return jbv_throw_detail(vm, "java/lang/NoClassDefFoundError", c->pool[entry->a].text, none, none, 0, status); }
     if (status == JBV_OK) status = jbv_class_access(vm, c, *out);
     if (status == JBV_OK) entry->text.data = (const uint8_t *)*out;
     return status;
