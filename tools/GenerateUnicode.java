@@ -8,8 +8,9 @@ import java.util.function.IntPredicate;
  * decoder. The generator decodes its own output and checks every code point. */
 public class GenerateUnicode {
     static final int MAX = Character.MAX_CODE_POINT;
-    /* 15-bit little-endian varint in chars; bit 15 marks a continuation. */
-    static void put(StringBuilder s, int n) { while (n >= 0x8000) { s.append((char) (0x8000 | (n & 0x7fff))); n >>>= 15; } s.append((char) n); }
+    /* Little-endian base-63 varint in ASCII chars: 64..126 a digit with more to come, 1..63 the
+     * last digit + 1. One byte each in the class file's UTF-8, which LZMA then sees as bytes. */
+    static void put(StringBuilder s, int n) { while (n >= 63) { s.append((char) (64 + n % 63)); n /= 63; } s.append((char) (1 + n)); }
     static int zig(int d) { return d < 0 ? (-d << 1) | 1 : d << 1; }
 
     static String runs(IntUnaryOperator f) {               // (length, value) pairs over 0..MAX
@@ -80,7 +81,7 @@ public class GenerateUnicode {
     /** Runtime decoder, emitted verbatim into Unicode.java (and mirrored by verify()). */
     static final String DECODER = """
         private static int at;
-        private static int next(String s){int n=0,shift=0;char c;do{c=s.charAt(at++);n|=(c&0x7fff)<<shift;shift+=15;}while((c&0x8000)!=0);return n;}
+        private static int next(String s){int n=0,m=1;char c;while((c=s.charAt(at++))>=64){n+=(c-64)*m;m*=63;}return n+(c-1)*m;}
         private static int unzig(int n){return (n&1)!=0?-(n>>>1):n>>>1;}
         /** Run tables: starts[i]..starts[i+1]-1 have values[i]. */
         static int[][] runs(String s){int n=0;at=0;while(at<s.length()){next(s);next(s);n++;}int[] starts=new int[n],values=new int[n];at=0;int c=0;
@@ -107,7 +108,7 @@ public class GenerateUnicode {
 
     /* Re-implements the decoder in the generator and checks all code points. */
     static int at;
-    static int next(String s) { int n = 0, shift = 0; char c; do { c = s.charAt(at++); n |= (c & 0x7fff) << shift; shift += 15; } while ((c & 0x8000) != 0); return n; }
+    static int next(String s) { int n = 0, m = 1; char c; while ((c = s.charAt(at++)) >= 64) { n += (c - 64) * m; m *= 63; } return n + (c - 1) * m; }
     static int unzig(int n) { return (n & 1) != 0 ? -(n >>> 1) : n >>> 1; }
     static int[] expand(String s) { int[] r = new int[MAX + 1]; at = 0; int c = 0; while (at < s.length()) { int n = next(s), v = unzig(next(s)); Arrays.fill(r, c, c + n, v); c += n; } if (c != MAX + 1) throw new IllegalStateException("runs"); return r; }
     /* Same lookup as the runtime decoder (binary search, then a bounded backward scan). */
