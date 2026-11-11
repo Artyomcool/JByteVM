@@ -42,7 +42,7 @@ JbvStatus jbv_native_call(JbvVM *vm, JbvMethod *m, const int32_t *args, uint16_t
     return status;
 }
 
-JBV_API JbvStatus JBV_CALL jbv_register_natives(JbvVM *vm, const char *class_name,
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_register_natives(JbvVM *vm, const char *class_name,
     const JbvNativeEntry *entries, uint32_t count, void *user) {
 #if defined(_M_IX86)
     JbvClass *c;
@@ -115,7 +115,7 @@ void jbv_begin_call(JbvVM *vm) {
     }
 }
 
-JBV_API JbvStatus JBV_CALL jbv_resolve_method(JbvVM *vm, const char *class_name,
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_resolve_method(JbvVM *vm, const char *class_name,
     const char *name, const char *descriptor, JbvMethodId *out) {
     JbvClass *c;
     JbvMethod *m;
@@ -132,7 +132,7 @@ JBV_API JbvStatus JBV_CALL jbv_resolve_method(JbvVM *vm, const char *class_name,
     return JBV_OK;
 }
 
-JBV_API JbvStatus JBV_CALL jbv_invoke(JbvVM *vm, const JbvMethodId *id,
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_invoke(JbvVM *vm, const JbvMethodId *id,
     const int32_t *args, uint16_t count, uint64_t *result) {
     JbvClass *owner, *target_owner;
     JbvMethod *m, *target;
@@ -167,7 +167,7 @@ JBV_API JbvStatus JBV_CALL jbv_invoke(JbvVM *vm, const JbvMethodId *id,
 #ifdef _MSC_VER
 __declspec(safebuffers)
 #endif
-JBV_API JbvStatus JBV_CALL jbv_invoke_args(JbvVM *vm, const JbvMethodId *id, JbvValue *out, ...) {
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_invoke_args(JbvVM *vm, const JbvMethodId *id, JbvValue *out, ...) {
     JbvMethod *m;
     int32_t slots[255];
     uint32_t pos = 1, count = 0, width;
@@ -197,7 +197,7 @@ JBV_API JbvStatus JBV_CALL jbv_invoke_args(JbvVM *vm, const JbvMethodId *id, Jbv
     return status;
 }
 
-JBV_API JbvStatus JBV_CALL jbv_alloc_object(JbvVM *vm, const char *class_name, JbvRef *out) {
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_alloc_object(JbvVM *vm, const char *class_name, JbvRef *out) {
     JbvClass *c;
     JbvStatus status;
     int32_t ref = 0;
@@ -213,7 +213,7 @@ JBV_API JbvStatus JBV_CALL jbv_alloc_object(JbvVM *vm, const char *class_name, J
     return status;
 }
 
-JBV_API JbvStatus JBV_CALL jbv_new_array(JbvVM *vm, const char *descriptor, int32_t length, JbvRef *out) {
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_new_array(JbvVM *vm, const char *descriptor, int32_t length, JbvRef *out) {
     JbvClass *c;
     JbvStatus status;
     int32_t ref = 0;
@@ -225,7 +225,7 @@ JBV_API JbvStatus JBV_CALL jbv_new_array(JbvVM *vm, const char *descriptor, int3
     return status;
 }
 
-JBV_API JbvStatus JBV_CALL jbv_resolve_field(JbvVM *vm, const char *class_name,
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_resolve_field(JbvVM *vm, const char *class_name,
     const char *name, const char *descriptor, JbvFieldId *out) {
     JbvClass *c;
     JbvField *f;
@@ -239,7 +239,7 @@ JBV_API JbvStatus JBV_CALL jbv_resolve_field(JbvVM *vm, const char *class_name,
     return JBV_OK;
 }
 
-static JbvStatus field_location(JbvVM *vm, const JbvFieldId *id, int32_t ref, int32_t **out) {
+JBV_GC static JbvStatus field_location(JbvVM *vm, const JbvFieldId *id, int32_t ref, int32_t **out) {
     JbvClass *c = (JbvClass *)id->owner;
     JbvField *f = (JbvField *)id->field;
     JbvStatus status;
@@ -259,7 +259,7 @@ static JbvStatus field_location(JbvVM *vm, const JbvFieldId *id, int32_t ref, in
     return status;
 }
 
-JBV_API JbvStatus JBV_CALL jbv_get_field(JbvVM *vm, const JbvFieldId *id, JbvRef receiver, uint64_t *out) {
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_get_field(JbvVM *vm, const JbvFieldId *id, JbvRef receiver, uint64_t *out) {
     JbvField *f;
     JbvStatus status;
     int32_t *location;
@@ -275,7 +275,7 @@ JBV_API JbvStatus JBV_CALL jbv_get_field(JbvVM *vm, const JbvFieldId *id, JbvRef
     return status;
 }
 
-JBV_API JbvStatus JBV_CALL jbv_set_field(JbvVM *vm, const JbvFieldId *id, JbvRef receiver, uint64_t value) {
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_set_field(JbvVM *vm, const JbvFieldId *id, JbvRef receiver, uint64_t value) {
     JbvField *f;
     JbvStatus status;
     int32_t *location, ref = jbv_i32((uint32_t)value);
@@ -381,7 +381,7 @@ JBV_API JbvStatus JBV_CALL jbv_array_write(JbvVM *vm, JbvRef ref, uint32_t start
     return JBV_OK;
 }
 
-JBV_API JbvStatus JBV_CALL jbv_throw(JbvVM *vm, JbvRef ref) {
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_throw(JbvVM *vm, JbvRef ref) {
     JbvStatus status;
     if (!vm) return JBV_BAD_ARGUMENT;
     if (!ref) return JBV_NULL_REFERENCE;

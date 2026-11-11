@@ -2,7 +2,7 @@
 
 /* The core profile supplies object identity and cloning. Text, Class mirrors,
  * primitive wrappers and the Java class library are separate build features. */
-static JbvStatus JBV_CALL core_native(JbvVM *vm, void *user, const int32_t *args, uint16_t count, uint64_t *out) {
+JBV_GC static JbvStatus JBV_CALL core_native(JbvVM *vm, void *user, const int32_t *args, uint16_t count, uint64_t *out) {
     uint32_t op = (uint32_t)(uintptr_t)user;
     JbvObject *object, *copy = 0;
     JbvStatus status;
@@ -36,8 +36,8 @@ JbvStatus jbv_library_class(JbvVM *vm,JbvText name,JbvClass **out){(void)vm;(voi
 JbvStatus jbv_library_initialize(JbvVM *vm,JbvClass *type){(void)vm;(void)type;return JBV_OK;}
 JbvStatus jbv_literal(JbvVM *vm,JbvClass *type,uint16_t index,int32_t *out){(void)vm;(void)type;(void)index;(void)out;return JBV_UNSUPPORTED_FEATURE;}
 JbvStatus jbv_mirror(JbvVM *vm,JbvClass *type,int32_t *out){(void)vm;(void)type;(void)out;return JBV_UNSUPPORTED_FEATURE;}
-JBV_API JbvStatus JBV_CALL jbv_string_new_utf16(JbvVM *vm,const uint16_t *text,uint32_t length,JbvRef *out){(void)vm;(void)text;(void)length;(void)out;return JBV_UNSUPPORTED_FEATURE;}
-JBV_API JbvStatus JBV_CALL jbv_string_new_utf8(JbvVM *vm,const char *text,uint32_t length,JbvRef *out){(void)vm;(void)text;(void)length;(void)out;return JBV_UNSUPPORTED_FEATURE;}
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_string_new_utf16(JbvVM *vm,const uint16_t *text,uint32_t length,JbvRef *out){(void)vm;(void)text;(void)length;(void)out;return JBV_UNSUPPORTED_FEATURE;}
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_string_new_utf8(JbvVM *vm,const char *text,uint32_t length,JbvRef *out){(void)vm;(void)text;(void)length;(void)out;return JBV_UNSUPPORTED_FEATURE;}
 JBV_API JbvStatus JBV_CALL jbv_string_length(JbvVM *vm,JbvRef ref,uint32_t *out){(void)vm;(void)ref;(void)out;return JBV_UNSUPPORTED_FEATURE;}
 JBV_API JbvStatus JBV_CALL jbv_string_read_utf16(JbvVM *vm,JbvRef ref,uint32_t start,uint32_t count,uint16_t *out){(void)vm;(void)ref;(void)start;(void)count;(void)out;return JBV_UNSUPPORTED_FEATURE;}
 JBV_API JbvStatus JBV_CALL jbv_string_read_utf8(JbvVM *vm,JbvRef ref,char *out,uint32_t capacity,uint32_t *bytes){(void)vm;(void)ref;(void)out;(void)capacity;(void)bytes;return JBV_UNSUPPORTED_FEATURE;}

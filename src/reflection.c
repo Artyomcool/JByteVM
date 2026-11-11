@@ -18,8 +18,8 @@ const uint8_t *jbv_attribute(JbvClass *owner, const uint8_t *p, const char *key)
     }
     return 0;
 }
-static JbvStatus error(JbvVM *vm, const char *type) { return jbv_throw_named(vm, type, 0, JBV_EXCEPTION); }
-static JbvStatus array(JbvVM *vm, const char *component, uint32_t count, int32_t *ref) {
+JBV_GC static JbvStatus error(JbvVM *vm, const char *type) { return jbv_throw_named(vm, type, 0, JBV_EXCEPTION); }
+JBV_GC static JbvStatus array(JbvVM *vm, const char *component, uint32_t count, int32_t *ref) {
     JbvClass *c = 0;
     JbvStatus status = jbv_resolve_class(vm, jbv_text(component), &c);
     if (status == JBV_OK) status = jbv_array_class(vm, c, 'L', &c);
@@ -38,7 +38,7 @@ static JbvStatus unpack(JbvVM *vm, int32_t ref, Member *m, JbvObject **o) {
     m->kind = (uint8_t)jbv_data(*o)[4];
     return m->target && m->owner ? JBV_OK : JBV_BAD_ARGUMENT;
 }
-static JbvStatus wrap(JbvVM *vm, Member m, int32_t *out) {
+JBV_GC static JbvStatus wrap(JbvVM *vm, Member m, int32_t *out) {
     JbvClass *c = 0;
     JbvObject *o;
     int32_t owner;
@@ -98,7 +98,7 @@ static JbvStatus members(JbvVM *vm, Members *list, JbvClass *c, uint8_t kind, in
     }
     return JBV_OK;
 }
-static JbvStatus parameters_match(JbvVM *vm, JbvText d, int32_t params, int *match) {
+JBV_GC static JbvStatus parameters_match(JbvVM *vm, JbvText d, int32_t params, int *match) {
     uint32_t pos = 1, i = 0, width, n = 0;
     JbvObject *o = 0;
     if (params) { (void)jbv_object(vm, params, &o); n = jbv_length(o); }
@@ -117,7 +117,7 @@ static JbvStatus parameters_match(JbvVM *vm, JbvText d, int32_t params, int *mat
     *match = i == n; return JBV_OK;
 }
 /* Generic signatures are parsed in Java: jbv.runtime.Generics.ofClass(Class,int). */
-static JbvStatus generics(JbvVM *vm, int32_t mirror, uint32_t what, uint64_t *out) {
+JBV_GC static JbvStatus generics(JbvVM *vm, int32_t mirror, uint32_t what, uint64_t *out) {
     static const uint8_t refs[2] = {1, 0};
     int32_t args[2];
     JbvClass *g;
@@ -244,7 +244,7 @@ static JbvClass *caller(JbvVM *vm) {
     }
     return 0;
 }
-static JbvStatus access(JbvVM *vm, Member m, JbvObject *member, int32_t receiver, int query) {
+JBV_GC static JbvStatus access(JbvVM *vm, Member m, JbvObject *member, int32_t receiver, int query) {
     JbvObject *o;
     JbvClass *from, *type = 0;
     JbvStatus status;
@@ -263,7 +263,7 @@ static JbvStatus access(JbvVM *vm, Member m, JbvObject *member, int32_t receiver
     if (status == JBV_LINKAGE_ERROR) { vm->exception = 0; return error(vm,"java/lang/IllegalAccessException"); }
     return status;
 }
-static JbvStatus info(JbvVM *vm, Member m, uint32_t op, int32_t *ref) {
+JBV_GC static JbvStatus info(JbvVM *vm, Member m, uint32_t op, int32_t *ref) {
     JbvText d = descriptor(m);
     JbvClass *c = 0;
     JbvObject *o;
@@ -302,11 +302,11 @@ static JbvStatus info(JbvVM *vm, Member m, uint32_t op, int32_t *ref) {
     }
     (void)jbv_release(vm,*ref); return status;
 }
-static JbvStatus convert(JbvVM *vm, int32_t value, JbvText type, uint64_t *bits) {
+JBV_GC static JbvStatus convert(JbvVM *vm, int32_t value, JbvText type, uint64_t *bits) {
     JbvStatus status = jbv_from_object(vm,value,type,bits);
     return status == JBV_CLASS_CAST || status == JBV_NULL_REFERENCE ? JBV_BAD_ARGUMENT : status;
 }
-static JbvStatus invoke(JbvVM *vm, Member m, JbvObject *member, int32_t receiver, int32_t arguments, int32_t *out) {
+JBV_GC static JbvStatus invoke(JbvVM *vm, Member m, JbvObject *member, int32_t receiver, int32_t arguments, int32_t *out) {
     JbvMethod *method = (JbvMethod *)m.target;
     JbvObject *args = 0, *o;
     JbvText d = method->descriptor, result = jbv_return_type(d);
@@ -355,7 +355,7 @@ static JbvStatus invoke(JbvVM *vm, Member m, JbvObject *member, int32_t receiver
 done:
     (void)jbv_release(vm,created);jbv_free(vm,slots);jbv_free(vm,refs);return status;
 }
-static JbvStatus field(JbvVM *vm, Member m, JbvObject *member, const int32_t *a, int32_t *out) {
+JBV_GC static JbvStatus field(JbvVM *vm, Member m, JbvObject *member, const int32_t *a, int32_t *out) {
     JbvField *f=(JbvField *)m.target;
     JbvObject *o = 0;
     int32_t *location;
@@ -376,7 +376,7 @@ static JbvStatus field(JbvVM *vm, Member m, JbvObject *member, const int32_t *a,
     return jbv_box(vm,f->descriptor.data[0],bits,out);
 }
 /* sizes[] holds at most 255 dimensions, checked before the copy. */
-__declspec(safebuffers)
+JBV_GC __declspec(safebuffers)
 static JbvStatus reflect_array(JbvVM *vm, const int32_t *a, int32_t *out) {
     JbvObject *o, *dims;
     JbvClass *c = 0;

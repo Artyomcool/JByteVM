@@ -10,14 +10,14 @@ static const char codes[] = "ZBCSIJFDV";
 static const char *const wrappers[] = {"java/lang/Boolean","java/lang/Byte","java/lang/Character","java/lang/Short",
     "java/lang/Integer","java/lang/Long","java/lang/Float","java/lang/Double","java/lang/Void"};
 
-static JbvStatus new_object(JbvVM *vm, const char *name, int32_t *ref, JbvObject **out) {
+JBV_GC static JbvStatus new_object(JbvVM *vm, const char *name, int32_t *ref, JbvObject **out) {
     JbvClass *type;
     JbvStatus status = jbv_resolve_class(vm, jbv_text(name), &type);
     if (status == JBV_OK) status = jbv_new(vm, type, 0, ref);
     if (status == JBV_OK) (void)jbv_object(vm, *ref, out);
     return status;
 }
-static JbvStatus method_type(JbvVM *vm, JbvText descriptor, int32_t *out) {
+JBV_GC static JbvStatus method_type(JbvVM *vm, JbvText descriptor, int32_t *out) {
     int32_t string;
     JbvObject *o;
     JbvStatus status = jbv_string_mutf(vm, descriptor, &string);
@@ -35,7 +35,7 @@ static uint32_t class_descriptor(JbvClass *type, uint8_t *buffer) {
     if (!type->array_kind) buffer[n++] = ';';
     return n;
 }
-static JbvStatus make_handle(JbvVM *vm, JbvClass *caller, JbvClass *symbolic, JbvText name, JbvText descriptor, uint8_t kind, int32_t *out) {
+JBV_GC static JbvStatus make_handle(JbvVM *vm, JbvClass *caller, JbvClass *symbolic, JbvText name, JbvText descriptor, uint8_t kind, int32_t *out) {
     JbvClass *owner = symbolic;
     JbvMethod *method = 0;
     JbvField *field = 0;
@@ -95,7 +95,7 @@ static JbvStatus make_handle(JbvVM *vm, JbvClass *caller, JbvClass *symbolic, Jb
     }
     (void)jbv_release(vm, type_ref); return status;
 }
-static JbvStatus object_array(JbvVM *vm, JbvClass *component, uint32_t length, int32_t *ref) {
+JBV_GC static JbvStatus object_array(JbvVM *vm, JbvClass *component, uint32_t length, int32_t *ref) {
     JbvClass *type;
     JbvStatus status = jbv_array_class(vm, component, 'L', &type);
     return status == JBV_OK ? jbv_new(vm, type, (int32_t)length, ref) : status;
@@ -105,7 +105,7 @@ static JbvStatus handle_descriptor(JbvVM *vm, JbvObject *handle, JbvText *out) {
     JbvStatus status = jbv_object(vm, jbv_data(handle)[5], &type);
     return status == JBV_OK ? jbv_text_bytes(vm, jbv_data(type)[0], out) : status;
 }
-static JbvStatus invoke_handle(JbvVM *vm, int32_t ref, int32_t array_ref, int32_t *out, int collect) {
+JBV_GC static JbvStatus invoke_handle(JbvVM *vm, int32_t ref, int32_t array_ref, int32_t *out, int collect) {
     JbvObject *handle, *array, *receiver = 0;
     JbvClass *owner, *caller;
     JbvMethod *method = 0;

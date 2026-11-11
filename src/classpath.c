@@ -57,7 +57,7 @@ static uint64_t integral_round(uint64_t bits, int mode) {
         (mode == 2 && (fraction > half || (fraction == half && (magnitude & unit))))) magnitude += unit;
     return sign | magnitude;
 }
-static JbvStatus JBV_CALL hook(JbvVM *vm, void *user, const int32_t *a, uint16_t count, uint64_t *out) {
+JBV_GC static JbvStatus JBV_CALL hook(JbvVM *vm, void *user, const int32_t *a, uint16_t count, uint64_t *out) {
     uint32_t op = (uint32_t)(uintptr_t)user;
     int32_t ref;
     JbvStatus status;

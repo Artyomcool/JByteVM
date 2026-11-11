@@ -618,7 +618,7 @@ static JbvStatus grow_handles(JbvVM *vm) {
     return JBV_OK;
 }
 /* Out of host memory: promote everything, give the young region back, continue old-only. */
-static int drop_young(JbvVM *vm, int moving) {
+JBV_GC static int drop_young(JbvVM *vm, int moving) {
     if (!vm->nursery || (vm->nursery_top != vm->nursery && (!moving || minor(vm) != JBV_OK))) return 0;
     jbv_free(vm, vm->nursery);
     vm->nursery = vm->nursery_top = 0; vm->nursery_size = 0; vm->nursery_disabled = 1;
@@ -734,7 +734,7 @@ JbvStatus jbv_multi_array(JbvVM *vm, JbvClass *type, const int32_t *sizes, uint8
     if (status == JBV_OK) *ref = parent;
     return status;
 }
-JBV_API JbvStatus JBV_CALL jbv_set_heap_limit(JbvVM *vm, size_t bytes) {
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_set_heap_limit(JbvVM *vm, size_t bytes) {
     if (!vm || !bytes || bytes > vm->config.max_memory) return JBV_BAD_ARGUMENT;
     if (vm->depth) return JBV_BUSY;
     (void)jbv_collect(vm);

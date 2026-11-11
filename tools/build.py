@@ -98,6 +98,8 @@ def main():
     (build / "image-breakdown.json").write_text(json.dumps(inspect_image(build / "Release/jbytevm.dll"), indent=2) + "\n")
     print(json.dumps(report, indent=2), flush=True)
     if args.test:
+        # Every function that may collect (and move objects) must be marked JBV_GC.
+        run([sys.executable, ROOT / "tools/check_gc.py"])
         pointer_size = 4 if args.arch == "x86" else 8
         python = args.test_python
         if not python:

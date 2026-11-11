@@ -175,7 +175,7 @@ JBV_GC JbvStatus jbv_lazy_class(JbvVM *vm, JbvText name, JbvClass **out);
 void jbv_free_image(JbvVM *vm, uint8_t *image);
 uint8_t jbv_library_id(JbvText name);
 JBV_GC JbvStatus jbv_library_class(JbvVM *vm, JbvText name, JbvClass **out);
-JbvStatus jbv_library_initialize(JbvVM *vm, JbvClass *type);
+JBV_GC JbvStatus jbv_library_initialize(JbvVM *vm, JbvClass *type);
 JBV_GC JbvStatus jbv_literal(JbvVM *vm, JbvClass *owner, uint16_t index, int32_t *out);
 JBV_GC JbvStatus jbv_mirror(JbvVM *vm, JbvClass *type, int32_t *out);
 JBV_GC JbvStatus jbv_link(JbvVM *vm, JbvClass *c, uint32_t depth);

@@ -13,7 +13,7 @@ JbvStatus jbv_class_access(JbvVM *vm, JbvClass *caller, JbvClass *target) {
     return (target->flags & 1) || jbv_same_package(caller, target) ? JBV_OK :
         jbv_throw_named(vm, "java/lang/IllegalAccessError", 0, JBV_LINKAGE_ERROR);
 }
-static JbvStatus nest_host(JbvVM *vm, JbvClass *member, JbvClass **out) {
+JBV_GC static JbvStatus nest_host(JbvVM *vm, JbvClass *member, JbvClass **out) {
     JbvClass *host;
     uint16_t i;
     JbvStatus status;

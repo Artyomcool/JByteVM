@@ -168,7 +168,7 @@ JBV_API JbvStatus JBV_CALL jbv_load_class(JbvVM *vm, const void *bytes, size_t s
     vm->classes = c;
     return JBV_OK;
 }
-static JbvStatus bind_native(JbvVM *vm, const char *class_name,
+JBV_GC static JbvStatus bind_native(JbvVM *vm, const char *class_name,
     const char *name, const char *descriptor, JbvNative callback, JbvNativeSlots wide, void *user) {
     JbvClass *c;
     JbvMethod *m;
@@ -187,15 +187,15 @@ static JbvStatus bind_native(JbvVM *vm, const char *class_name,
     m->native_user = user;
     return JBV_OK;
 }
-JBV_API JbvStatus JBV_CALL jbv_bind_native(JbvVM *vm, const char *class_name,
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_bind_native(JbvVM *vm, const char *class_name,
     const char *name, const char *descriptor, JbvNative callback, void *user) {
     return bind_native(vm, class_name, name, descriptor, callback, 0, user);
 }
-JBV_API JbvStatus JBV_CALL jbv_bind_native_slots(JbvVM *vm, const char *class_name,
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_bind_native_slots(JbvVM *vm, const char *class_name,
     const char *name, const char *descriptor, JbvNativeSlots callback, void *user) {
     return bind_native(vm, class_name, name, descriptor, 0, callback, user);
 }
-JBV_API JbvStatus JBV_CALL jbv_call(JbvVM *vm, const char *class_name,
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_call(JbvVM *vm, const char *class_name,
     const char *name, const char *descriptor, const int32_t *args,
     uint16_t count, int32_t *result) {
     uint64_t value = 0;
@@ -210,7 +210,7 @@ JBV_API JbvStatus JBV_CALL jbv_call(JbvVM *vm, const char *class_name,
     if (status == JBV_OK) *result = jbv_i32((uint32_t)value);
     return status;
 }
-JBV_API JbvStatus JBV_CALL jbv_call_slots(JbvVM *vm, const char *class_name,
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_call_slots(JbvVM *vm, const char *class_name,
     const char *name, const char *descriptor, const int32_t *args,
     uint16_t count, uint64_t *result) {
     JbvMethodId id;

@@ -173,7 +173,7 @@ JbvStatus jbv_mirror(JbvVM *vm, JbvClass *type, int32_t *out) {
 static JbvClass *represented(JbvObject *o) {
     return (JbvClass *)(uintptr_t)jbv_slot_bits(jbv_data(o), JBV_LONG);
 }
-static JbvStatus class_name_string(JbvVM *vm, JbvClass *c, int prefix, int32_t *out) {
+JBV_GC static JbvStatus class_name_string(JbvVM *vm, JbvClass *c, int prefix, int32_t *out) {
     uint16_t *data;
     uint32_t i, n = 0;
     int32_t ref;
@@ -196,7 +196,7 @@ static JbvStatus class_name_string(JbvVM *vm, JbvClass *c, int prefix, int32_t *
     return JBV_OK;
 }
 /* The only scalar stack buffer is the bounded eight-digit hexadecimal hash. */
-__declspec(safebuffers)
+JBV_GC __declspec(safebuffers)
 static JbvStatus JBV_CALL library_native(JbvVM *vm, void *user, const int32_t *a, uint16_t count, uint64_t *out) {
     uint32_t packed = (uint32_t)(uintptr_t)user, op = packed & 255;
     JbvObject *o = 0, *other = 0;
@@ -289,7 +289,7 @@ static JbvStatus JBV_CALL library_native(JbvVM *vm, void *user, const int32_t *a
  * jbv.runtime.Strings whose descriptor prepends the receiver; constructors map to
  * a static "init" returning a new instance whose fields are copied into this.
  * Native methods never use line tables, so `lines` caches the resolved helper. */
-static JbvStatus JBV_CALL java_native(JbvVM *vm, void *user, const int32_t *a, uint16_t count, uint64_t *out) {
+JBV_GC static JbvStatus JBV_CALL java_native(JbvVM *vm, void *user, const int32_t *a, uint16_t count, uint64_t *out) {
     JbvMethod *m = (JbvMethod *)user, *h = (JbvMethod *)(uintptr_t)m->lines;
     JbvClass *helper;
     JbvObject *self = 0, *made = 0;

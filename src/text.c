@@ -11,7 +11,7 @@ JbvStatus jbv_string_view(JbvVM *vm, int32_t ref, JbvTextView *out) {
     if (status == JBV_OK) { out->data = jbv_chars(a); out->length = jbv_length(a); }
     return status;
 }
-static JbvStatus char_array(JbvVM *vm, uint32_t length, int32_t *ref, uint16_t **data) {
+JBV_GC static JbvStatus char_array(JbvVM *vm, uint32_t length, int32_t *ref, uint16_t **data) {
     JbvClass *type;
     JbvObject *o = 0;
     JbvStatus status;
@@ -50,7 +50,7 @@ static JbvStatus array_view(JbvVM *vm, int32_t ref, JbvTextView *view) {
     view->data = jbv_chars(o); view->length = jbv_length(o); return JBV_OK;
 }
 /* Copies n units at start of String or char[] src (rooted) into a new string. */
-static JbvStatus copy_string(JbvVM *vm, int32_t src, uint32_t start, uint32_t n, int32_t *out) {
+JBV_GC static JbvStatus copy_string(JbvVM *vm, int32_t src, uint32_t start, uint32_t n, int32_t *out) {
     JbvTextView view;
     uint16_t *to;
     uint32_t i;
@@ -115,7 +115,7 @@ uint32_t jbv_integer_text(uint64_t magnitude, int negative, uint32_t radix, uint
     return n;
 }
 /* Each formatting function writes at most 32 UTF-16 units into this buffer. */
-__declspec(safebuffers)
+JBV_GC __declspec(safebuffers)
 static JbvStatus value_string(JbvVM *vm, uint8_t kind, const int32_t *a, int32_t *out) {
     uint16_t text[32];
     uint32_t n;
@@ -135,10 +135,10 @@ static JbvStatus value_string(JbvVM *vm, uint8_t kind, const int32_t *a, int32_t
     if (status == JBV_OK) while (n--) to[n] = text[n];
     return status;
 }
-static JbvStatus string_bounds(JbvVM *vm) {
+JBV_GC static JbvStatus string_bounds(JbvVM *vm) {
     return jbv_throw_named(vm, "java/lang/StringIndexOutOfBoundsException", 0, JBV_ARRAY_BOUNDS);
 }
-static JbvStatus sequence_string(JbvVM *vm, int32_t ref, int sliced, int32_t start, int32_t end, int32_t *out) {
+JBV_GC static JbvStatus sequence_string(JbvVM *vm, int32_t ref, int sliced, int32_t start, int32_t end, int32_t *out) {
     JbvObject *o;
     JbvClass *owner, *type;
     JbvMethodId id;
@@ -189,7 +189,7 @@ static JbvStatus sequence_string(JbvVM *vm, int32_t ref, int sliced, int32_t sta
     if (status == JBV_OK) *out = value;
     return status;
 }
-static JbvStatus builder_buffer(JbvVM *vm, int32_t builder, uint32_t minimum, JbvTextView *view) {
+JBV_GC static JbvStatus builder_buffer(JbvVM *vm, int32_t builder, uint32_t minimum, JbvTextView *view) {
     JbvObject *o;
     int32_t *fields, ref;
     uint16_t *data;
@@ -210,7 +210,7 @@ static JbvStatus builder_buffer(JbvVM *vm, int32_t builder, uint32_t minimum, Jb
     fields[0] = ref; jbv_barrier_checked(vm, o, ref); view->data = data; view->length = n;
     return JBV_OK;
 }
-static JbvStatus builder_call(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *a, uint16_t count, int32_t *out) {
+JBV_GC static JbvStatus builder_call(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *a, uint16_t count, int32_t *out) {
     JbvObject *o;
     JbvTextView buffer, text;
     JbvStatus status = jbv_object(vm, a[0], &o);
@@ -350,7 +350,7 @@ static int text_match(JbvTextView text, uint32_t at, JbvTextView pattern) {
     for (i = 0; i < pattern.length; ++i) if (text.data[at+i] != pattern.data[i]) return 0;
     return 1;
 }
-static JbvStatus replace_sequence(JbvVM *vm, const int32_t *a, int32_t *out, int contains) {
+JBV_GC static JbvStatus replace_sequence(JbvVM *vm, const int32_t *a, int32_t *out, int contains) {
     JbvTextView text, pattern, replacement = {0, 0};
     int32_t p = 0, r = 0;
     uint16_t *data;
@@ -547,7 +547,7 @@ JbvStatus jbv_text_native(JbvVM *vm, uint32_t op, uint8_t kind, const int32_t *a
     *out = (uint32_t)result; return JBV_OK;
 }
 
-JBV_API JbvStatus JBV_CALL jbv_string_new_utf16(JbvVM *vm, const uint16_t *text, uint32_t length, JbvRef *out) {
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_string_new_utf16(JbvVM *vm, const uint16_t *text, uint32_t length, JbvRef *out) {
     int32_t ref;
     uint16_t *data;
     uint32_t i;
@@ -573,7 +573,7 @@ static int utf8_next(const uint8_t *s, uint32_t n, uint32_t *pos, uint32_t *out)
     if (ch < min || ch > 0x10ffff || (ch >= 0xd800 && ch <= 0xdfff)) return 0;
     *out = ch; return 1;
 }
-JBV_API JbvStatus JBV_CALL jbv_string_new_utf8(JbvVM *vm, const char *text, uint32_t bytes, JbvRef *out) {
+JBV_GC JBV_API JbvStatus JBV_CALL jbv_string_new_utf8(JbvVM *vm, const char *text, uint32_t bytes, JbvRef *out) {
     uint32_t pos = 0, n = 0, ch = 0;
     int32_t ref;
     uint16_t *data;

@@ -2,7 +2,7 @@
 
 #define ANNOTATION "java/lang/annotation/Annotation"
 #define IMPL "jbv/runtime/AnnotationValue"
-static JbvStatus read_annotation(JbvVM *vm, JbvClass *owner, const uint8_t **p, int32_t *ref);
+JBV_GC static JbvStatus read_annotation(JbvVM *vm, JbvClass *owner, const uint8_t **p, int32_t *ref);
 static uint16_t read2(const uint8_t **p) { uint16_t n=jbv_u16(*p);*p+=2;return n; }
 static const uint8_t *skip_value(const uint8_t *p);
 static const uint8_t *skip_annotation(const uint8_t *p) {
@@ -24,7 +24,7 @@ static void store(JbvVM *vm, int32_t array, uint32_t i, int32_t value) {
     JbvObject *o;
     (void)jbv_object(vm,array,&o);jbv_data(o)[i]=value;jbv_barrier_checked(vm,o,value);
 }
-static JbvStatus clone_array(JbvVM *vm, int32_t value, int32_t *out) {
+JBV_GC static JbvStatus clone_array(JbvVM *vm, int32_t value, int32_t *out) {
     JbvObject *o, *copy;
     JbvStatus status=jbv_object(vm,value,&o);
     size_t i;
@@ -36,7 +36,7 @@ static JbvStatus clone_array(JbvVM *vm, int32_t value, int32_t *out) {
     for(i=0;i<jbv_object_bytes(o);++i)((volatile uint8_t *)(copy+1))[i]=((const uint8_t *)(o+1))[i];
     return JBV_OK;
 }
-static JbvStatus JBV_CALL element(JbvVM *vm, void *user, const int32_t *a, uint16_t count, uint64_t *out) {
+JBV_GC static JbvStatus JBV_CALL element(JbvVM *vm, void *user, const int32_t *a, uint16_t count, uint64_t *out) {
     JbvObject *o,*values;
     int32_t ref;
     JbvStatus status=jbv_object(vm,a[0],&o);
@@ -49,7 +49,7 @@ static JbvStatus JBV_CALL element(JbvVM *vm, void *user, const int32_t *a, uint1
     if(jbv_reference_type(jbv_return_type(method->descriptor))){status=clone_array(vm,ref,&ref);if(status==JBV_OK)*out=(uint32_t)ref;return status;}
     return jbv_unbox(vm,ref,jbv_return_type(method->descriptor).data[0],0,out);
 }
-static JbvStatus implementation(JbvVM *vm, JbvClass *type, JbvClass **out) {
+JBV_GC static JbvStatus implementation(JbvVM *vm, JbvClass *type, JbvClass **out) {
     JbvClass *c,*base=0;
     uint32_t i;
     JbvStatus status;
@@ -73,7 +73,7 @@ static JbvStatus implementation(JbvVM *vm, JbvClass *type, JbvClass **out) {
     }
     c->next=vm->classes;vm->classes=c;*out=c;return JBV_OK;
 }
-static JbvStatus read_value(JbvVM *vm, JbvClass *owner, const uint8_t **p, JbvText expected, int32_t *ref) {
+JBV_GC static JbvStatus read_value(JbvVM *vm, JbvClass *owner, const uint8_t **p, JbvText expected, int32_t *ref) {
     uint8_t tag=*(*p)++;
     uint16_t index;
     JbvClass *type=0;

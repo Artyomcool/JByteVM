@@ -61,7 +61,7 @@ static const ExceptionMethod methods[] = {
     {"getSuppressed", "()[Ljava/lang/Throwable;"}
 };
 /* Throwable payload is ordinary traced fields: message, cause, suppressed. */
-static JbvStatus JBV_CALL exception_native(JbvVM *vm, void *user, const int32_t *a, uint16_t count, int32_t *out) {
+JBV_GC static JbvStatus JBV_CALL exception_native(JbvVM *vm, void *user, const int32_t *a, uint16_t count, int32_t *out) {
     JbvObject *object, *old = 0, *array = 0;
     int32_t *fields, ref = 0;
     uint32_t id = (uint32_t)(uintptr_t)user, i, length = 0;

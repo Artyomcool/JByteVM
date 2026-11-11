@@ -97,7 +97,7 @@ fail:
     if (pin > 0) (void)jbv_arguments(vm, owner, method, args, (uint16_t)i, 0, -1);
     return status;
 }
-static JbvStatus initialize_defaults(JbvVM *vm, JbvClass *c) {
+JBV_GC static JbvStatus initialize_defaults(JbvVM *vm, JbvClass *c) {
     uint16_t i;
     JbvStatus status;
     for (i = 0; i < c->interface_count; ++i) {
@@ -142,7 +142,7 @@ JbvStatus jbv_initialize(JbvVM *vm, JbvClass *c) {
     --vm->depth;
     return status;
 }
-static JbvStatus resolve(JbvVM *vm, JbvClass *c, uint16_t index,
+JBV_GC static JbvStatus resolve(JbvVM *vm, JbvClass *c, uint16_t index,
     JbvClass **owner, JbvText *name, JbvText *descriptor) {
     JbvConstant *ref = &c->pool[index], *pair = &c->pool[ref->b];
     *name = c->pool[pair->a].text;
