@@ -105,6 +105,7 @@ void jbv_free_class(JbvVM *vm, JbvClass *c) {
         for (slot = 0; slot < 5; ++slot) vm->throwable_init[slot] = 0;
     }
     jbv_free(vm, c->ref_slots);
+    jbv_free(vm, c->root_slots);
     jbv_free(vm, c->methods);
     jbv_free(vm, c->fields);
     jbv_free(vm, c->interfaces);

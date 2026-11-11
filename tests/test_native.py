@@ -302,10 +302,10 @@ class NativeTests(unittest.TestCase):
         self.assertEqual(LIB.jbv_release(vm.handle, array), OK)
         # Small objects and arrays come from the young region or heap chunks; a large one needs the host.
         vm.fail_after = vm.allocations
-        self.assertEqual(LIB.jbv_new_array(vm.handle, b'[J', 10000, C.byref(out)), OOM)
+        self.assertEqual(LIB.jbv_new_array(vm.handle, b'[J', 40000, C.byref(out)), OOM)
         self.assertEqual(out.value, 123)
         vm.fail_after = None
-        array = self.array(vm, '[J', 10000)
+        array = self.array(vm, '[J', 40000)
         self.assertEqual(LIB.jbv_release(vm.handle, array), OK)
         self.assertEqual(LIB.jbv_collect(vm.handle), OK)
         self.assertEqual(vm.stats().objects, 0)

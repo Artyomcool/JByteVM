@@ -322,7 +322,7 @@ JBV_API JbvStatus JBV_CALL jbv_release(JbvVM *vm, JbvRef ref) {
  * rewrites its handle entry. */
 #define JBV_SMALL 512u
 #define JBV_CHUNK_HEADER (2 * sizeof(void *))
-#define JBV_YOUNG_MAX 262144u
+#define JBV_YOUNG_MAX 1048576u
 static size_t align_size(size_t n) { return (n + JBV_ALIGN - 1) & ~(size_t)(JBV_ALIGN - 1); }
 static int young(const JbvVM *vm, const void *p) { return (uintptr_t)p - (uintptr_t)vm->nursery < vm->nursery_size; }
 size_t jbv_object_bytes(const JbvObject *object) {
@@ -452,6 +452,24 @@ static void mark_full(JbvVM *vm, int32_t ref) {
 static void drain(JbvVM *vm, Visit visit) {
     while (vm->mark_top) scan(vm, (JbvObject *)vm->handles[vm->mark_stack[--vm->mark_top]], visit);
 }
+/* Where a class holds references outside objects (built once: fields and the pool are fixed). */
+static int class_roots(JbvVM *vm, JbvClass *c) {
+    uint32_t i, n = 0;
+    if (c->roots_ready) return 1;
+    for (i = 1; i < c->pool_size; ++i) n += c->pool[i].tag == 8 || c->pool[i].tag == 15 || c->pool[i].tag == 16;
+    for (i = 0; i < c->field_count; ++i) n += (c->fields[i].flags & JBV_STATIC) && jbv_reference_type(c->fields[i].descriptor);
+    if (n) {
+        c->root_slots = (int32_t **)jbv_alloc(vm, n * sizeof(int32_t *));
+        if (!c->root_slots) return 0;
+        n = 0;
+        for (i = 1; i < c->pool_size; ++i)
+            if (c->pool[i].tag == 8 || c->pool[i].tag == 15 || c->pool[i].tag == 16) c->root_slots[n++] = (int32_t *)&c->pool[i].bits;
+        for (i = 0; i < c->field_count; ++i)
+            if ((c->fields[i].flags & JBV_STATIC) && jbv_reference_type(c->fields[i].descriptor)) c->root_slots[n++] = &c->fields[i].value;
+    }
+    c->root_count = n; c->roots_ready = 1;
+    return 1;
+}
 static void roots(JbvVM *vm, Visit visit) {
     uint32_t i;
     JbvClass *c;
@@ -465,6 +483,11 @@ static void roots(JbvVM *vm, Visit visit) {
     }
     for (c = vm->classes; c; c = c->next) {
         visit(vm, c->mirror);
+        if (class_roots(vm, c)) {
+            for (i = 0; i < c->root_count; ++i) visit(vm, *c->root_slots[i]);
+            drain(vm, visit);
+            continue;
+        }
         for (i = 1; i < c->pool_size; ++i) {
             JbvConstant *p = &c->pool[i];
             if (p->tag == 8 || p->tag == 15 || p->tag == 16) visit(vm, jbv_i32(p->bits));
@@ -530,7 +553,7 @@ static JbvStatus minor(JbvVM *vm) {
     for (p = vm->nursery; p < vm->nursery_top;) {
         uint32_t word = *(uint32_t *)p, index = word >> 1;
         JbvObject *object = (JbvObject *)(p + JBV_ALIGN + (word & 1 ? JBV_ALIGN : 0));
-        size_t size = JBV_ALIGN + block_size(object);
+        size_t size = word & 1 ? JBV_ALIGN + block_size(object) : JBV_ALIGN + align_size(sizeof(*object) + (size_t)object->type->instance_slots * sizeof(int32_t));
         if (vm->handles[index] == (uintptr_t)object) free_handle(vm, index);   /* still here: unreachable */
         p += size;
     }
@@ -701,8 +724,8 @@ JbvStatus jbv_new(JbvVM *vm, JbvClass *type, int32_t length, int32_t *ref) {
     }
     if (vm->heap_bytes > vm->heap_limit || bytes > vm->heap_limit - vm->heap_bytes) return JBV_OUT_OF_MEMORY;
     if (bytes <= JBV_YOUNG_MAX / 8) {
-        if (!vm->nursery && !vm->nursery_disabled) {   /* lazily, 1/16 of the heap up to 256 KiB */
-            size_t size = vm->heap_limit / 16 > JBV_YOUNG_MAX ? JBV_YOUNG_MAX : (vm->heap_limit / 16) & ~(size_t)(JBV_ALIGN - 1);
+        if (!vm->nursery && !vm->nursery_disabled) {   /* lazily, 1/8 of the heap up to 1 MiB */
+            size_t size = vm->heap_limit / 8 > JBV_YOUNG_MAX ? JBV_YOUNG_MAX : (vm->heap_limit / 8) & ~(size_t)(JBV_ALIGN - 1);
             if (size >= 16384) vm->nursery = (uint8_t *)jbv_alloc(vm, size);
             if (vm->nursery) { vm->nursery_size = size; vm->nursery_top = vm->nursery; } else vm->nursery_disabled = 1;
         }

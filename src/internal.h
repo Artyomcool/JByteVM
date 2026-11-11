@@ -100,7 +100,9 @@ typedef struct JbvClass {
     JbvStatus init_error;
     uint16_t *ref_slots;      /* instance slots holding references, inherited included (built by the GC) */
     uint16_t ref_count;
-    uint8_t ref_ready;
+    uint8_t ref_ready, roots_ready;
+    int32_t **root_slots;     /* static reference fields and String/MethodHandle/MethodType constants */
+    uint32_t root_count;
 } JbvClass;
 typedef struct JbvObject {
     /* One-word header (single-threaded VM, non-moving GC): just the class.
