@@ -83,7 +83,7 @@ static const MethodSpec string_methods[] = {
     J("strip","()" STR), J("stripLeading","()" STR), J("stripTrailing","()" STR), J("isBlank","()Z"),
     J("codePointAt","(I)I"), J("codePointBefore","(I)I"), J("codePointCount","(II)I"), J("contentEquals","(" SEQ ")Z"),
     J("getBytes","()[B"), J("getBytes","(" STR ")[B"), J("getBytes","(Ljava/nio/charset/Charset;)[B"),
-    J("formatted","([" OBJ ")" STR), J("indent","(I)" STR),
+    J("formatted","([" OBJ ")" STR), J("indent","(I)" STR), J("chars","()Ljava/util/stream/IntStream;"), J("codePoints","()Ljava/util/stream/IntStream;"),
     J("toLowerCase","(Ljava/util/Locale;)" STR), J("toUpperCase","(Ljava/util/Locale;)" STR),
     {"format","(Ljava/util/Locale;" STR "[" OBJ ")" STR,O_JAVA,0,JBV_STATIC},
     {"join","(" SEQ "[" SEQ ")" STR,O_JAVA,0,JBV_STATIC}, {"join","(" SEQ "Ljava/lang/Iterable;)" STR,O_JAVA,0,JBV_STATIC},

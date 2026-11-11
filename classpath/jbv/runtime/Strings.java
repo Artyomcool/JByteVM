@@ -145,6 +145,10 @@ public final class Strings {
     public static String strip(String s) { return stripTrailing(stripLeading(s)); }
     public static String stripLeading(String s) { int i = 0; while (i < s.length()) { int c = s.codePointAt(i); if (!Character.isWhitespace(c)) break; i += Character.charCount(c); } return s.substring(i); }
     public static String stripTrailing(String s) { int i = s.length(); while (i > 0) { int c = s.codePointBefore(i); if (!Character.isWhitespace(c)) break; i -= Character.charCount(c); } return s.substring(0, i); }
+    public static java.util.stream.IntStream chars(String s) { int[] a = new int[s.length()]; for (int i = 0; i < a.length; i++) a[i] = s.charAt(i); return java.util.Arrays.stream(a); }
+    public static java.util.stream.IntStream codePoints(String s) {
+        int[] a = new int[s.codePointCount(0, s.length())]; for (int i = 0, j = 0; i < a.length; i++) { a[i] = s.codePointAt(j); j += Character.charCount(a[i]); }
+        return java.util.Arrays.stream(a); }
     public static boolean isBlank(String s) { return stripLeading(s).isEmpty(); }
     public static int codePointAt(String s, int i) { if (i < 0 || i >= s.length()) throw new StringIndexOutOfBoundsException("Index " + i + " out of bounds for length " + s.length()); return Character.codePointAt(s, i); }
     public static int codePointBefore(String s, int i) { if (i < 1 || i > s.length()) throw new StringIndexOutOfBoundsException("Index " + i + " out of bounds for length " + s.length()); return Character.codePointBefore(s, i); }

@@ -112,6 +112,7 @@ PUBLIC op_load_42
 PUBLIC op_load_43
 PUBLIC op_load_44
 PUBLIC op_load_45
+PUBLIC op_lookupswitch
 PUBLIC op_lshift_121
 PUBLIC op_lshift_123
 PUBLIC op_lshift_125
@@ -136,6 +137,7 @@ PUBLIC op_store_76
 PUBLIC op_store_77
 PUBLIC op_store_78
 PUBLIC op_swap
+PUBLIC op_tableswitch
 PUBLIC op_this_getfield
 PUBLIC op_wconst_10
 PUBLIC op_wconst_14
@@ -394,8 +396,8 @@ op_table LABEL DWORD
     DWORD op_goto
     DWORD exit_op
     DWORD exit_op
-    DWORD exit_op
-    DWORD exit_op
+    DWORD op_tableswitch
+    DWORD op_lookupswitch
     DWORD op_ireturn
     DWORD exit_op
     DWORD exit_op
@@ -651,8 +653,8 @@ op_table_w LABEL DWORD
     DWORD op_goto
     DWORD exit_op
     DWORD exit_op
-    DWORD exit_op
-    DWORD exit_op
+    DWORD op_tableswitch
+    DWORD op_lookupswitch
     DWORD op_ireturn
     DWORD exit_op
     DWORD exit_op
@@ -1756,6 +1758,97 @@ goto_go:
     DISPATCH
 
 ALIGN 16
+op_tableswitch:
+    mov edx, [esp]
+    mov ecx, esi
+    sub ecx, [edx+0]
+    add ecx, 3
+    and ecx, -4
+    add ecx, [edx+0]
+    push ebp
+    mov ebp, [ecx+4]
+    bswap ebp
+    mov edx, [ecx+8]
+    bswap edx
+    sub eax, ebp
+    sub edx, ebp
+    pop ebp
+    cmp eax, edx
+    ja ts_default
+    mov edx, [ecx+eax*4+12]
+    bswap edx
+    jmp ts_go0
+ts_default:
+    mov edx, [ecx]
+    bswap edx
+ts_go0:
+    test edx, edx
+    jg ts_go
+    mov ecx, [esp]
+    mov ecx, [ecx+20]
+    sub DWORD PTR [ecx], 1
+    jc ts_go_borrow
+ts_go_back:
+ts_go:
+    dec ebx
+    mov eax, [edi+ebx*4-4]
+    lea esi, [esi+edx-1]
+    DISPATCH
+
+ALIGN 16
+op_lookupswitch:
+    mov edx, [esp]
+    mov ecx, esi
+    sub ecx, [edx+0]
+    add ecx, 3
+    and ecx, -4
+    add ecx, [edx+0]
+    push esi
+    push ebp
+    push ebx
+    xor ebp, ebp
+    mov edx, [ecx+4]
+    bswap edx
+ls_loop:
+    cmp ebp, edx
+    jge ls_default
+    lea ebx, [ebp+edx]
+    shr ebx, 1
+    mov esi, [ecx+ebx*8+8]
+    bswap esi
+    cmp eax, esi
+    je ls_found
+    jl ls_less
+    lea ebp, [ebx+1]
+    jmp ls_loop
+ls_less:
+    mov edx, ebx
+    jmp ls_loop
+ls_found:
+    mov edx, [ecx+ebx*8+12]
+    bswap edx
+    jmp ls_go0
+ls_default:
+    mov edx, [ecx]
+    bswap edx
+ls_go0:
+    pop ebx
+    pop ebp
+    pop esi
+    test edx, edx
+    jg ls_go
+    mov ecx, [esp]
+    mov ecx, [ecx+20]
+    sub DWORD PTR [ecx], 1
+    jc ls_go_borrow
+ls_go_back:
+ls_go:
+    dec ebx
+    mov eax, [edi+ebx*4-4]
+    lea esi, [esi+edx-1]
+    DISPATCH
+
+ALIGN 16
 op_arraylength:
     test eax, eax
     jz exit_op
@@ -2332,6 +2425,17 @@ op_invoke_182:
     mov ecx, [ecx+16]
     test ecx, ecx
     jz exit_op
+    mov edx, [ecx+28]
+    test edx, edx
+    jz inv_182_pic
+    movzx eax, WORD PTR [ecx+40]
+    neg eax
+    add eax, ebx
+    cmp DWORD PTR [edi+eax*4], 0
+    je exit_op
+    mov eax, [ecx+24]
+    jmp inv_182_call
+inv_182_pic:
     mov edx, [ecx+12]
     test edx, edx
     jz exit_op
@@ -2564,6 +2668,17 @@ op_invoke_185:
     mov ecx, [ecx+16]
     test ecx, ecx
     jz exit_op
+    mov edx, [ecx+28]
+    test edx, edx
+    jz inv_185_pic
+    movzx eax, WORD PTR [ecx+40]
+    neg eax
+    add eax, ebx
+    cmp DWORD PTR [edi+eax*4], 0
+    je exit_op
+    mov eax, [ecx+24]
+    jmp inv_185_call
+inv_185_pic:
     mov edx, [ecx+12]
     test edx, edx
     jz exit_op
@@ -4162,13 +4277,9 @@ enter_run:                       ; eax = owner, edx = m, ecx = argbase; [esp] re
     add ebx, ecx
     cmp ebx, [eax+12]
     ja enter_limit
-    cmp DWORD PTR [eax+352], 0
-    jne @F
-    cmp DWORD PTR [eax+356], 0
-    je enter_limit
-@@:
     sub DWORD PTR [eax+352], 1
-    sbb DWORD PTR [eax+356], 0
+    jc enter_borrow
+enter_charged:
     inc DWORD PTR [eax+344]
     mov edx, [eax+340]
     mov [ebp+148], edx
@@ -4236,6 +4347,13 @@ zero_done:
     mov ebp, [ebp+8]
     mov eax, [edi+ebx*4-4]
     DISPATCH
+enter_borrow:                    ; the low word was 0: borrow from the high word, or stop
+    cmp DWORD PTR [eax+356], 0
+    je enter_spent
+    dec DWORD PTR [eax+356]
+    jmp enter_charged
+enter_spent:
+    mov DWORD PTR [eax+352], 0
 enter_limit:
     pop ebx
     mov eax, 1279872256
@@ -4468,6 +4586,24 @@ goto_go_borrow:                ; the low word was 0: borrow from the high word, 
     dec DWORD PTR [ecx+4]
     jmp goto_go_back
 goto_go_out:
+    mov DWORD PTR [ecx], 0
+    jmp exit_op
+
+ts_go_borrow:                ; the low word was 0: borrow from the high word, or stop
+    cmp DWORD PTR [ecx+4], 0
+    je ts_go_out
+    dec DWORD PTR [ecx+4]
+    jmp ts_go_back
+ts_go_out:
+    mov DWORD PTR [ecx], 0
+    jmp exit_op
+
+ls_go_borrow:                ; the low word was 0: borrow from the high word, or stop
+    cmp DWORD PTR [ecx+4], 0
+    je ls_go_out
+    dec DWORD PTR [ecx+4]
+    jmp ls_go_back
+ls_go_out:
     mov DWORD PTR [ecx], 0
     jmp exit_op
 

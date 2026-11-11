@@ -131,6 +131,20 @@ for op, inverse in [(159, 'jne'), (160, 'je'), (161, 'jge'), (162, 'jl'), (163, 
 branch([198], 'op_ifnull', ['test eax, eax'], 'jne', 1)
 branch([199], 'op_ifnonnull', ['test eax, eax'], 'je', 1)
 handler([167], 'op_goto', lines(OFFSET, budget('goto_go'), ['lea esi, [esi+edx-1]'], DISPATCH))
+def switch_table():   # ecx = the 4-aligned operands after the opcode at esi-1
+    return ['mov edx, [esp]', 'mov ecx, esi', f'sub ecx, [edx+{STATE["code"]}]', 'add ecx, 3', 'and ecx, -4', f'add ecx, [edx+{STATE["code"]}]']
+handler([170], 'op_tableswitch', lines(switch_table(), [
+    'push ebp', 'mov ebp, [ecx+4]', 'bswap ebp', 'mov edx, [ecx+8]', 'bswap edx', 'sub eax, ebp', 'sub edx, ebp', 'pop ebp',
+    'cmp eax, edx', 'ja ts_default', 'mov edx, [ecx+eax*4+12]', 'bswap edx', 'jmp ts_go0',
+    'ts_default:', 'mov edx, [ecx]', 'bswap edx', 'ts_go0:'], budget('ts_go'), POP1, ['lea esi, [esi+edx-1]'], DISPATCH))
+handler([171], 'op_lookupswitch', lines(switch_table(), [
+    'push esi', 'push ebp', 'push ebx', 'xor ebp, ebp', 'mov edx, [ecx+4]', 'bswap edx',      # lo = 0, hi = npairs
+    'ls_loop:', 'cmp ebp, edx', 'jge ls_default', 'lea ebx, [ebp+edx]', 'shr ebx, 1',
+    'mov esi, [ecx+ebx*8+8]', 'bswap esi', 'cmp eax, esi', 'je ls_found', 'jl ls_less', 'lea ebp, [ebx+1]', 'jmp ls_loop',
+    'ls_less:', 'mov edx, ebx', 'jmp ls_loop',
+    'ls_found:', 'mov edx, [ecx+ebx*8+12]', 'bswap edx', 'jmp ls_go0',
+    'ls_default:', 'mov edx, [ecx]', 'bswap edx',
+    'ls_go0:', 'pop ebx', 'pop ebp', 'pop esi'], budget('ls_go'), POP1, ['lea esi, [esi+edx-1]'], DISPATCH))
 
 # Objects: references are handle indexes; the handle table holds object pointers
 # (header word, then fields/elements; an array's length is the word before it).
@@ -266,7 +280,10 @@ handler([184], 'op_invokestatic', lines(METHOD_LINK, [f'cmp BYTE PTR [ecx+{LINK_
                                         [f'mov edx, [ecx+{LINK_MEMBER}]', f'mov eax, [ecx+{LINK_OWNER}]'], call(2, 'st')))
 for op, size in [(182, 2), (185, 4)]:
     entries = [(LINK_SEEN, LINK_TARGET_OWNER, LINK_TARGET)] + [(LINK_PIC_SEEN + 4 * k, LINK_PIC_OWNER + 4 * k, LINK_PIC_TARGET + 4 * k) for k in range(3)]
-    code = METHOD_LINK + [f'mov edx, [ecx+{LINK_SEEN}]', 'test edx, edx', 'jz exit_op',
+    code = METHOD_LINK + [f'mov edx, [ecx+{LINK_SPECIAL}]', 'test edx, edx', f'jz inv_{op}_pic',   # private/final: one target
+            f'movzx eax, WORD PTR [ecx+{LINK_ARGC}]', 'neg eax', 'add eax, ebx', 'cmp DWORD PTR [edi+eax*4], 0', 'je exit_op',
+            f'mov eax, [ecx+{LINK_SPECIAL_OWNER}]', f'jmp inv_{op}_call', f'inv_{op}_pic:',
+            f'mov edx, [ecx+{LINK_SEEN}]', 'test edx, edx', 'jz exit_op',
             f'movzx eax, WORD PTR [ecx+{LINK_ARGC}]', 'neg eax', 'add eax, ebx', 'mov eax, [edi+eax*4]',  # receiver = locals[sp - argc]
             'test eax, eax', 'jz exit_op', 'and eax, 0FFFFFFh', 'mov edx, [esp]', f'mov edx, [edx+{STATE["handles"]}]',
             'mov eax, [edx+eax*4]', 'mov eax, [eax]']
@@ -456,8 +473,7 @@ body.append('\n'.join([
     '    movzx ebx, WORD PTR [edx+4]', f'    mov [ebp+{ACT_FRAME + F_LOCALS}], ebx', f'    mov [ebp+{STATE["sp"]}], ebx',
     '    movzx ebx, WORD PTR [edx+2]', f'    add ebx, [ebp+{ACT_FRAME + F_LOCALS}]', '    add ebx, ecx',   # base + needed
     f'    cmp ebx, [eax+{VM_MAX_SLOTS}]', '    ja enter_limit',
-    f'    cmp DWORD PTR [eax+{VM_REMAINING}], 0', '    jne @F', f'    cmp DWORD PTR [eax+{VM_REMAINING + 4}], 0', '    je enter_limit', '@@:',
-    f'    sub DWORD PTR [eax+{VM_REMAINING}], 1', f'    sbb DWORD PTR [eax+{VM_REMAINING + 4}], 0', f'    inc DWORD PTR [eax+{VM_DEPTH}]',
+    f'    sub DWORD PTR [eax+{VM_REMAINING}], 1', '    jc enter_borrow', 'enter_charged:', f'    inc DWORD PTR [eax+{VM_DEPTH}]',
     f'    mov edx, [eax+{VM_USED}]', f'    mov [ebp+{ACT_SAVED}], edx', f'    mov [eax+{VM_USED}], ebx',
     '    pop ebx',
     f'    mov edx, [eax+{VM_SLOTS}]', '    lea edx, [edx+ecx*4]', f'    mov [ebp+{STATE["locals"]}], edx', f'    mov [ebp+{ACT_LOCALS}], edx',
@@ -481,6 +497,9 @@ body.append('\n'.join([
     '    pop edx', f'    mov [ebp+{ACT_RET}], edx       ; [esp] = the activation; returns go back through ret',
     f'    mov esi, [ebp+{STATE["code"]}]', f'    mov edi, [ebp+{STATE["locals"]}]', f'    mov ebx, [ebp+{STATE["sp"]}]',
     f'    mov ebp, [ebp+{STATE["refs"]}]', '    mov eax, [edi+ebx*4-4]', '    DISPATCH',
+    'enter_borrow:                    ; the low word was 0: borrow from the high word, or stop',
+    f'    cmp DWORD PTR [eax+{VM_REMAINING + 4}], 0', '    je enter_spent', f'    dec DWORD PTR [eax+{VM_REMAINING + 4}]', '    jmp enter_charged',
+    'enter_spent:', f'    mov DWORD PTR [eax+{VM_REMAINING}], 0',
     'enter_limit:', '    pop ebx', f'    mov eax, {CORE_LIMIT}', '    ret',
     'ret_core:                        ; edx = a core activation that returned: unlink it',
     f'    cmp BYTE PTR [edx+{ACT_FRAME + F_MON}], 0', '    jne leave_in_c',

@@ -120,6 +120,14 @@ public final class Arrays {
     public static String toString(boolean[] a){if(a==null)return "null";StringBuilder s=new StringBuilder("[");for(int i=0;i<a.length;i++){if(i>0)s.append(", ");s.append(a[i]);}return s.append(']').toString();}
 
     public static void fill(Object[] a,Object v){for(int i=0;i<a.length;i++)a[i]=v;}
+    @SuppressWarnings("unchecked") public static <T> java.util.stream.Stream<T> stream(T[] a){return (java.util.stream.Stream<T>)jbv.runtime.Pipe.array(0,a,0,a.length);}
+    @SuppressWarnings("unchecked") public static <T> java.util.stream.Stream<T> stream(T[] a,int from,int to){return (java.util.stream.Stream<T>)jbv.runtime.Pipe.array(0,a,from,to);}
+    public static java.util.stream.IntStream stream(int[] a){return (java.util.stream.IntStream)jbv.runtime.Pipe.array(1,a,0,a.length);}
+    public static java.util.stream.IntStream stream(int[] a,int from,int to){return (java.util.stream.IntStream)jbv.runtime.Pipe.array(1,a,from,to);}
+    public static java.util.stream.LongStream stream(long[] a){return (java.util.stream.LongStream)jbv.runtime.Pipe.array(2,a,0,a.length);}
+    public static java.util.stream.LongStream stream(long[] a,int from,int to){return (java.util.stream.LongStream)jbv.runtime.Pipe.array(2,a,from,to);}
+    public static java.util.stream.DoubleStream stream(double[] a){return (java.util.stream.DoubleStream)jbv.runtime.Pipe.array(3,a,0,a.length);}
+    public static java.util.stream.DoubleStream stream(double[] a,int from,int to){return (java.util.stream.DoubleStream)jbv.runtime.Pipe.array(3,a,from,to);}
     public static void fill(Object[] a,int from,int to,Object v){check(a.length,from,to);for(int i=from;i<to;i++)a[i]=v;}
     @SuppressWarnings("unchecked") public static <T> T[] copyOf(T[] a,int n){T[] r=(T[])jbv.runtime.Support.newArrayLike(a,n);System.arraycopy(a,0,r,0,Math.min(n,a.length));return r;}
     @SuppressWarnings("unchecked") public static <T,U> T[] copyOf(U[] a,int n,Class<? extends T[]> type){T[] r=(T[])java.lang.reflect.Array.newInstance(type.getComponentType(),n);System.arraycopy(a,0,r,0,Math.min(n,a.length));return r;}

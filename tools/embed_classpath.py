@@ -7,6 +7,7 @@ import generate_wrappers
 import generate_functions
 import generate_factories
 import generate_arrays
+import generate_streams
 from check_no_indy import has_indy
 from slim_class import without_stack_maps
 
@@ -17,6 +18,7 @@ def build(jdk,build_dir):
     generate_functions.generate()
     generate_factories.generate()
     generate_arrays.generate()
+    generate_streams.generate()
     subprocess.run([str(jdk/'bin/java.exe'),str(ROOT/'tools/GenerateUnicode.java'),str(ROOT/'classpath/jbv/runtime/Unicode.java')],check=True)
     classes=build_dir/'classpath'
     # This directory belongs only to this generator. Drop obsolete .class files

@@ -236,6 +236,7 @@ javac на диске остаётся пригодным для стандар�
 | Generics в рефлексии | Type, ParameterizedType, TypeVariable, WildcardType, GenericArrayType; Class.getGenericSuperclass/Interfaces/getTypeParameters/getTypeName, Field.getGenericType, Method/Constructor getGeneric*Types, getTypeParameters, getParameters (имена — при компиляции с `-parameters`). Сигнатуры разбираются по запросу, без кэша |
 | Исключения IO | java.io.IOException/UncheckedIOException, InterruptedException, TypeNotPresentException (без самого IO) |
 | Коллекции | Queue/Deque, ArrayDeque, PriorityQueue (тот же порядок кучи, что в JDK), LinkedList, LinkedHashMap/Set (в т.ч. access order и removeEldestEntry), TreeMap/TreeSet (treap) с Navigable-представлениями, EnumMap/EnumSet |
+| Streams | Stream/IntStream/LongStream/DoubleStream (последовательные, ленивые, pull-конвейер), Collection.stream, Arrays.stream, String.chars/codePoints, Stream.of/iterate/generate/concat/builder; все промежуточные и терминальные операции, кроме parallel/spliterator; count() без прогона конвейера для sized-источников, как в JDK; Collectors (toList/Set/Map, joining, groupingBy, partitioningBy, mapping/filtering/flatMapping, counting, summing/averaging/summarizing, reducing, minBy/maxBy, teeing, collectingAndThen), Collector.of; Optional/OptionalInt/Long/Double, *SummaryStatistics (компенсированная сумма double бит в бит как в JDK) |
 | Строки | toLowerCase/toUpperCase (полный Unicode, SpecialCasing, final sigma), equalsIgnoreCase/compareToIgnoreCase/regionMatches как в JDK, split/matches/replaceAll, strip/isBlank/indent, join, format/formatted, кодовые точки, getBytes/new String с UTF-8/UTF-16/ISO-8859-1/US-ASCII (правила замены как в JDK); StringBuilder.indexOf. Методы реализованы на Java в `jbv.runtime.Strings` и подключены к встроенному String |
 | Character | getType, isLetter/isLetterOrDigit/isUpperCase/isLowerCase/isAlphabetic/isSpaceChar/isJavaIdentifier*, toUpperCase/toLowerCase/toTitleCase, getNumericValue — по таблицам из JDK сборки (`tools/GenerateUnicode.java` проверяет все кодовые точки) |
 | Регулярные выражения | java.util.regex Pattern/Matcher: классы символов, \d\w\s, якоря, группы (в т.ч. именованные), жадные/ленивые квантификаторы, флаги; split/replaceAll с JDK-семантикой |
@@ -684,7 +685,7 @@ CONSTANT_Dynamic также отклоняется во всех профиля�
 ## Точные границы совместимости
 
 Нет JIT, verifier, JNI/FFM, Java-потоков/wait, класслоадеров, выгрузки классов,
-полной reflection, файлов/сети, serialization, streams/Spliterator, regex/локалей
+полной reflection, файлов/сети, serialization, parallel streams/Spliterator, локалей
 и полного Java SE classpath. Отдельные отсутствующие методы не подменяются
 успешными заглушками: обращение завершается ошибкой разрешения/unsupported.
 

@@ -487,7 +487,10 @@ JBV_GC static __declspec(noinline) JbvStatus slow_op(JbvVM *vm, JbvClass *c, Jbv
             JbvObject *receiver;
             status = jbv_object(vm, stack[argbase], &receiver);
             if (status != JBV_OK) goto done;
-            if (op != 183 && !(callee->flags & 0x0002)) {
+            if (op != 183 && !link->special && (callee->flags & 0x0012 || owner->flags & 0x0010) && !(callee->flags & (JBV_STATIC | JBV_ABSTRACT))) {
+                link->special = callee; link->special_owner = owner;   /* private or final: the core calls it directly */
+            }
+            if (op != 183 && !(callee->flags & 0x0012) && !(owner->flags & 0x0010)) {
                 JbvClass *type = receiver->type;
                 for (i = 0; i < 3 && link->pic_seen[i] != type; ++i) {}
                 if (link->seen != type && i < 3) { owner = link->pic_owner[i]; callee = link->pic_target[i]; }
