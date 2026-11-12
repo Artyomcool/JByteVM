@@ -36,6 +36,7 @@ static void subtract(Big *a, const Big *b) {
     }
     while (a->n > 1 && !a->word[a->n-1]) --a->n;
 }
+#if !defined(_M_IX86)
 static void add(Big *a, const Big *b) {
     uint32_t i; uint64_t carry = 0;
     for (i = 0; i < a->n || i < b->n; ++i) {
@@ -111,6 +112,11 @@ uint32_t jbv_decimal_text(uint64_t bits, int single, uint16_t *out) {
     }
     return pos;
 }
+#else
+/* decimal_x86.asm */
+uint32_t JBV_CALL jbv_decimal_text_x86(uint32_t lo, uint32_t hi, int single, uint16_t *out);
+uint32_t jbv_decimal_text(uint64_t bits, int single, uint16_t *out) { return jbv_decimal_text_x86((uint32_t)bits, (uint32_t)(bits >> 32), single, out); }
+#endif
 
 static uint32_t bit_length(const Big *a) {
     uint32_t n=(a->n-1)*32, top=a->word[a->n-1];
