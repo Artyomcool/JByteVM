@@ -35,7 +35,8 @@ int main(void) {
     F(JbvVM, config.max_memory, "VM_MAX_MEMORY"); F(JbvVM, memory_used, "VM_MEMORY_USED"); F(JbvVM, memory_peak, "VM_MEMORY_PEAK");
     F(JbvVM, class_cache, "VM_CLASS_CACHE"); F(JbvVM, library, "VM_LIBRARY"); F(JbvVM, app, "VM_APP");
     F(JbvClass, primitive, "C_PRIMITIVE"); F(JbvClass, ref_slots, "C_REF_SLOTS"); F(JbvClass, root_slots, "C_ROOT_SLOTS");
-    F(JbvClass, interfaces, "C_INTERFACES");
+    F(JbvClass, interfaces, "C_INTERFACES"); F(JbvClass, builtin, "C_BUILTIN"); F(JbvClass, array_kind, "C_ARRAY_KIND"); F(JbvClass, component, "C_COMPONENT");
+    F(JbvVM, interned, "VM_INTERNED"); F(JbvVM, handle_capacity, "VM_HANDLE_CAPACITY"); F(JbvVM, generations, "VM_GENERATIONS");
     Z(JbvConfig, "CFG_SIZEOF"); F(JbvConfig, alloc, "CFG_ALLOC"); F(JbvConfig, free, "CFG_FREE"); F(JbvConfig, allocator_user, "CFG_USER");
     F(JbvConfig, max_slots, "CFG_MAX_SLOTS"); F(JbvConfig, max_depth, "CFG_MAX_DEPTH"); F(JbvConfig, max_instructions, "CFG_MAX_INSTRUCTIONS");
     F(JbvConfig, max_memory, "CFG_MAX_MEMORY"); F(JbvConfig, max_heap, "CFG_MAX_HEAP");

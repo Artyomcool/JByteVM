@@ -1,4 +1,5 @@
 #include "library.h"
+#if !defined(_M_IX86)   /* text_x86.asm; this is the reference */
 
 JbvStatus jbv_string_view(JbvVM *vm, int32_t ref, JbvTextView *out) {
     JbvObject *s, *a;
@@ -654,3 +655,4 @@ JBV_API JbvStatus JBV_CALL jbv_string_read_utf8(JbvVM *vm, JbvRef ref, char *out
     }
     *bytes = n; return JBV_OK;
 }
+#endif

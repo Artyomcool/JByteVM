@@ -120,7 +120,17 @@ static const JbvNativeEntry natives[] = {
     { "list", "(Ljava/lang/String;)[Ljava/lang/String;", JBV_NATIVE_FN(host_list) },
 };
 
+/* Crash report: faulting address relative to jbytevm.dll and the registers. */
+static LONG WINAPI crashed(EXCEPTION_POINTERS *info) {
+    uintptr_t base = (uintptr_t)GetModuleHandleA("jbytevm.dll"), ip = (uintptr_t)info->ExceptionRecord->ExceptionAddress;
+    CONTEXT *r = info->ContextRecord;
+    fprintf(stderr, "crash %08lx at rva %x (eax %08lx ebx %08lx ecx %08lx edx %08lx esi %08lx edi %08lx ebp %08lx esp %08lx)\n",
+        info->ExceptionRecord->ExceptionCode, (unsigned)(ip - base), r->Eax, r->Ebx, r->Ecx, r->Edx, r->Esi, r->Edi, r->Ebp, r->Esp);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 int main(int argc, char **argv) {
+    SetUnhandledExceptionFilter(crashed);
     JbvConfig config = { allocate, release, 0, 0, 0, 0, 0, 0 };
     JbvHostServices services = { 0 };
     JbvVM *vm = 0;
