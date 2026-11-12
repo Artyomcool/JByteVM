@@ -31,6 +31,11 @@ int main(void) {
     F(JbvVM, throwable_init, "VM_THROWABLE_INIT"); F(JbvVM, frames, "VM_FRAMES"); F(JbvVM, exception, "VM_EXCEPTION");
     F(JbvVM, emergency_oom, "VM_EMERGENCY_OOM"); F(JbvVM, exception_status, "VM_EXCEPTION_STATUS"); F(JbvVM, heap_limit, "VM_HEAP_LIMIT");
     F(JbvVM, handles, "VM_HANDLES");
+    F(JbvVM, config.alloc, "VM_ALLOC"); F(JbvVM, config.free, "VM_FREE"); F(JbvVM, config.allocator_user, "VM_ALLOC_USER");
+    F(JbvVM, config.max_memory, "VM_MAX_MEMORY"); F(JbvVM, memory_used, "VM_MEMORY_USED"); F(JbvVM, memory_peak, "VM_MEMORY_PEAK");
+    F(JbvVM, class_cache, "VM_CLASS_CACHE"); F(JbvVM, library, "VM_LIBRARY"); F(JbvVM, app, "VM_APP");
+    F(JbvClass, primitive, "C_PRIMITIVE"); F(JbvClass, ref_slots, "C_REF_SLOTS"); F(JbvClass, root_slots, "C_ROOT_SLOTS");
+    F(JbvClass, interfaces, "C_INTERFACES");
 #if JBV_PROFILE_FULL
     F(JbvField, attributes, "FIELD_ATTRIBUTES"); F(JbvMethod, attributes, "M_ATTRIBUTES"); F(JbvClass, attributes, "C_ATTRIBUTES");
 #endif

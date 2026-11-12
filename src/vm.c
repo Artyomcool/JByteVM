@@ -7,6 +7,7 @@ typedef union JbvAllocation {
     uint64_t alignment; /* All VM payload types require at most 8-byte alignment. */
 } JbvAllocation;
 
+#if !defined(_M_IX86)   /* vm_x86.asm */
 uint16_t jbv_u16(const uint8_t *p) { return (uint16_t)((p[0] << 8) | p[1]); }
 uint32_t jbv_u32(const uint8_t *p) {
     return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
@@ -37,11 +38,13 @@ void jbv_free(JbvVM *vm, void *memory) {
         vm->config.free(vm->config.allocator_user, allocation);
     }
 }
+#endif
 JBV_API JbvStatus JBV_CALL jbv_memory_stats(JbvVM *vm, JbvMemoryStats *out) {
     if (!vm || !out) return JBV_BAD_ARGUMENT;
     out->used = vm->memory_used; out->peak = vm->memory_peak; out->limit = vm->config.max_memory;
     return JBV_OK;
 }
+#if !defined(_M_IX86)   /* vm_x86.asm */
 JbvText jbv_text(const char *s) {
     JbvText t;
     size_t n = 0;
@@ -118,6 +121,7 @@ void jbv_free_class(JbvVM *vm, JbvClass *c) {
     jbv_free_image(vm, c->image);
     jbv_free(vm, c);
 }
+#endif
 JBV_API JbvStatus JBV_CALL jbv_create(const JbvConfig *config, JbvVM **out) {
     JbvVM *vm;
     JbvStatus status;
@@ -244,6 +248,7 @@ JBV_GC JBV_API JbvStatus JBV_CALL jbv_call_slots(JbvVM *vm, const char *class_na
     return jbv_invoke(vm, &id, args, count, result);
 }
 
+#if !defined(_M_IX86)   /* vm_x86.asm */
 JBV_API const char *JBV_CALL jbv_status_string(JbvStatus status) {
     switch (status) {
     case JBV_OK: return "ok";
@@ -271,3 +276,4 @@ JBV_API const char *JBV_CALL jbv_status_string(JbvStatus status) {
     default: return "unknown status";
     }
 }
+#endif
