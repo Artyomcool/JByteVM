@@ -27,7 +27,7 @@ typedef struct JbvNativeEntry {
 /* Register one class's table atomically. Reject duplicate keys and unsupported
  * methods; on failure every old binding remains intact. Rebinding requires an
  * idle VM. Table/strings are borrowed only during registration; functions and
- * user context must remain valid while bound. Non-x86 returns UNSUPPORTED_FEATURE.
+ * user context must remain valid while bound.
  * Native reference parameters are borrowed roots until return. Reference
  * results are borrowed too: release a host-owned result immediately before
  * returning it, with no intervening VM calls (same rule as slot callbacks). */

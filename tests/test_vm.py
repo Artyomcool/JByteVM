@@ -17,12 +17,10 @@ from check_no_indy import has_indy
 parser = argparse.ArgumentParser()
 parser.add_argument("--jdk", required=True, type=Path)
 parser.add_argument("--build", type=Path)
-parser.add_argument("--arch", choices=("x86", "x64"), default="x86")
 options, remaining = parser.parse_known_args()
-BUILD = (options.build or ROOT / "build" / options.arch).resolve()
-POINTER_BYTES = 4 if options.arch == "x86" else 8
-if C.sizeof(C.c_void_p) != POINTER_BYTES:
-    raise SystemExit(f"Use {options.arch} Python to test the {options.arch} DLL.")
+BUILD = (options.build or ROOT / "build/x86").resolve()
+if C.sizeof(C.c_void_p) != 4:
+    raise SystemExit("Use 32-bit Python: the DLL is x86.")
 JAVA = options.jdk / "bin/java.exe"
 JAVAP = options.jdk / "bin/javap.exe"
 CLASSES = ROOT / "build/classes"
@@ -436,9 +434,9 @@ class RuntimeTests(unittest.TestCase):
         pe = struct.unpack_from("<I", data, 0x3c)[0]
         self.assertEqual(data[pe:pe + 4], b"PE\x00\x00")
         optional = pe + 24
-        self.assertEqual(struct.unpack_from("<H", data, pe + 4)[0], 0x14c if POINTER_BYTES == 4 else 0x8664)
-        self.assertEqual(struct.unpack_from("<H", data, optional)[0], 0x10b if POINTER_BYTES == 4 else 0x20b)
-        imports = struct.unpack_from("<II", data, optional + (96 if POINTER_BYTES == 4 else 112) + 8)
+        self.assertEqual(struct.unpack_from("<H", data, pe + 4)[0], 0x14c)
+        self.assertEqual(struct.unpack_from("<H", data, optional)[0], 0x10b)
+        imports = struct.unpack_from("<II", data, optional + 96 + 8)
         self.assertEqual(imports, (0, 0), "Runtime must have no DLL imports")
 
     def test_objects_against_hotspot(self):

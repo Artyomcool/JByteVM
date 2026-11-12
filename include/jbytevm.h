@@ -4,18 +4,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#if defined(_WIN32) && defined(JBV_BUILD_DLL)
-#define JBV_API __declspec(dllexport)
-#elif defined(_WIN32) && defined(JBV_USE_DLL)
+/* jbytevm.dll is 32-bit Windows (x86): every entry point is __cdecl. */
+#if defined(JBV_USE_DLL)
 #define JBV_API __declspec(dllimport)
 #else
 #define JBV_API
 #endif
-#if defined(_WIN32)
 #define JBV_CALL __cdecl
-#else
-#define JBV_CALL
-#endif
 
 #ifdef __cplusplus
 extern "C" {

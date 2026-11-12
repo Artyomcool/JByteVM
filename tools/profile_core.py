@@ -52,7 +52,7 @@ finally:
         api.LIB = libraries[name]
         vm.close()
 report = {
-    'architecture': api.options.arch,
+    'architecture': 'x86',
     'baseline': str(args.baseline.resolve()),
     'current': str(api.BUILD / 'Release/jbytevm.dll'),
     'baseline_sha256': hashlib.sha256(args.baseline.read_bytes()).hexdigest(),

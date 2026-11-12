@@ -40,11 +40,11 @@ def build(jdk,build_dir):
     # One solid DEFLATE stream: names and descriptors repeat across classes.
     jar=jar_pack.pack_classes([(n[:-6],d) for n,d in entries])
     (build_dir/'classpath.jar').write_bytes(jar)
-    lines=['/* Generated: the class library as a deflated JAR (also written to classpath.jar). */','#include "classpath.h"',
-           f'const uint32_t jbv_library_jar_size={len(jar)};','const uint8_t jbv_library_jar[]={']
-    for off in range(0,len(jar),32): lines.append(','.join(str(x) for x in jar[off:off+32])+',')
-    lines.append('};')
-    output=build_dir/'generated_classpath.c'
+    lines=['; Generated: the class library as a deflated JAR (also written to classpath.jar).','.686','.model flat, C',
+           'PUBLIC jbv_library_jar, jbv_library_jar_size','.const',f'jbv_library_jar_size DD {len(jar)}','jbv_library_jar LABEL BYTE']
+    for off in range(0,len(jar),32): lines.append('    DB '+','.join(str(x) for x in jar[off:off+32]))
+    lines.append('END')
+    output=build_dir/'generated_classpath.asm'
     content='\n'.join(lines)+'\n'
     if not output.exists() or output.read_text()!=content: output.write_text(content)
     return image_bytes, len(jar)
