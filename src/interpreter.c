@@ -617,6 +617,7 @@ JbvStatus jbv_slow_op(JbvVM *vm, JbvClass *c, JbvFrame *frame, uint8_t op, JbvOp
     int32_t *stack, uint8_t *stack_refs, int32_t *locals, uint8_t *local_refs);
 #define slow_op jbv_slow_op
 #endif
+#if !defined(_M_IX86)   /* run_x86.asm; this is the reference */
 #if JBV_X86_CORE
 JBV_GC static JbvStatus jbv_run(JbvVM *vm, JbvActivation *act, JbvStatus status, uint64_t *out);
 static void core_state(JbvVM *vm, JbvActivation *act) {   /* core.locals and core.refs are set */
@@ -1111,4 +1112,4 @@ leave:
     if (status == JBV_OK) *result = returns && jbv_width((uint8_t)(returns - 1)) == 2 ? value : (uint32_t)value;
     return status;
 }
-
+#endif

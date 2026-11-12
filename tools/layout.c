@@ -61,6 +61,7 @@ int main(void) {
     F(JbvMethod, native_slots, "M_NATIVE_SLOTS"); F(JbvMethod, result_kind, "M_RESULT_KIND");
     F(JbvVM, native_frame, "VM_NATIVE_FRAME"); F(JbvVM, fp_ready, "VM_FP_READY"); F(JbvMethod, argument_slots, "M_ARG_SLOTS");
     F(JbvVM, config.max_instructions, "VM_MAX_INSTRUCTIONS");
+    F(JbvVM, used_slots, "VM_USED_SLOTS"); F(JbvVM, config.max_slots, "VM_MAX_SLOTS"); F(JbvMethod, handlers, "M_HANDLER_COUNT");
     Z(JbvLink, "LK_SIZEOF"); F(JbvLink, owner, "LK_OWNER"); F(JbvLink, symbolic, "LK_SYMBOLIC"); F(JbvLink, member, "LK_MEMBER");
     F(JbvLink, slot, "LK_SLOT"); F(JbvLink, kind, "LK_KIND"); F(JbvLink, type, "LK_TYPE"); F(JbvLink, fast, "LK_FAST"); F(JbvLink, argc, "LK_ARGC");
     F(JbvLink, result, "LK_RESULT");
