@@ -1,6 +1,7 @@
 #include "library.h"
 #include "classpath.h"
 
+#if !defined(_M_IX86)   /* dynamic_x86.asm; this is the reference */
 /* Direct Java handles. Value conversions are shared with reflection;
  * CONSTANT_Dynamic is lowered during class preparation. */
 #define MH "java/lang/invoke/MethodHandle"
@@ -345,3 +346,4 @@ done:
     jbv_free(vm,(void *)name.data); jbv_free(vm,(void *)descriptor.data);
     if (status == JBV_OK) *out = (uint32_t)ref; return status;
 }
+#endif
