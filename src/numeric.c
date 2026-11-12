@@ -1,8 +1,6 @@
 #include "internal.h"
 
 int _fltused = 0;
-typedef union Number { uint64_t u; int64_t j; double d; } Number;
-typedef union Single { uint32_t u; float f; } Single;
 uint8_t jbv_kind(uint8_t c) {
     return c == 'L' || c == '[' || c == 'P' ? JBV_REF : c == 'J' ? JBV_LONG :
         c == 'F' ? JBV_FLOAT : c == 'D' ? JBV_DOUBLE : JBV_INT;
@@ -31,6 +29,9 @@ uint32_t jbv_numeric_types(uint8_t op) {
     }
     return a | (b << 8) | (r << 16);
 }
+#if !defined(_M_IX86)   /* numeric_x86.asm */
+typedef union Number { uint64_t u; int64_t j; double d; } Number;
+typedef union Single { uint32_t u; float f; } Single;
 static int64_t signed64(uint64_t n) { return n <= INT64_MAX ? (int64_t)n : -1 - (int64_t)(UINT64_MAX - n); }
 static uint64_t integer_to_ieee(uint64_t n, uint32_t precision, uint32_t bias, uint32_t sign_bit) {
     uint64_t sign = n >> 63, scan, significant, mask;
@@ -97,7 +98,7 @@ static double remainder(double a, double b) {
     result.u = sign | (ey >= -1022 ? ((uint64_t)(ey + 1023) << 52) | (mx & UINT64_C(0xfffffffffffff)) : mx >> (-1022 - ey));
     return result.d;
 }
-JbvStatus jbv_numeric(uint8_t op, uint64_t a, uint64_t b, uint64_t *out) {
+JbvStatus JBV_CALL jbv_numeric(uint8_t op, uint64_t a, uint64_t b, uint64_t *out) {
     uint32_t types = jbv_numeric_types(op), kind = types & 255, shift;
     Number x, y, z;
     Single f, g, h;
@@ -174,3 +175,4 @@ JbvStatus jbv_numeric(uint8_t op, uint64_t a, uint64_t b, uint64_t *out) {
     }
     return JBV_OK;
 }
+#endif

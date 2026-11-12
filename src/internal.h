@@ -292,7 +292,7 @@ JBV_INLINE uint32_t jbv_element_bytes(uint8_t kind) { return kind == 'Z' || kind
 uint64_t jbv_array_get(JbvObject *array, uint32_t i, uint8_t kind);
 void jbv_array_set(JbvObject *array, uint32_t i, uint8_t kind, uint64_t bits);
 uint32_t jbv_numeric_types(uint8_t op);
-JbvStatus jbv_numeric(uint8_t op, uint64_t a, uint64_t b, uint64_t *out);
+JbvStatus JBV_CALL jbv_numeric(uint8_t op, uint64_t a, uint64_t b, uint64_t *out);   /* x86: numeric_x86.asm */
 int jbv_exception_name(JbvText name);
 JbvStatus jbv_exception_class(JbvVM *vm, JbvText name, JbvClass **out);
 JBV_GC JbvStatus jbv_raise(JbvVM *vm, JbvStatus status);
