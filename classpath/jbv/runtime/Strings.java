@@ -5,6 +5,17 @@ import java.util.Iterator;
 /** Java implementations of built-in String members (see java_native in src/library.c):
  * instance members take the receiver first; constructors are static init(...). */
 public final class Strings {
+    /** Class.getResourceAsStream: absolute names from the JAR root, others from the class's package. */
+    public static java.io.InputStream getResourceAsStream(Class<?> c, String name) {
+        if (name.startsWith("/")) name = name.substring(1);
+        else {
+            while (c.isArray()) c = c.getComponentType();
+            String pkg = c.getPackageName();
+            if (!pkg.isEmpty()) name = pkg.replace('.', '/') + "/" + name;
+        }
+        byte[] data = Support.resource(name);
+        return data == null ? null : new java.io.ByteArrayInputStream(data);
+    }
     private Strings() {}
 
     // ---- case ----
@@ -298,6 +309,7 @@ public final class Strings {
     public static String init(byte[] b) { return decode(b, 0, b.length, UTF8); }
     public static String init(byte[] b, int off, int len) { return decode(b, off, len, UTF8); }
     public static String init(byte[] b, String name) throws java.io.UnsupportedEncodingException { return decode(b, 0, b.length, Charsets.lookup(name)); }
+    public static String init(byte[] b, int off, int len, String name) throws java.io.UnsupportedEncodingException { return decode(b, off, len, Charsets.lookup(name)); }
     public static String init(byte[] b, Charset charset) { return decode(b, 0, b.length, Charsets.id(java.util.Objects.requireNonNull(charset))); }
     public static String init(byte[] b, int off, int len, Charset charset) { return decode(b, off, len, Charsets.id(java.util.Objects.requireNonNull(charset))); }
     public static String init(StringBuilder b) { return b.toString(); }

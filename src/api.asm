@@ -202,7 +202,7 @@ nc_ret:
     pop ebp
     ret 12
 @jbv_typed_call@20 ENDP
-jbv_native_context PROC EXPORT      ; (vm) -> the running typed native's user pointer
+jbv_native_context PROC JBV_EXPORT      ; (vm) -> the running typed native's user pointer
     mov eax, [esp+4]
     test eax, eax
     jz @F
@@ -213,7 +213,7 @@ jbv_native_context PROC EXPORT      ; (vm) -> the running typed native's user po
 @@:
     ret
 jbv_native_context ENDP
-jbv_native_fail PROC EXPORT         ; (vm, status): the typed native's result status
+jbv_native_fail PROC JBV_EXPORT         ; (vm, status): the typed native's result status
     mov ecx, [esp+4]
     mov eax, [esp+8]
     jecxz nf_bad
@@ -240,7 +240,7 @@ jbv_native_fail ENDP
 @@:
     ret
 @jbv_begin_call@4 ENDP
-jbv_throw PROC EXPORT               ; (vm, ref): a Throwable becomes the pending exception
+jbv_throw PROC JBV_EXPORT               ; (vm, ref): a Throwable becomes the pending exception
     push ebx
     mov ebx, [esp+8]
     mov eax, S_BAD_ARG
@@ -264,7 +264,7 @@ th_ret:
     pop ebx
     ret
 jbv_throw ENDP
-jbv_clear_exception PROC EXPORT
+jbv_clear_exception PROC JBV_EXPORT
     mov ecx, [esp+4]
     mov eax, S_BAD_ARG
     jecxz @F
@@ -294,7 +294,7 @@ R_NAME  EQU 12
 R_TABLE EQU 16
 R_COUNT EQU 20
 R_USER  EQU 24
-jbv_register_natives PROC EXPORT    ; (vm, class_name, entries, count, user)
+jbv_register_natives PROC JBV_EXPORT    ; (vm, class_name, entries, count, user)
     push ebp
     mov ebp, esp
     push 0
@@ -443,7 +443,7 @@ resolve_named:
 M_C     EQU -4
 M_N     EQU -12       ; JbvText name
 M_D     EQU -20       ; JbvText descriptor
-jbv_resolve_method PROC EXPORT      ; (vm, class_name, name, descriptor, out)
+jbv_resolve_method PROC JBV_EXPORT      ; (vm, class_name, name, descriptor, out)
     push ebp
     mov ebp, esp
     sub esp, 20
@@ -526,7 +526,7 @@ I_OUT   EQU 24
 I_OWNER EQU -4        ; the target's class
 I_RECV  EQU -8
 I_VALUE EQU -16
-jbv_invoke PROC EXPORT              ; (vm, id, args, count, result)
+jbv_invoke PROC JBV_EXPORT              ; (vm, id, args, count, result)
     push ebp
     mov ebp, esp
     sub esp, 16
@@ -670,7 +670,7 @@ V_SLOTS EQU -1020     ; int32_t[255]
 V_POS   EQU -1024
 V_WIDTH EQU -1028
 V_RES   EQU -1036
-jbv_invoke_args PROC EXPORT         ; (vm, id, out, ...): a static method with C arguments
+jbv_invoke_args PROC JBV_EXPORT         ; (vm, id, out, ...): a static method with C arguments
     push ebp
     mov ebp, esp
     sub esp, 1036
@@ -767,11 +767,11 @@ ia_ret:
 jbv_invoke_args ENDP
 
 ; ---- objects and arrays from the host
-jbv_alloc_object PROC EXPORT        ; (vm, class_name, out): an initialized instance, retained
+jbv_alloc_object PROC JBV_EXPORT        ; (vm, class_name, out): an initialized instance, retained
     xor eax, eax
     jmp new_common
 jbv_alloc_object ENDP
-jbv_new_array PROC EXPORT           ; (vm, descriptor, length, out): a retained array
+jbv_new_array PROC JBV_EXPORT           ; (vm, descriptor, length, out): a retained array
     mov eax, 1
     jmp new_common
 jbv_new_array ENDP
@@ -846,7 +846,7 @@ nw_ret:
     pop ebp
     ret
 
-jbv_resolve_field PROC EXPORT       ; (vm, class_name, name, descriptor, out)
+jbv_resolve_field PROC JBV_EXPORT       ; (vm, class_name, name, descriptor, out)
     push ebp
     mov ebp, esp
     push 0
@@ -956,7 +956,7 @@ field_args:
     or esp, esp                         ; ZF = 0
 @@:
     ret
-jbv_get_field PROC EXPORT           ; (vm, id, receiver, out): a reference result is retained
+jbv_get_field PROC JBV_EXPORT           ; (vm, id, receiver, out): a reference result is retained
     push ebp
     mov ebp, esp
     push ebx
@@ -1001,7 +1001,7 @@ gf_ret:
     pop ebp
     ret
 jbv_get_field ENDP
-jbv_set_field PROC EXPORT           ; (vm, id, receiver, value)
+jbv_set_field PROC JBV_EXPORT           ; (vm, id, receiver, value)
     push ebp
     mov ebp, esp
     push ebx
@@ -1130,7 +1130,7 @@ array_leave MACRO
     pop ebp
     ret
 ENDM
-jbv_array_info PROC EXPORT          ; (vm, ref, length, kind)
+jbv_array_info PROC JBV_EXPORT          ; (vm, ref, length, kind)
     array_frame
     mov eax, S_BAD_ARG
     mov ecx, [ebp+16]
@@ -1157,7 +1157,7 @@ jbv_array_info PROC EXPORT          ; (vm, ref, length, kind)
 ai_ret:
     array_leave
 jbv_array_info ENDP
-jbv_array_read PROC EXPORT          ; (vm, ref, start, count, out): references are retained
+jbv_array_read PROC JBV_EXPORT          ; (vm, ref, start, count, out): references are retained
     array_frame
     mov eax, S_BAD_ARG
     cmp DWORD PTR [ebp+20], 0
@@ -1230,7 +1230,7 @@ ard_ok:
 ard_ret:
     array_leave
 jbv_array_read ENDP
-jbv_array_write PROC EXPORT         ; (vm, ref, start, count, values)
+jbv_array_write PROC JBV_EXPORT         ; (vm, ref, start, count, values)
     array_frame
     mov eax, S_BAD_ARG
     cmp DWORD PTR [ebp+20], 0

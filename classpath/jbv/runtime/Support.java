@@ -28,4 +28,6 @@ public final class Support {
     public static native double roundIntegral(double value,int mode);
     /** Copies the leading ASCII bytes of b[off, off+len) to out; returns their count. */
     public static native int ascii(byte[] b,int off,int len,char[] out);
+    /** An entry of the application JAR (a resource), or null. */
+    public static native byte[] resource(String name);
 }

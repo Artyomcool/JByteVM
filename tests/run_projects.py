@@ -35,6 +35,8 @@ def compile_project(src, out):
     files = [str(p) for p in sorted(src.rglob("*.java"))] + [str(p) for p in (PROJECTS / "_harness").rglob("*.java")]
     r = subprocess.run([str(JAVAC), "--release", "25", "-g:none", "-parameters", "-XDstringConcat=inline", "-nowarn", "-d", str(out), *files],
                        capture_output=True, text=True)
+    if r.returncode == 0 and (src / "resources").is_dir():   # resources: JAR entries beside the classes
+        shutil.copytree(src / "resources", out, dirs_exist_ok=True)
     return r.returncode == 0, (r.stdout + r.stderr).strip()
 
 def jbv_run(jar, package, project):

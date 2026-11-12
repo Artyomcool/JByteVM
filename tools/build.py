@@ -62,7 +62,7 @@ def main():
     includes = hashlib.sha256(b"".join(p.read_bytes() for p in sorted((ROOT / "src").glob("*.inc")) + [build / "profile.inc"])).hexdigest()
     stamp = build / "asm-includes.sha256"
     if not stamp.exists() or stamp.read_text() != includes:
-        for obj in (build / "jbytevm.dir").rglob("*.obj"): obj.unlink()
+        for obj in build.glob("jbytevm*.dir/**/*.obj"): obj.unlink()
     run([cmake, "--build", build, "--config", "Release"])
     stamp.write_text(includes)
     classes = ROOT / "build/classes"

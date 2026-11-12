@@ -1108,7 +1108,7 @@ pin_ref:
     and edx, 0FFFFFFh
     test eax, eax
     ret
-jbv_retain PROC EXPORT              ; (vm, ref)
+jbv_retain PROC JBV_EXPORT              ; (vm, ref)
     push ebx
     mov ebx, [esp+8]
     mov edx, [esp+12]
@@ -1179,7 +1179,7 @@ pn_oom:
     pop ebx
     ret
 jbv_retain ENDP
-jbv_release PROC EXPORT             ; (vm, ref)
+jbv_release PROC JBV_EXPORT             ; (vm, ref)
     push ebx
     mov ebx, [esp+8]
     mov edx, [esp+12]

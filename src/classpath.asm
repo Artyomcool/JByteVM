@@ -14,6 +14,11 @@ EXTERN SYSCALL @jbv_parse_fp@16:PROC
 EXTERN SYSCALL @jbv_dynamic_native@16:PROC
 EXTERN SYSCALL @jbv_find_class@12:PROC
 EXTERN SYSCALL @jbv_link@12:PROC
+EXTERN SYSCALL @jbv_text_bytes@12:PROC
+EXTERN SYSCALL @jbv_array_class@16:PROC
+EXTERN SYSCALL @jbv_alloc@8:PROC
+EXTERN SYSCALL @jbv_free@8:PROC
+EXTERN jbv_jar_read:PROC
 EXTERN jbv_collect:PROC
 EXTERN jbv_archive_open:PROC
 EXTERN jbv_archive_find:PROC
@@ -23,6 +28,8 @@ EXTERN jbv_library_jar:BYTE
 EXTERN jbv_library_jar_size:DWORD
 
 S_UNSUPPORTED EQU 6
+S_NOT_FOUND EQU 7
+OP_RESOURCE EQU 24
 S_LINKAGE   EQU 8
 S_NULL      EQU 12
 S_BOUNDS    EQU 13
@@ -38,7 +45,7 @@ hooks DB 9, 'primitive', 9, 'arraycopy', 12, 'newArrayLike', 12, 'identityHash',
     DB 7, 'collect', 9, 'floatBits', 9, 'bitsFloat', 10, 'doubleBits', 10, 'bitsDouble', 7, 'parseFP'
     DB 4, 'sqrt', 13, 'roundIntegral', 5, 'ascii'
     DB 11, 'callerClass', 15, 'methodTypeClass', 10, 'findHandle', 12, 'invokeHandle', 11, 'staticFinal'
-    DB 12, 'wrapperClass', 12, 'explicitCast', 9, 'enumValue', 17, 'captureStackTrace', 0
+    DB 12, 'wrapperClass', 12, 'explicitCast', 9, 'enumValue', 17, 'captureStackTrace', 8, 'resource', 0
 reflection DB 4, 'info', 5, 'flags', 6, 'invoke', 5, 'field', 6, 'access', 5, 'array', 7, 'convert'
     DB 11, 'annotations', 14, 'classSignature', 0
 n_support    DB 'jbv/runtime/Support'
@@ -267,6 +274,8 @@ hook PROC
     mov [edi], eax
     mov [edi+4], eax
     mov eax, [ebp+H_USER]
+    cmp eax, OP_RESOURCE
+    je hk_resource
     cmp eax, 14
     ja hk_dynamic
     jmp DWORD PTR [hk_table+eax*4]
@@ -432,6 +441,9 @@ hk_dynamic:
     lea edx, [eax-15]
     mov ecx, ebx
     call @jbv_dynamic_native@16
+    jmp hk_ret
+hk_resource:
+    call resource
 hk_ret:
     pop edi
     pop esi
@@ -443,6 +455,97 @@ hook ENDP
 .const
 hk_table DD hk_primitive, hk_copy, hk_array, hk_int, hk_clock, hk_write, hk_collect
     DD hk_int, hk_int, hk_long, hk_long, hk_parse, hk_sqrt, hk_round, hk_ascii
+.code
+
+; Support.resource(name): an entry of the application JAR as a new byte[], or null
+; (ebx = vm, esi = the arguments, edi = out -> eax status)
+R_NAME  EQU -8        ; JbvText (freed)
+R_DATA  EQU -12       ; the entry (freed)
+R_SIZE  EQU -16
+R_CLASS EQU -20
+resource:
+    push ebp
+    mov ebp, esp
+    sub esp, 20
+    push esi
+    push edi
+    xor eax, eax
+    mov [ebp+R_NAME], eax
+    mov [ebp+R_DATA], eax
+    cmp DWORD PTR [ebx+VM_APP_JAR], 0   ; no resources: null
+    je rs_ret
+    mov eax, S_NULL
+    mov edx, [esi]
+    test edx, edx
+    jz rs_ret
+    lea eax, [ebp+R_NAME]
+    push eax
+    mov ecx, ebx
+    call @jbv_text_bytes@12
+    test eax, eax
+    jnz rs_ret
+    push 1                              ; verify: the host's JAR
+    lea eax, [ebp+R_SIZE]
+    push eax
+    lea eax, [ebp+R_DATA]
+    push eax
+    push OFFSET rs_none
+    movzx eax, WORD PTR [ebp+R_NAME+4]
+    push eax
+    push DWORD PTR [ebp+R_NAME]
+    push DWORD PTR [ebx+VM_APP_JAR_SIZE]
+    push DWORD PTR [ebx+VM_APP_JAR]
+    push ebx
+    call jbv_jar_read
+    add esp, 36
+    cmp eax, S_NOT_FOUND
+    je rs_null
+    test eax, eax
+    jnz rs_free
+    lea eax, [ebp+R_CLASS]              ; a byte[] of it
+    push eax
+    push 'B'
+    xor edx, edx
+    mov ecx, ebx
+    call @jbv_array_class@16
+    test eax, eax
+    jnz rs_free
+    push edi
+    push DWORD PTR [ebp+R_SIZE]
+    mov edx, [ebp+R_CLASS]
+    mov ecx, ebx
+    call @jbv_new@16
+    test eax, eax
+    jnz rs_free
+    push 0
+    push esp
+    mov edx, [edi]
+    mov ecx, ebx
+    call @jbv_object@12
+    pop edi
+    add edi, DATA0
+    mov esi, [ebp+R_DATA]
+    mov ecx, [ebp+R_SIZE]
+    rep movsb
+rs_null:
+    xor eax, eax
+rs_free:
+    push eax
+    mov edx, [ebp+R_DATA]
+    mov ecx, ebx
+    call @jbv_free@8
+    mov edx, [ebp+R_NAME]
+    mov ecx, ebx
+    call @jbv_free@8
+    pop eax
+rs_ret:
+    pop edi
+    pop esi
+    mov esp, ebp
+    pop ebp
+    ret
+.const
+rs_none DB 0
 .code
 
 ; JbvStatus jbv_classpath_find(vm, name, data, size): a class file of the library (opened once)

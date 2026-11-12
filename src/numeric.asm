@@ -8,8 +8,6 @@
 option casemap:none
 option noscoped
 PUBLIC jbv_numeric
-EXTERN _alldiv:PROC
-EXTERN _allrem:PROC
 
 A_LO EQU DWORD PTR [esp+8]
 A_HI EQU DWORD PTR [esp+12]
@@ -136,11 +134,11 @@ lshr:
     sar edx, 31
     jmp put64
 ldiv_:
-    mov ecx, OFFSET _alldiv
+    xor ecx, ecx
     jmp ldivide
 lrem:
-    mov ecx, OFFSET _allrem
-ldivide:
+    mov ecx, 1
+ldivide:                                ; ecx: 0 quotient, 1 remainder
     mov eax, B_LO
     or eax, B_HI
     jz div_zero
@@ -154,18 +152,113 @@ ldivide:
     jne ld_go
     mov eax, A_LO
     mov edx, A_HI
-    cmp ecx, OFFSET _alldiv
-    je put64
+    jecxz @F
     xor eax, eax
     xor edx, edx
+@@:
     jmp put64
+; |a| / |b| unsigned (no CRT helper); the quotient's sign is a's ^ b's, the remainder's a's
+U_BLO EQU DWORD PTR [esp]
+U_BHI EQU DWORD PTR [esp+4]
+U_ALO EQU DWORD PTR [esp+8]
+U_AHI EQU DWORD PTR [esp+12]
 ld_go:
-    push B_HI                           ; each push moves the next operand to [esp+20]
-    push B_HI
-    push B_HI
-    push B_HI
-    call ecx                            ; callee pops the 16 bytes
+    push ebx
+    push esi
+    push edi
+    push ebp
+    mov ebp, ecx
+    mov eax, A_LO+16
+    mov edx, A_HI+16
+    mov edi, edx                        ; bit 31: the quotient's sign
+    call ld_abs
+    push edx
+    push eax
+    mov eax, B_LO+24
+    mov edx, B_HI+24
+    xor edi, edx
+    call ld_abs
+    push edx
+    push eax
+    test edx, edx
+    jnz ld_wide
+    mov eax, U_AHI                      ; a one-word divisor: two divisions
+    xor edx, edx
+    div U_BLO
+    mov esi, eax
+    mov eax, U_ALO
+    div U_BLO
+    mov ebx, edx                        ; remainder ecx:ebx, quotient esi:eax
+    xor ecx, ecx
+    jmp ld_signs
+ld_wide:                                ; shifted until the divisor is one word: the estimate is the
+    mov ecx, edx                        ; quotient or one more
+    mov ebx, eax
+    mov edx, U_AHI
+    mov eax, U_ALO
+@@:
+    shr ecx, 1
+    rcr ebx, 1
+    shr edx, 1
+    rcr eax, 1
+    test ecx, ecx
+    jnz @B
+    div ebx
+    mov esi, eax
+    mov eax, U_BHI                      ; q * |b|
+    mul esi
+    mov ecx, eax
+    mov eax, U_BLO
+    mul esi
+    add edx, ecx
+    jc ld_less
+    cmp edx, U_AHI
+    ja ld_less
+    jb ld_fits
+    cmp eax, U_ALO
+    jbe ld_fits
+ld_less:
+    dec esi
+    sub eax, U_BLO
+    sbb edx, U_BHI
+ld_fits:
+    mov ebx, U_ALO                      ; remainder = |a| - q * |b|
+    mov ecx, U_AHI
+    sub ebx, eax
+    sbb ecx, edx
+    mov eax, esi
+    xor esi, esi
+ld_signs:                               ; quotient esi:eax, remainder ecx:ebx
+    add esp, 16
+    test ebp, ebp
+    jnz ld_remainder
+    mov edx, esi
+    test edi, edi
+    jns ld_out
+    jmp ld_negate
+ld_remainder:
+    mov eax, ebx
+    mov edx, ecx
+    test DWORD PTR A_HI+16, 80000000h
+    jz ld_out
+ld_negate:
+    neg eax
+    adc edx, 0
+    neg edx
+ld_out:
+    pop ebp
+    pop edi
+    pop esi
+    pop ebx
     jmp put64
+ld_abs:                                 ; edx:eax = |edx:eax|
+    test edx, edx
+    jns @F
+    neg eax
+    adc edx, 0
+    neg edx
+@@:
+    ret
 div_zero:
     mov eax, S_DIVIDE
     ret

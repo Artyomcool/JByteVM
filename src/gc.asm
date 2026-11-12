@@ -1468,7 +1468,7 @@ co_done:
 co_none:
     xor eax, eax
     ret
-jbv_collect PROC EXPORT             ; (vm): from the host nothing holds raw pointers: compact
+jbv_collect PROC JBV_EXPORT             ; (vm): from the host nothing holds raw pointers: compact
     push ebx
     mov ebx, [esp+8]
     mov eax, S_BAD_ARG
@@ -2165,7 +2165,7 @@ ma_ret:
     ret 12
 @jbv_multi_array@20 ENDP
 
-jbv_set_heap_limit PROC EXPORT      ; (vm, bytes)
+jbv_set_heap_limit PROC JBV_EXPORT      ; (vm, bytes)
     push ebx
     mov ebx, [esp+8]
     mov edx, [esp+12]
@@ -2191,7 +2191,7 @@ hl_ret:
     pop ebx
     ret
 jbv_set_heap_limit ENDP
-jbv_heap_stats PROC EXPORT          ; (vm, out)
+jbv_heap_stats PROC JBV_EXPORT          ; (vm, out)
     mov ecx, [esp+4]
     mov edx, [esp+8]
     mov eax, S_BAD_ARG

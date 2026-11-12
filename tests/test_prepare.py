@@ -222,6 +222,20 @@ class PrepareTests(unittest.TestCase):
                     self.assertEqual(vm.call(m,n,owner='LambdaValues'),(OK,value),(m,n));self.assertEqual(LIB.jbv_collect(vm.handle),OK)
                 self.assertEqual(vm.call('negate',5)[0],OK)
                 self.assertNotEqual(vm.load_name('Core'),OK)  # already provided by the JAR
+            with VM() as vm:   # resources outlive the host's buffer
+                import ctypes as C
+                buffer=C.create_string_buffer(data);self.assertEqual(LIB.jbv_load_jar(vm.handle,buffer,len(data)),OK)
+                C.memset(buffer,0x5a,len(data));del buffer
+                LIB.jbv_string_new_utf8.argtypes=[C.c_void_p,C.c_char_p,C.c_uint32,C.POINTER(C.c_int32)]
+                LIB.jbv_array_read.argtypes=[C.c_void_p,C.c_int32,C.c_uint32,C.c_uint32,C.POINTER(C.c_uint64)]
+                for name,expected in (('mod.dat',payload),('missing.dat',None)):
+                    ref=C.c_int32();self.assertEqual(LIB.jbv_string_new_utf8(vm.handle,name.encode(),len(name),C.byref(ref)),OK)
+                    status,array=vm.call('resource',ref.value,owner='jbv/runtime/Support',descriptor='(Ljava/lang/String;)[B')
+                    self.assertEqual(status,OK)
+                    if expected is None:self.assertEqual(array,0);continue
+                    out=(C.c_uint64*len(expected))()
+                    self.assertEqual(LIB.jbv_array_read(vm.handle,array,0,len(expected),out),OK)
+                    self.assertEqual(bytes(x&255 for x in out),expected)
             with VM() as vm:
                 broken=bytearray(data);broken[len(broken)//3]^=0x55
                 self.assertNotEqual(vm.load_jar(bytes(broken)),OK)

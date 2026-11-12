@@ -382,7 +382,7 @@ fr_ret:
     ret
 @jbv_free_class@8 ENDP
 
-jbv_status_string PROC EXPORT       ; const char *jbv_status_string(JbvStatus), cdecl
+jbv_status_string PROC JBV_EXPORT       ; const char *jbv_status_string(JbvStatus), cdecl
     mov ecx, [esp+4]
     cmp ecx, 23
     jb @F
@@ -425,7 +425,7 @@ NATIVE        EQU 100h
 STATIC        EQU 8
 TYPED_NATIVE  EQU 8000h
 
-jbv_memory_stats PROC EXPORT        ; (vm, out)
+jbv_memory_stats PROC JBV_EXPORT        ; (vm, out)
     mov ecx, [esp+4]
     mov edx, [esp+8]
     mov eax, S_BAD_ARG
@@ -444,7 +444,7 @@ jbv_memory_stats PROC EXPORT        ; (vm, out)
     ret
 jbv_memory_stats ENDP
 
-jbv_create PROC EXPORT              ; (config, out)
+jbv_create PROC JBV_EXPORT              ; (config, out)
     push ebx
     push esi
     push edi
@@ -561,7 +561,7 @@ FREE_VM MACRO field
     mov ecx, ebx
     call @jbv_free@8
 ENDM
-jbv_destroy PROC EXPORT             ; (vm)
+jbv_destroy PROC JBV_EXPORT             ; (vm)
     push ebx
     push esi
     mov ebx, [esp+12]
@@ -586,6 +586,7 @@ jbv_destroy PROC EXPORT             ; (vm)
 @@:
     FREE_VM VM_LIBRARY
     FREE_VM VM_APP
+    FREE_VM VM_APP_JAR
     FREE_VM VM_SLOTS
     FREE_VM VM_SLOT_REFS
     push ebx
@@ -599,31 +600,75 @@ ds_ret:
     ret
 jbv_destroy ENDP
 
-jbv_load_jar PROC EXPORT            ; (vm, bytes, size)
-    mov ecx, [esp+4]
+; (vm, bytes, size): the classes, and a copy of the JAR when it has other entries
+; (resources, read by Class.getResourceAsStream; the host's buffer is not kept)
+jbv_load_jar PROC JBV_EXPORT
+    push ebx
+    push esi
+    push edi
+    mov ebx, [esp+16]
+    mov esi, [esp+20]
     mov eax, S_BAD_ARG
-    test ecx, ecx
-    jz @F
-    cmp DWORD PTR [esp+8], 0
-    je @F
-    cmp DWORD PTR [ecx+VM_APP], 0
-    jne @F
+    test ebx, ebx
+    jz lj_ret
+    test esi, esi
+    jz lj_ret
+    cmp DWORD PTR [ebx+VM_APP], 0
+    jne lj_ret
     mov eax, S_BUSY
-    cmp DWORD PTR [ecx+VM_DEPTH], 0
-    jne @F
+    cmp DWORD PTR [ebx+VM_DEPTH], 0
+    jne lj_ret
     push 1
-    push DWORD PTR [esp+16]
-    push DWORD PTR [esp+16]
-    lea eax, [ecx+VM_APP]
+    push DWORD PTR [esp+28]
+    push esi
+    lea eax, [ebx+VM_APP]
     push eax
-    push ecx
+    push ebx
     call jbv_archive_open
     add esp, 20
+    test eax, eax
+    jnz lj_ret
+    mov ecx, [esp+24]                   ; the entry count of the end record (found by open)
+    lea edi, [esi+ecx-22]
 @@:
+    cmp DWORD PTR [edi], 06054b50h
+    je @F
+    dec edi
+    jmp @B
+@@:
+    xor eax, eax
+    cmp WORD PTR [edi+10], 1
+    jbe lj_ret
+    mov edx, ecx
+    mov ecx, ebx
+    call @jbv_alloc@8
+    test eax, eax
+    jnz @F
+    lea edx, [ebx+VM_APP]               ; no room for the resources: no JAR at all
+    mov ecx, ebx
+    push edx
+    mov edx, [edx]
+    call @jbv_free@8
+    pop edx
+    mov DWORD PTR [edx], 0
+    mov DWORD PTR [edx+4], 0
+    mov eax, S_OOM
+    jmp lj_ret
+@@:
+    mov [ebx+VM_APP_JAR], eax
+    mov ecx, [esp+24]
+    mov [ebx+VM_APP_JAR_SIZE], ecx
+    mov edi, eax
+    rep movsb
+    xor eax, eax
+lj_ret:
+    pop edi
+    pop esi
+    pop ebx
     ret
 jbv_load_jar ENDP
 
-jbv_load_class PROC EXPORT          ; (vm, bytes, size)
+jbv_load_class PROC JBV_EXPORT          ; (vm, bytes, size)
     push ebx
     push esi
     push edi
@@ -797,7 +842,7 @@ bn_ret:
     pop ebx
     pop ebp
     ret
-jbv_bind_native PROC EXPORT         ; (vm, class, name, descriptor, callback, user)
+jbv_bind_native PROC JBV_EXPORT         ; (vm, class, name, descriptor, callback, user)
     push DWORD PTR [esp+24]
     push 0
     push DWORD PTR [esp+28]
@@ -809,7 +854,7 @@ jbv_bind_native PROC EXPORT         ; (vm, class, name, descriptor, callback, us
     add esp, 28
     ret
 jbv_bind_native ENDP
-jbv_bind_native_slots PROC EXPORT   ; (vm, class, name, descriptor, callback, user)
+jbv_bind_native_slots PROC JBV_EXPORT   ; (vm, class, name, descriptor, callback, user)
     push DWORD PTR [esp+24]
     push DWORD PTR [esp+24]
     push 0
@@ -822,7 +867,7 @@ jbv_bind_native_slots PROC EXPORT   ; (vm, class, name, descriptor, callback, us
     ret
 jbv_bind_native_slots ENDP
 
-jbv_call PROC EXPORT                ; (vm, class, name, descriptor, args, count, int32_t *result)
+jbv_call PROC JBV_EXPORT                ; (vm, class, name, descriptor, args, count, int32_t *result)
     push ebp
     mov ebp, esp
     sub esp, 16                         ; [ebp-8] value, [ebp-12] returns, [ebp-16] expected
@@ -866,7 +911,7 @@ jc_ret:
     ret
 jbv_call ENDP
 
-jbv_call_slots PROC EXPORT          ; (vm, class, name, descriptor, args, count, uint64_t *result)
+jbv_call_slots PROC JBV_EXPORT          ; (vm, class, name, descriptor, args, count, uint64_t *result)
     push ebp
     mov ebp, esp
     sub esp, 8                          ; the method id
@@ -944,7 +989,7 @@ pa_ret:
     pop esi
     ret 8
 @jbv_parse@16 ENDP
-jbv_features PROC EXPORT            ; the profile's features
+jbv_features PROC JBV_EXPORT            ; the profile's features
 IF JBV_PROFILE_FULL
     mov eax, 1 or 2 or 4 or 8 or 16 or 64 or 128
 ELSEIF JBV_PROFILE_CORE
@@ -954,7 +999,7 @@ ELSE
 ENDIF
     ret
 jbv_features ENDP
-jbv_set_host_services PROC EXPORT   ; (vm, services or 0): installed while idle
+jbv_set_host_services PROC JBV_EXPORT   ; (vm, services or 0): installed while idle
     mov ecx, [esp+4]
     mov eax, 1
     jecxz hs_ret

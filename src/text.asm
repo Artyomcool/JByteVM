@@ -2382,7 +2382,7 @@ tn_at:
 @jbv_text_native@24 ENDP
 
 ; ---- the public string API (cdecl, exported)
-jbv_string_new_utf16 PROC EXPORT    ; (vm, text, length, out)
+jbv_string_new_utf16 PROC JBV_EXPORT    ; (vm, text, length, out)
     push ebx
     push esi
     push edi
@@ -2483,7 +2483,7 @@ un_bad:
     pop ecx
     stc
     ret
-jbv_string_new_utf8 PROC EXPORT     ; (vm, text, bytes, out)
+jbv_string_new_utf8 PROC JBV_EXPORT     ; (vm, text, bytes, out)
     push ebx
     push esi
     push edi
@@ -2543,7 +2543,7 @@ su_bad:
     mov eax, S_BAD_ARG
     jmp su_ret
 jbv_string_new_utf8 ENDP
-jbv_string_length PROC EXPORT       ; (vm, ref, out)
+jbv_string_length PROC JBV_EXPORT       ; (vm, ref, out)
     push ebx
     push esi
     mov ebx, [esp+12]
@@ -2563,7 +2563,7 @@ jbv_string_length PROC EXPORT       ; (vm, ref, out)
     pop ebx
     ret
 jbv_string_length ENDP
-jbv_string_read_utf16 PROC EXPORT   ; (vm, ref, start, count, out)
+jbv_string_read_utf16 PROC JBV_EXPORT   ; (vm, ref, start, count, out)
     push ebx
     push esi
     push edi
@@ -2690,7 +2690,7 @@ ue_done:
     pop ebx
     pop esi
     ret
-jbv_string_read_utf8 PROC EXPORT    ; (vm, ref, out, capacity, bytes)
+jbv_string_read_utf8 PROC JBV_EXPORT    ; (vm, ref, out, capacity, bytes)
     push ebx
     push esi
     push edi

@@ -234,15 +234,15 @@ lo_ret:
     mov eax, S_UNSUPPORTED
     ret 4
 @jbv_mirror@12 ENDP
-jbv_string_new_utf16 PROC EXPORT    ; the string API without strings
+jbv_string_new_utf16 PROC JBV_EXPORT    ; the string API without strings
 jbv_string_new_utf16 ENDP
-jbv_string_new_utf8 PROC EXPORT
+jbv_string_new_utf8 PROC JBV_EXPORT
 jbv_string_new_utf8 ENDP
-jbv_string_length PROC EXPORT
+jbv_string_length PROC JBV_EXPORT
 jbv_string_length ENDP
-jbv_string_read_utf16 PROC EXPORT
+jbv_string_read_utf16 PROC JBV_EXPORT
 jbv_string_read_utf16 ENDP
-jbv_string_read_utf8 PROC EXPORT
+jbv_string_read_utf8 PROC JBV_EXPORT
     mov eax, S_UNSUPPORTED
     ret
 jbv_string_read_utf8 ENDP

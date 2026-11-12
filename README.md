@@ -6,7 +6,7 @@
 преобразование лямбд и CONSTANT_Dynamic при подготовке и три профиля x86.
 
 **Только Windows x86 (32 бита).** VM целиком на ассемблере (MASM, `src/*.asm`):
-в DLL нет C-кода и CRT, кроме компиляторных `_alldiv`/`_allrem`. C — только примеры
+в DLL нет C-кода, CRT и импортов. C — только примеры
 хостов и тестовые фикстуры.
 Разрядность JDK, компилирующего классы, не определяет разрядность VM.
 
@@ -234,7 +234,9 @@ javac на диске остаётся пригодным для стандар�
 | Random | LCG java.util.Random с теми же последовательностями, что в JDK: nextInt/Long/Double/Float/Boolean/Gaussian/Bytes, nextInt(origin,bound); конструктор без seed нужны часы хозяина |
 | Функции | Используемые коллекциями и лямбдами Function/BiFunction/Consumer/BiConsumer/Predicate/Supplier/Runnable, операторы и часть примитивных специализаций, Comparator (comparing*/thenComparing*/nullsFirst/Last), Objects |
 | Generics в рефлексии | Type, ParameterizedType, TypeVariable, WildcardType, GenericArrayType; Class.getGenericSuperclass/Interfaces/getTypeParameters/getTypeName, Field.getGenericType, Method/Constructor getGeneric*Types, getTypeParameters, getParameters (имена — при компиляции с `-parameters`). Сигнатуры разбираются по запросу, без кэша |
-| Исключения IO | java.io.IOException/UncheckedIOException, InterruptedException, TypeNotPresentException (без самого IO) |
+| java.io | InputStream/OutputStream, ByteArrayInputStream/ByteArrayOutputStream, FilterInputStream/FilterOutputStream, DataInputStream/DataOutputStream (big-endian, modified UTF-8, readFully/EOFException как в JDK), DataInput/DataOutput, Closeable/Flushable; IOException/EOFException/UTFDataFormatException/UncheckedIOException. Файлов и консольного ввода нет |
+| Ресурсы | Class.getResourceAsStream: абсолютные имена от корня JAR, относительные от пакета класса, null если нет; ByteArrayInputStream с available() = размер |
+| Прочие исключения | InterruptedException, TypeNotPresentException |
 | Коллекции | Queue/Deque, ArrayDeque, PriorityQueue (тот же порядок кучи, что в JDK), LinkedList, LinkedHashMap/Set (в т.ч. access order и removeEldestEntry), TreeMap/TreeSet (treap) с Navigable-представлениями, EnumMap/EnumSet |
 | Streams | Stream/IntStream/LongStream/DoubleStream (последовательные, ленивые, pull-конвейер), Collection.stream, Arrays.stream, String.chars/codePoints, Stream.of/iterate/generate/concat/builder; все промежуточные и терминальные операции, кроме parallel/spliterator; count() без прогона конвейера для sized-источников, как в JDK; Collectors (toList/Set/Map, joining, groupingBy, partitioningBy, mapping/filtering/flatMapping, counting, summing/averaging/summarizing, reducing, minBy/maxBy, teeing, collectingAndThen), Collector.of; Optional/OptionalInt/Long/Double, *SummaryStatistics (компенсированная сумма double бит в бит как в JDK) |
 | Строки | toLowerCase/toUpperCase (полный Unicode, SpecialCasing, final sigma), equalsIgnoreCase/compareToIgnoreCase/regionMatches как в JDK, split/matches/replaceAll, strip/isBlank/indent, join, format/formatted, кодовые точки, getBytes/new String с UTF-8/UTF-16/ISO-8859-1/US-ASCII (правила замены как в JDK); StringBuilder.indexOf. Методы реализованы на Java в `jbv.runtime.Strings` и подключены к встроенному String |
@@ -478,6 +480,10 @@ python tools/build.py --jdk C:/path/to/jdk-25 --test --test-python C:/path/to/py
 | text | Ядро, native, Object/Class/String/StringBuilder, встроенные базовые исключения; без Java-библиотеки, рефлексии и stack traces | build/x86-text |
 | core | Ядро, native, идентичность/клонирование Object, массивы, базовые исключения и мониторы; без строк и Class mirrors | build/x86-core |
 
+Рядом с `jbytevm.dll` собирается `jbytevm_static.lib` из тех же объектов: публичные
+символы без директив экспорта и без внешних зависимостей (ни CRT, ни импортов) — для
+статической линковки, в том числе MinGW x86; заголовки те же, без `JBV_USE_DLL`.
+
 C ABI одинаков; доступность групп возвращает `jbv_features()`. Строковые C API
 в core возвращают UNSUPPORTED_FEATURE. Уменьшенные профили сознательно меняют
 доступный classpath; это не эквивалентные по возможностям варианты full.
@@ -644,7 +650,8 @@ python tools/prepare.py --unpack app.jar -o app-classes
 сжатой одним потоком LZMA (ZIP-метод 14, тот же формат, что у встроенной библиотеки), ресурсы —
 тоже LZMA или без сжатия. Хозяин передаёт его целиком: `jbv_load_jar(vm, bytes, size)`.
 VM сразу распаковывает классы в свою память (входит в бюджет), буфер хозяина
-не удерживает; классы загружаются лениво при первом обращении, в том числе
+не удерживает: если в JAR есть ресурсы, VM хранит его копию (сжатую) и распаковывает
+ресурс при каждом Class.getResourceAsStream; классы загружаются лениво при первом обращении, в том числе
 при привязке native-функций. На VM — один такой JAR. Отдельные class-файлы
 по-прежнему можно передать через `jbv_load_class`.
 

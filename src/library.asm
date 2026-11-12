@@ -168,6 +168,7 @@ IF JBV_PROFILE_FULL
     DB 11, 'getNestHost', 3, '()$', 17, 33, 0
     DB 17, 'getDeclaringClass', 3, '()$', 17, 34, 0
     DB 17, 'getEnclosingClass', 3, '()$', 17, 35, 0
+    DB 19, 'getResourceAsStream', 24, '(!)Ljava/io/InputStream;', 18, 'K', 0
 ENDIF
     DB 0
 string_methods LABEL BYTE
@@ -252,6 +253,7 @@ IF JBV_PROFILE_FULL
     DB 6, '<init>', 5, '([B)V', 18, 0, 0
     DB 6, '<init>', 7, '([BII)V', 18, 0, 0
     DB 6, '<init>', 6, '([B!)V', 18, 0, 0
+    DB 6, '<init>', 8, '([BII!)V', 18, 0, 0
     DB 6, '<init>', 31, '([BLjava/nio/charset/Charset;)V', 18, 0, 0
     DB 6, '<init>', 33, '([BIILjava/nio/charset/Charset;)V', 18, 0, 0
     DB 6, '<init>', 4, '(&)V', 18, 0, 0
@@ -1534,10 +1536,14 @@ java_native PROC
     je jn_parameters
     test WORD PTR [edx+M_FLAGS], ACC_STATIC
     jnz jn_parameters
-    mov eax, OFFSET x_string            ; the receiver: String, or StringBuilder
+    mov eax, OFFSET x_string            ; the receiver: String, StringBuilder or Class
     cmp WORD PTR [edx+M_LINE_COUNT], 'B'
     jne @F
     mov eax, OFFSET x_builder
+@@:
+    cmp WORD PTR [edx+M_LINE_COUNT], 'K'
+    jne @F
+    mov eax, OFFSET x_class
 @@:
     movzx ecx, BYTE PTR [eax]
     lea esi, [eax+1]

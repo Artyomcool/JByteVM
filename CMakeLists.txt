@@ -23,23 +23,29 @@ JBV_PROFILE_CORE EQU ${JBV_CORE}
 JBV_GC_STRESS EQU ${JBV_GC_STRESS}
 ")
 # The VM is assembly only (MASM). The C below are example hosts and test fixtures.
-add_library(jbytevm SHARED src/native.asm src/interp.asm src/lzma.asm src/numeric.asm src/classfile.asm
-    src/jar.asm src/throw.asm src/vm.asm src/classes.asm src/gc.asm src/monitors.asm src/api.asm src/link.asm
-    src/slow.asm src/run.asm)
+set(JBV_SOURCES src/native.asm src/interp.asm src/lzma.asm src/numeric.asm src/classfile.asm src/jar.asm src/throw.asm
+    src/vm.asm src/classes.asm src/gc.asm src/monitors.asm src/api.asm src/link.asm src/slow.asm src/run.asm)
 if(JBV_PROFILE STREQUAL "full")
-    target_sources(jbytevm PRIVATE src/values.asm src/classpath.asm src/annotations.asm src/dynamic.asm
-        src/reflection.asm "${CMAKE_BINARY_DIR}/generated_classpath.asm")
+    list(APPEND JBV_SOURCES src/values.asm src/classpath.asm src/annotations.asm src/dynamic.asm src/reflection.asm
+        "${CMAKE_BINARY_DIR}/generated_classpath.asm")
 else()
-    target_sources(jbytevm PRIVATE src/core.asm)
+    list(APPEND JBV_SOURCES src/core.asm)
 endif()
 if(NOT JBV_PROFILE STREQUAL "core")
-    target_sources(jbytevm PRIVATE src/text.asm src/decimal.asm src/library.asm)
+    list(APPEND JBV_SOURCES src/text.asm src/decimal.asm src/library.asm)
 endif()
-target_include_directories(jbytevm PUBLIC include)
-target_compile_options(jbytevm PRIVATE /safeseh "/I${CMAKE_SOURCE_DIR}/src" "/I${CMAKE_BINARY_DIR}")
-# 64-bit division and remainder come from the compiler's helpers (_alldiv, _allrem); nothing else
-# of the CRT. No entry point, no OS imports: the host supplies memory and services.
-target_link_libraries(jbytevm PRIVATE libcmt)
+# jbytevm.dll exports the API; jbytevm_static.lib has the same objects with plain public symbols
+# (no .drectve), for static linking, MinGW's included. Neither needs a CRT, an entry point or
+# any import: the host supplies memory and services.
+file(WRITE "${CMAKE_BINARY_DIR}/dll/export.inc" "JBV_EXPORT TEXTEQU <EXPORT>\n")
+file(WRITE "${CMAKE_BINARY_DIR}/static/export.inc" "JBV_EXPORT TEXTEQU <PUBLIC>\n")
+add_library(jbytevm SHARED ${JBV_SOURCES})
+add_library(jbytevm_static STATIC ${JBV_SOURCES})
+foreach(target jbytevm jbytevm_static)
+    target_include_directories(${target} PUBLIC include)
+endforeach()
+target_compile_options(jbytevm PRIVATE /safeseh "/I${CMAKE_BINARY_DIR}/dll" "/I${CMAKE_SOURCE_DIR}/src" "/I${CMAKE_BINARY_DIR}")
+target_compile_options(jbytevm_static PRIVATE /safeseh "/I${CMAKE_BINARY_DIR}/static" "/I${CMAKE_SOURCE_DIR}/src" "/I${CMAKE_BINARY_DIR}")
 target_link_options(jbytevm PRIVATE /NODEFAULTLIB /NOENTRY /INCREMENTAL:NO /OPT:REF /OPT:ICF /MAP)
 
 function(jbv_host name source options)
