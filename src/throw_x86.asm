@@ -24,8 +24,10 @@ EXTERN SYSCALL @jbv_object@12:PROC
 EXTERN SYSCALL @jbv_barrier_checked@12:PROC
 EXTERN jbv_retain:PROC
 EXTERN jbv_release:PROC
+IF JBV_PROFILE_CORE EQ 0
 EXTERN SYSCALL @jbv_string_mutf@16:PROC
 EXTERN SYSCALL @jbv_string_view@12:PROC
+ENDIF
 EXTERN SYSCALL @jbv_execute@28:PROC
 
 S_OK          EQU 0
@@ -55,7 +57,7 @@ methods LABEL BYTE
     DB 6, '<init>', 44, '(Ljava/lang/String;Ljava/lang/Throwable;ZZ)V'
     DB 10, 'getMessage', 20, '()Ljava/lang/String;'
     DB 8, 'getCause', 23, '()Ljava/lang/Throwable;'
-    DB 9, 'initCause', 46, '(Ljava/lang/Throwable;)Ljava/lang/Throwable;'
+    DB 9, 'initCause', 44, '(Ljava/lang/Throwable;)Ljava/lang/Throwable;'
     DB 13, 'addSuppressed', 24, '(Ljava/lang/Throwable;)V'
     DB 13, 'getSuppressed', 24, '()[Ljava/lang/Throwable;'
 fields LABEL BYTE
@@ -143,6 +145,7 @@ if_yes:
     or eax, 1
     ret
 
+IF JBV_PROFILE_FULL
 @jbv_capture_trace@8 PROC SYSCALL
     push ebp
     mov ebp, esp
@@ -358,6 +361,12 @@ et_ok:
     xor eax, eax
 et_ret:
     ret
+ELSE
+@jbv_capture_trace@8 PROC SYSCALL   ; no stack traces without the library
+    mov eax, 6
+    ret
+@jbv_capture_trace@8 ENDP
+ENDIF
 
 ; ---- built-in exception classes
 ; ZF = the name (JbvText at eax) is a built-in exception; ecx = its record

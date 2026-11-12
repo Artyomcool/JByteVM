@@ -104,7 +104,7 @@ def main():
         shutil.rmtree(checker, ignore_errors=True)
         run([jdk / "bin/javac.exe", "--release", "25", "-g:none", "-XDstringConcat=inline", "-d", checker / "classes", ROOT / "tools/jbvhost/Host.java", ROOT / "tools/checkgc/CheckGc.java"])
         run([sys.executable, ROOT / "tools/prepare.py", checker / "classes", "-o", checker / "checkgc.jar", "--lower-lambdas", "--jdk", jdk])
-        run([build / "Release/jbytevm-run.exe", checker / "checkgc.jar", "checkgc/CheckGc", ROOT / "src"])
+        if args.profile == "full": run([build / "Release/jbytevm-run.exe", checker / "checkgc.jar", "checkgc/CheckGc", ROOT / "src"])
         pointer_size = 4 if args.arch == "x86" else 8
         python = args.test_python
         if not python:
