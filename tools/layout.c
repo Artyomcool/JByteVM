@@ -36,6 +36,12 @@ int main(void) {
     F(JbvVM, class_cache, "VM_CLASS_CACHE"); F(JbvVM, library, "VM_LIBRARY"); F(JbvVM, app, "VM_APP");
     F(JbvClass, primitive, "C_PRIMITIVE"); F(JbvClass, ref_slots, "C_REF_SLOTS"); F(JbvClass, root_slots, "C_ROOT_SLOTS");
     F(JbvClass, interfaces, "C_INTERFACES");
+    Z(JbvConfig, "CFG_SIZEOF"); F(JbvConfig, alloc, "CFG_ALLOC"); F(JbvConfig, free, "CFG_FREE"); F(JbvConfig, allocator_user, "CFG_USER");
+    F(JbvConfig, max_slots, "CFG_MAX_SLOTS"); F(JbvConfig, max_depth, "CFG_MAX_DEPTH"); F(JbvConfig, max_instructions, "CFG_MAX_INSTRUCTIONS");
+    F(JbvConfig, max_memory, "CFG_MAX_MEMORY"); F(JbvConfig, max_heap, "CFG_MAX_HEAP");
+    Z(JbvVM, "VM_SIZEOF"); F(JbvVM, config, "VM_CONFIG"); F(JbvVM, slots, "VM_SLOTS"); F(JbvVM, slot_refs, "VM_SLOT_REFS");
+    F(JbvVM, depth, "VM_DEPTH"); F(JbvVM, monitors, "VM_MONITORS");
+    F(JbvMethod, native_slots, "M_NATIVE_SLOTS"); F(JbvMethod, result_kind, "M_RESULT_KIND");
 #if JBV_PROFILE_FULL
     F(JbvField, attributes, "FIELD_ATTRIBUTES"); F(JbvMethod, attributes, "M_ATTRIBUTES"); F(JbvClass, attributes, "C_ATTRIBUTES");
 #endif

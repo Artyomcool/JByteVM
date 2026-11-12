@@ -1,5 +1,6 @@
 ; VM basics for x86 (vm.c is the reference and serves x64): accounted allocation,
-; text comparison, class/method/field lookup, freeing classes. Same names as the C.
+; text comparison, class/method/field lookup, freeing classes, the public VM API.
+; Internal functions keep the C names (fastcall); the API is cdecl and exported.
 .686
 .model flat, C
 option casemap:none
@@ -426,4 +427,513 @@ ss_next:
 ss_done:
     ret
 jbv_status_string ENDP
+
+; ---- the public VM API (cdecl, exported)
+EXTERN SYSCALL @jbv_bootstrap@4:PROC
+EXTERN SYSCALL @jbv_free_heap@4:PROC
+EXTERN SYSCALL @jbv_parse@16:PROC
+EXTERN SYSCALL @jbv_classpath_find@20:PROC
+EXTERN SYSCALL @jbv_library_id@8:PROC
+EXTERN SYSCALL @jbv_exception_name@8:PROC
+EXTERN SYSCALL @jbv_lazy_class@16:PROC
+EXTERN SYSCALL @jbv_signature@16:PROC
+EXTERN SYSCALL @jbv_begin_call@4:PROC
+EXTERN jbv_archive_open:PROC
+EXTERN jbv_archive_find:PROC
+EXTERN jbv_resolve_method:PROC
+EXTERN jbv_invoke:PROC
+S_BAD_ARG     EQU 1
+S_OOM         EQU 2
+S_UNSUPPORTED EQU 6
+S_NOT_FOUND   EQU 7
+S_LINKAGE     EQU 8
+S_BUSY        EQU 11
+NATIVE        EQU 100h
+STATIC        EQU 8
+TYPED_NATIVE  EQU 8000h
+
+jbv_memory_stats PROC EXPORT        ; (vm, out)
+    mov ecx, [esp+4]
+    mov edx, [esp+8]
+    mov eax, S_BAD_ARG
+    test ecx, ecx
+    jz @F
+    test edx, edx
+    jz @F
+    mov eax, [ecx+VM_MEMORY_USED]
+    mov [edx], eax
+    mov eax, [ecx+VM_MEMORY_PEAK]
+    mov [edx+4], eax
+    mov eax, [ecx+VM_MAX_MEMORY]
+    mov [edx+8], eax
+    xor eax, eax
+@@:
+    ret
+jbv_memory_stats ENDP
+
+jbv_create PROC EXPORT              ; (config, out)
+    push ebx
+    push esi
+    push edi
+    mov esi, [esp+16]                   ; config
+    mov eax, [esp+20]
+    test eax, eax
+    jz cr_bad
+    mov DWORD PTR [eax], 0
+    test esi, esi
+    jz cr_bad
+    cmp DWORD PTR [esi+CFG_ALLOC], 0
+    je cr_bad
+    cmp DWORD PTR [esi+CFG_FREE], 0
+    je cr_bad
+    cmp DWORD PTR [esi+CFG_MAX_DEPTH], 256
+    ja cr_bad
+    cmp DWORD PTR [esi+CFG_MAX_SLOTS], 1000000h
+    ja cr_bad
+    mov ebx, [esi+CFG_MAX_MEMORY]       ; the total limit: 10 MiB by default
+    test ebx, ebx
+    jnz @F
+    mov ebx, 10*1024*1024
+@@:
+    cmp [esi+CFG_MAX_HEAP], ebx
+    ja cr_bad
+    cmp ebx, VM_SIZEOF
+    jb cr_oom
+    push VM_SIZEOF
+    push DWORD PTR [esi+CFG_USER]
+    call DWORD PTR [esi+CFG_ALLOC]
+    add esp, 8
+    test eax, eax
+    jz cr_oom
+    mov edx, eax
+    mov edi, eax
+    mov ecx, VM_SIZEOF
+    xor eax, eax
+    rep stosb
+    mov edi, edx                        ; vm->config = *config
+    mov ecx, CFG_SIZEOF/4
+    rep movsd
+    mov esi, edx                        ; esi = the VM
+    mov [esi+VM_MAX_MEMORY], ebx
+    mov DWORD PTR [esi+VM_MEMORY_USED], VM_SIZEOF
+    mov DWORD PTR [esi+VM_MEMORY_PEAK], VM_SIZEOF
+    cmp DWORD PTR [esi+CFG_MAX_DEPTH], 0
+    jne @F
+    mov DWORD PTR [esi+CFG_MAX_DEPTH], 64
+@@:
+    cmp DWORD PTR [esi+CFG_MAX_SLOTS], 0
+    jne @F
+    mov DWORD PTR [esi+CFG_MAX_SLOTS], 16384
+@@:
+    mov eax, [esi+CFG_MAX_INSTRUCTIONS]
+    or eax, [esi+CFG_MAX_INSTRUCTIONS+4]
+    jnz @F
+    mov DWORD PTR [esi+CFG_MAX_INSTRUCTIONS], 10000000
+@@:
+    mov eax, [esi+CFG_MAX_HEAP]
+    test eax, eax
+    jnz @F
+    mov eax, ebx
+@@:
+    mov [esi+VM_HEAP_LIMIT], eax
+    mov edx, [esi+CFG_MAX_SLOTS]
+    shl edx, 2
+    mov ecx, esi
+    call @jbv_alloc@8
+    mov [esi+VM_SLOTS], eax
+    test eax, eax
+    jnz @F
+    push esi                            ; nothing else exists yet: just the VM
+    push DWORD PTR [esi+CFG_USER]
+    call DWORD PTR [esi+CFG_FREE]
+    add esp, 8
+    jmp cr_oom
+@@:
+    mov edx, [esi+CFG_MAX_SLOTS]
+    mov ecx, esi
+    call @jbv_alloc@8
+    mov [esi+VM_SLOT_REFS], eax
+    mov ebx, S_OOM
+    test eax, eax
+    jz cr_destroy
+    mov ecx, esi
+    call @jbv_bootstrap@4
+    mov ebx, eax
+    test eax, eax
+    jnz cr_destroy
+    mov eax, [esp+20]
+    mov [eax], esi
+    xor eax, eax
+    jmp cr_ret
+cr_destroy:
+    push esi
+    call jbv_destroy
+    add esp, 4
+    mov eax, ebx
+    jmp cr_ret
+cr_oom:
+    mov eax, S_OOM
+    jmp cr_ret
+cr_bad:
+    mov eax, S_BAD_ARG
+cr_ret:
+    pop edi
+    pop esi
+    pop ebx
+    ret
+jbv_create ENDP
+
+FREE_VM MACRO field
+    mov edx, [ebx+field]
+    mov ecx, ebx
+    call @jbv_free@8
+ENDM
+jbv_destroy PROC EXPORT             ; (vm)
+    push ebx
+    push esi
+    mov ebx, [esp+12]
+    mov eax, S_BAD_ARG
+    test ebx, ebx
+    jz ds_ret
+    mov eax, S_BUSY
+    cmp DWORD PTR [ebx+VM_DEPTH], 0
+    jne ds_ret
+    mov ecx, ebx
+    call @jbv_free_heap@4
+    FREE_VM VM_MONITORS
+    mov esi, [ebx+VM_CLASSES]
+@@:
+    test esi, esi
+    jz @F
+    mov edx, esi
+    mov esi, [esi+C_NEXT]
+    mov ecx, ebx
+    call @jbv_free_class@8
+    jmp @B
+@@:
+    FREE_VM VM_LIBRARY
+    FREE_VM VM_APP
+    FREE_VM VM_SLOTS
+    FREE_VM VM_SLOT_REFS
+    push ebx
+    push DWORD PTR [ebx+CFG_USER]
+    call DWORD PTR [ebx+CFG_FREE]
+    add esp, 8
+    xor eax, eax
+ds_ret:
+    pop esi
+    pop ebx
+    ret
+jbv_destroy ENDP
+
+jbv_load_jar PROC EXPORT            ; (vm, bytes, size)
+    mov ecx, [esp+4]
+    mov eax, S_BAD_ARG
+    test ecx, ecx
+    jz @F
+    cmp DWORD PTR [esp+8], 0
+    je @F
+    cmp DWORD PTR [ecx+VM_APP], 0
+    jne @F
+    mov eax, S_BUSY
+    cmp DWORD PTR [ecx+VM_DEPTH], 0
+    jne @F
+    push 1
+    push DWORD PTR [esp+16]
+    push DWORD PTR [esp+16]
+    lea eax, [ecx+VM_APP]
+    push eax
+    push ecx
+    call jbv_archive_open
+    add esp, 20
+@@:
+    ret
+jbv_load_jar ENDP
+
+jbv_load_class PROC EXPORT          ; (vm, bytes, size)
+    push ebx
+    push esi
+    push edi
+    push 0                              ; [esp] = the class
+    mov ebx, [esp+20]
+    mov eax, S_BAD_ARG
+    test ebx, ebx
+    jz lc_ret
+    cmp DWORD PTR [esp+24], 0
+    je lc_ret
+    mov eax, S_BUSY
+    cmp DWORD PTR [ebx+VM_DEPTH], 0
+    jne lc_ret
+    mov eax, esp
+    push eax
+    push DWORD PTR [esp+32]
+    mov edx, [esp+32]
+    mov ecx, ebx
+    call @jbv_parse@16
+    test eax, eax
+    jnz lc_ret
+    mov esi, [esp]                      ; esi = the class
+    lea edi, [esi+C_NAME]
+    ; built-in layouts are owned by the runtime, including before lazy creation
+    push 0
+    push DWORD PTR [edi+4]
+    push DWORD PTR [edi]
+    xor edx, edx
+    mov ecx, ebx
+    call @jbv_classpath_find@20
+    test eax, eax
+    jz lc_taken
+    cmp eax, S_NOT_FOUND
+    jne lc_free
+    push DWORD PTR [edi+4]
+    push DWORD PTR [edi]
+    mov ecx, ebx
+    call @jbv_find_class@12
+    test eax, eax
+    jnz lc_taken
+    push DWORD PTR [edi+4]
+    push DWORD PTR [edi]
+    call @jbv_library_id@8
+    test al, al
+    jnz lc_taken
+    push DWORD PTR [edi+4]
+    push DWORD PTR [edi]
+    call @jbv_exception_name@8
+    test eax, eax
+    jnz lc_taken
+    push 0
+    push 0
+    push DWORD PTR [edi+4]
+    push DWORD PTR [edi]
+    lea eax, [ebx+VM_APP]
+    push eax
+    call jbv_archive_find
+    add esp, 20
+    test eax, eax
+    jz lc_taken
+    mov eax, [ebx+VM_CLASSES]
+    mov [esi+C_NEXT], eax
+    mov [ebx+VM_CLASSES], esi
+    xor eax, eax
+    jmp lc_ret
+lc_taken:
+    mov eax, S_LINKAGE
+lc_free:
+    push eax
+    mov edx, esi
+    mov ecx, ebx
+    call @jbv_free_class@8
+    pop eax
+lc_ret:
+    pop ecx
+    pop edi
+    pop esi
+    pop ebx
+    ret
+jbv_load_class ENDP
+
+; bind_native: [esp+4] vm, class, name, descriptor, callback, wide, user (stdcall-like frame below)
+B_VM    EQU 8
+B_CLASS EQU 12
+B_NAME  EQU 16
+B_DESC  EQU 20
+B_CB    EQU 24
+B_WIDE  EQU 28
+B_USER  EQU 32
+bind_native:
+    push ebp
+    mov ebp, esp
+    push ebx
+    push 0                              ; [ebp-8] = the class
+    mov ebx, [ebp+B_VM]
+    mov eax, S_BAD_ARG
+    test ebx, ebx
+    jz bn_ret
+    cmp DWORD PTR [ebp+B_CLASS], 0
+    je bn_ret
+    cmp DWORD PTR [ebp+B_NAME], 0
+    je bn_ret
+    cmp DWORD PTR [ebp+B_DESC], 0
+    je bn_ret
+    mov ecx, [ebp+B_CB]
+    or ecx, [ebp+B_WIDE]
+    jz bn_ret
+    mov eax, S_BUSY
+    cmp DWORD PTR [ebx+VM_DEPTH], 0
+    jne bn_ret
+    mov ecx, [ebp+B_CLASS]
+    call @jbv_text@4
+    push edx
+    push eax
+    push edx
+    push eax
+    mov ecx, ebx
+    call @jbv_find_class@12
+    pop ecx                             ; the class name again
+    pop edx
+    mov [ebp-8], eax
+    test eax, eax
+    jnz bn_found
+    push edx
+    push ecx
+    lea edx, [ebp-8]
+    mov ecx, ebx
+    call @jbv_lazy_class@16
+    test eax, eax
+    jnz bn_ret
+bn_found:
+    mov ecx, [ebp+B_DESC]
+    call @jbv_text@4
+    push edx
+    push eax
+    mov ecx, [ebp+B_NAME]
+    call @jbv_text@4
+    push edx
+    push eax
+    mov ecx, [ebp-8]
+    call @jbv_find_method@20
+    mov ecx, eax
+    mov eax, S_NOT_FOUND
+    test ecx, ecx
+    jz bn_ret
+    mov eax, S_LINKAGE
+    test WORD PTR [ecx+M_FLAGS], NATIVE
+    jz bn_ret
+    cmp BYTE PTR [ecx+M_INTRINSIC], 0
+    jne bn_ret
+    mov eax, S_UNSUPPORTED
+    test WORD PTR [ecx+M_FLAGS], STATIC
+    jz bn_ret
+    cmp DWORD PTR [ebp+B_WIDE], 0       ; a plain callback returns at most 32 bits
+    jne @F
+    cmp BYTE PTR [ecx+M_RESULT_KIND], 3
+    je bn_ret
+    cmp BYTE PTR [ecx+M_RESULT_KIND], 6
+    je bn_ret
+@@:
+    and WORD PTR [ecx+M_FLAGS], NOT TYPED_NATIVE
+    mov eax, [ebp+B_CB]
+    mov [ecx+M_NATIVE], eax
+    mov eax, [ebp+B_WIDE]
+    mov [ecx+M_NATIVE_SLOTS], eax
+    mov eax, [ebp+B_USER]
+    mov [ecx+M_NATIVE_USER], eax
+    xor eax, eax
+bn_ret:
+    pop ecx
+    pop ebx
+    pop ebp
+    ret
+jbv_bind_native PROC EXPORT         ; (vm, class, name, descriptor, callback, user)
+    push DWORD PTR [esp+24]
+    push 0
+    push DWORD PTR [esp+28]
+    push DWORD PTR [esp+28]
+    push DWORD PTR [esp+28]
+    push DWORD PTR [esp+28]
+    push DWORD PTR [esp+28]
+    call bind_native
+    add esp, 28
+    ret
+jbv_bind_native ENDP
+jbv_bind_native_slots PROC EXPORT   ; (vm, class, name, descriptor, callback, user)
+    push DWORD PTR [esp+24]
+    push DWORD PTR [esp+24]
+    push 0
+    push DWORD PTR [esp+28]
+    push DWORD PTR [esp+28]
+    push DWORD PTR [esp+28]
+    push DWORD PTR [esp+28]
+    call bind_native
+    add esp, 28
+    ret
+jbv_bind_native_slots ENDP
+
+jbv_call PROC EXPORT                ; (vm, class, name, descriptor, args, count, int32_t *result)
+    push ebp
+    mov ebp, esp
+    sub esp, 16                         ; [ebp-8] value, [ebp-12] returns, [ebp-16] expected
+    mov eax, S_BAD_ARG
+    cmp DWORD PTR [ebp+20], 0
+    je jc_ret
+    cmp DWORD PTR [ebp+32], 0
+    je jc_ret
+    mov ecx, [ebp+20]
+    call @jbv_text@4
+    push edx
+    push eax
+    lea ecx, [ebp-16]
+    lea edx, [ebp-12]
+    call @jbv_signature@16
+    test eax, eax
+    jnz jc_ret
+    mov eax, S_UNSUPPORTED
+    cmp DWORD PTR [ebp-12], 3
+    je jc_ret
+    cmp DWORD PTR [ebp-12], 6
+    je jc_ret
+    lea eax, [ebp-8]
+    push eax
+    push DWORD PTR [ebp+28]
+    push DWORD PTR [ebp+24]
+    push DWORD PTR [ebp+20]
+    push DWORD PTR [ebp+16]
+    push DWORD PTR [ebp+12]
+    push DWORD PTR [ebp+8]
+    call jbv_call_slots
+    add esp, 28
+    test eax, eax
+    jnz jc_ret
+    mov ecx, [ebp+32]
+    mov edx, [ebp-8]
+    mov [ecx], edx
+jc_ret:
+    mov esp, ebp
+    pop ebp
+    ret
+jbv_call ENDP
+
+jbv_call_slots PROC EXPORT          ; (vm, class, name, descriptor, args, count, uint64_t *result)
+    push ebp
+    mov ebp, esp
+    sub esp, 8                          ; the method id
+    mov ecx, [ebp+8]
+    mov eax, S_BAD_ARG
+    test ecx, ecx
+    jz cs_ret
+    cmp DWORD PTR [ebp+32], 0
+    je cs_ret
+    cmp WORD PTR [ebp+28], 0
+    je @F
+    cmp DWORD PTR [ebp+24], 0
+    je cs_ret
+@@:
+    call @jbv_begin_call@4
+    lea eax, [ebp-8]
+    push eax
+    push DWORD PTR [ebp+20]
+    push DWORD PTR [ebp+16]
+    push DWORD PTR [ebp+12]
+    push DWORD PTR [ebp+8]
+    call jbv_resolve_method
+    add esp, 20
+    test eax, eax
+    jnz cs_ret
+    mov eax, [ebp-4]                    ; id.method
+    test WORD PTR [eax+M_FLAGS], STATIC
+    mov eax, S_UNSUPPORTED
+    jz cs_ret
+    push DWORD PTR [ebp+32]
+    push DWORD PTR [ebp+28]
+    push DWORD PTR [ebp+24]
+    lea eax, [ebp-8]
+    push eax
+    push DWORD PTR [ebp+8]
+    call jbv_invoke
+    add esp, 20
+cs_ret:
+    mov esp, ebp
+    pop ebp
+    ret
+jbv_call_slots ENDP
 END
