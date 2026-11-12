@@ -6,14 +6,12 @@ import tempfile
 import unittest
 import zipfile
 from test_vm import ROOT, JAVA, CLASSES, VM, LIB, OK, remaining, has_indy
-from prepare import prepare
-from check_no_indy import has_constant
-import jar_pack
+from jbvtools import prepare, has_constant, unpack
 
 JDK=JAVA.parent.parent
 
 def expand(jar,work):
-    target=work/(jar.stem+'-expanded');jar_pack.unpack(jar,target);return target
+    target=work/(jar.stem+'-expanded');unpack(jar,target,JDK);return target
 
 # Records (ObjectMethods) and pattern switches (SwitchBootstraps) of every label kind.
 PATTERNS=r'''import java.util.*;
@@ -247,7 +245,7 @@ class PrepareTests(unittest.TestCase):
             shutil.copy2(CLASSES/'Concat.class',source)
             with self.assertRaisesRegex(ValueError,'invokedynamic'):prepare(source,output,JDK,False)
             self.assertFalse(output.exists())
-            with self.assertRaises(subprocess.CalledProcessError):prepare(source,output,JDK,True)
+            with self.assertRaisesRegex(ValueError,'invokedynamic'):prepare(source,output,JDK,True)
             self.assertFalse(output.exists())
             with self.assertRaisesRegex(ValueError,'\.jar'):prepare(source,work/'directory',JDK,False)
             twin=work/'twin';twin.mkdir();shutil.copy2(CLASSES/'Concat.class',twin)

@@ -2,7 +2,7 @@
 import subprocess
 import unittest
 from test_vm import VM, LIB, CLASSES, JAVA, ROOT, remaining, OK, NATIVE, LIMIT, UNSUPPORTED
-from check_no_indy import has_constant
+from jbvtools import has_constant
 class DynamicTests(unittest.TestCase):
     def test_interface_private_bootstrap_and_lifetime(self):
         lowered=ROOT/'build/condy-lowered'

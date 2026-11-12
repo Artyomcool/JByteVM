@@ -13,8 +13,7 @@ import time
 from pathlib import Path
 from test_vm import VM, LIB, JAVA, ROOT, OK, remaining
 from test_strings import read_units
-sys.path.insert(0, str(ROOT / "tools"))
-from prepare import prepare
+from jbvtools import prepare
 
 PROJECTS = ROOT / "tests/projects"
 WORK = ROOT / "build/projects"

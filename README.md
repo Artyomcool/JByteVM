@@ -462,11 +462,17 @@ long/double используют все биты, остальные — мла�
 
 ## Сборка и проверки
 
-Нужны Windows, Python 3.10+, Visual Studio 2022 Build Tools с C++ x86/CMake
-и JDK 25. Проверено под Windows x64 через WOW64; отдельная 32-битная Windows
-не проверялась. VM, хозяин и native-библиотеки должны иметь одну разрядность.
+Сборке нужны Windows, Visual Studio 2022 Build Tools (MASM, CMake) и JDK 25 —
+больше ничего: встроенную библиотеку компилирует и упаковывает `tools/Embed.java`,
+который CMake вызывает сам. Проверено под Windows x64 через WOW64; отдельная
+32-битная Windows не проверялась. VM, хозяин и native-библиотеки должны иметь одну
+разрядность.
 
 ```powershell
+# Только сборка (jbytevm.dll, jbytevm_static.lib, примеры хостов):
+cmake -S . -B build/x86 -A Win32 [-DJBV_PROFILE=full|text|core] [-DJBV_JAVA=C:/jdk-25/bin/java.exe]
+cmake --build build/x86 --config Release
+# Сборка с тестами (Python — только для тестов и инструментов разработки):
 python tools/build.py --test
 python tools/build.py --profile text --test
 python tools/build.py --profile core --test
@@ -491,12 +497,11 @@ C ABI одинаков; доступность групп возвращает `
 описанный набор reflection в full. Подготовленный condy использует Java MethodHandle
 из full; перенос в обычный байткод сам по себе не добавляет эту библиотеку в text/core.
 
-JDK ищется в JAVA_HOME, .tools/jdk-25* и PATH; сборка ничего не скачивает.
-Скрипт может работать в x64 Python; ctypes-тестам нужен x86 Python, автоматически
+JDK 25 для full CMake берёт из JBV_JAVA, иначе первый JDK 25 из JAVA_HOME,
+.tools/jdk-25* и PATH (версия проверяется); сборка ничего не скачивает. `build.py`
+может работать в x64 Python; ctypes-тестам нужен x86 Python, автоматически
 выбираемый из .tools/python-x86 или заданный через --test-python. Для embeddable
-Python нужны tests и tools в python*._pth. `build.py` сначала генерирует
-classpath и generated_classpath.asm, затем вызывает CMake. Для full используйте
-этот вход в сборку, а не чистый CMake без сгенерированного исходника.
+Python нужны tests и tools в python*._pth.
 
 ```powershell
 .\build\x86\Release\jbytevm-demo.exe .\build\classes\Core.class
@@ -578,7 +583,7 @@ Windows x86, MSVC 19.44, Release /O1, без упаковки исполняем
 
 В full встроен JAR 107 242 байта (LZMA; тем же DEFLATE был бы 134 436). До LZMA — JAR 133 984 байта (прирост над 155 КиБ: regex ~15 КБ, коллекции ~19 КБ, Unicode ~9 КБ, строки/кодировки ~8 КБ, форматирование ~7 КБ). Ранее — JAR 75 826 байт: все классы библиотеки (261 386 байт class-файлов)
 в одной записи. Из прироста над 126 КиБ: StrictMath ~9 КиБ, Arrays, Collections и
-разбор generics — по ~5 КиБ. Распаковщик LZMA и чтение ZIP занимают около 1,7 КиБ кода (DEFLATE не поддерживается: JAR делает только tools/prepare.py); внешние классы библиотеки и runtime DLL-зависимости не нужны.
+разбор generics — по ~5 КиБ. Распаковщик LZMA и чтение ZIP занимают около 1,7 КиБ кода (DEFLATE не поддерживается: JAR делает только tools/Prepare.java); внешние классы библиотеки и runtime DLL-зависимости не нужны.
 Цель меньше 256 КиБ соблюдена. Цель **32 КиБ пока не достигнута**:
 core превышает её на 6144 байта, из них около 3 КиБ — распаковщик JAR приложения.
 Типизированный x86 ABI-переходник занимает около 96 байт по linker map.
@@ -625,7 +630,7 @@ size-report.json, image-breakdown.json, timing-report.json, core-profile.json
 
 `tests/projects/pNN_*` — небольшие «моды» (инвентарь, события на лямбдах, enum,
 исключения, рефлексия-плагины, JSON-парсер, физика, поиск пути и т.д.). Каждый
-компилируется, проходит `prepare.py` в общий JAR и запускается в JByteVM; результат
+компилируется, проходит `tools/Prepare.java` в общий JAR и запускается в JByteVM; результат
 `pNN.Main.run()` сравнивается с HotSpot. Часть проектов намеренно использует ещё
 не поддержанные API (records, switch с паттернами, streams, EnumMap, PriorityQueue,
 String.split/format) — это список пробелов, а не регрессии.
@@ -641,9 +646,9 @@ build/x86/Release/jbytevm-run.exe app.jar pkg/Class args...      # static int ru
 ```powershell
 javac --release 25 -XDstringConcat=inline -d classes MyMod.java
 # Все моды (каталоги классов и/или JAR) — в один общий JAR приложения:
-python tools/prepare.py --lower-lambdas --lower-condy classes other-mod.jar -o app.jar
+java tools/Prepare.java --lower-lambdas --lower-condy classes other-mod.jar -o app.jar
 # Обратно в обычный каталог классов (для HotSpot и инструментов):
-python tools/prepare.py --unpack app.jar -o app-classes
+java tools/Prepare.java --unpack app.jar -o app-classes
 ```
 
 Результат всегда один JAR: все классы лежат в одной записи `jbv/classes.bin`,

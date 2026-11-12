@@ -1,6 +1,5 @@
 """Build the Windows interpreter (x86 assembly) with Visual Studio tools."""
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -8,7 +7,6 @@ import shutil
 import subprocess
 import sys
 from size_breakdown import inspect_image
-import embed_classpath
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,15 +54,10 @@ def main():
     cmake = find_cmake()
     build = ROOT / "build" / ("x86" + ("" if args.profile == "full" else "-" + args.profile) + ("-stress" if args.gc_stress else ""))
     build.mkdir(parents=True, exist_ok=True)
-    classpath_bytes, jar_bytes = embed_classpath.build(jdk, build) if args.profile == "full" else (0, 0)
-    run([cmake, "-S", ROOT, "-B", build, "-G", "Visual Studio 17 2022", "-A", "Win32", "-DJBV_PROFILE=" + args.profile, "-DJBV_GC_STRESS=" + str(args.gc_stress)])
-    # MSBuild does not track MASM includes: a changed .inc rebuilds every object.
-    includes = hashlib.sha256(b"".join(p.read_bytes() for p in sorted((ROOT / "src").glob("*.inc")) + [build / "profile.inc"])).hexdigest()
-    stamp = build / "asm-includes.sha256"
-    if not stamp.exists() or stamp.read_text() != includes:
-        for obj in build.glob("jbytevm*.dir/**/*.obj"): obj.unlink()
+    run([cmake, "-S", ROOT, "-B", build, "-G", "Visual Studio 17 2022", "-A", "Win32", "-DJBV_JAVA=" + str(jdk / "bin/java.exe"), "-DJBV_PROFILE=" + args.profile, "-DJBV_GC_STRESS=" + str(args.gc_stress)])
     run([cmake, "--build", build, "--config", "Release"])
-    stamp.write_text(includes)
+    sizes = build / "classpath-sizes.txt"   # written by tools/Embed.java (full)
+    classpath_bytes, jar_bytes = map(int, sizes.read_text().split()) if args.profile == "full" else (0, 0)
     classes = ROOT / "build/classes"
     classes.mkdir(parents=True, exist_ok=True)
     run([jdk / "bin/javac.exe", "--release", "25", "-g:none", "-d", classes, *sorted((ROOT / "tests/java").rglob("*.java"))])

@@ -12,7 +12,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from check_no_indy import has_indy
+from jbvtools import has_indy
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--jdk", required=True, type=Path)
@@ -416,8 +416,8 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(completed)
 
     def test_shared_jar_loads_lazily(self):
-        import jar_pack
-        jar = jar_pack.pack_classes([("Core", (CLASSES / "Core.class").read_bytes())])
+        from jbvtools import pack_classes
+        jar = pack_classes([("Core", (CLASSES / "Core.class").read_bytes())], options.jdk)
         with VM() as vm:
             before = vm.live_bytes
             self.assertEqual(vm.load_jar(jar), OK)

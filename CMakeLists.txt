@@ -22,12 +22,65 @@ file(WRITE "${CMAKE_BINARY_DIR}/profile.inc" "JBV_PROFILE_FULL EQU ${JBV_FULL}
 JBV_PROFILE_CORE EQU ${JBV_CORE}
 JBV_GC_STRESS EQU ${JBV_GC_STRESS}
 ")
+# MSBuild does not track MASM includes: when one changes, every object is assembled again
+# (the includes are configure dependencies, so a change reconfigures first).
+file(GLOB JBV_INCLUDES "${CMAKE_SOURCE_DIR}/src/*.inc")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${JBV_INCLUDES})
+set(JBV_INCLUDE_HASH "")
+foreach(include ${JBV_INCLUDES} "${CMAKE_BINARY_DIR}/profile.inc")
+    file(SHA256 "${include}" hash)
+    string(APPEND JBV_INCLUDE_HASH "${hash}")
+endforeach()
+if(NOT JBV_INCLUDE_HASH STREQUAL "${JBV_INCLUDE_STAMP}")
+    file(GLOB_RECURSE JBV_STALE "${CMAKE_BINARY_DIR}/jbytevm*.dir/*.obj")
+    if(JBV_STALE)
+        file(REMOVE ${JBV_STALE})
+    endif()
+    set(JBV_INCLUDE_STAMP "${JBV_INCLUDE_HASH}" CACHE INTERNAL "")
+endif()
+
+# The full profile embeds the class library (classpath/*.java), compiled and packed by
+# tools/Embed.java into generated_classpath.asm: JDK 25 is needed (JBV_JAVA, else JAVA_HOME,
+# .tools/jdk-25*, PATH).
+if(JBV_PROFILE STREQUAL "full")
+    set(JBV_JAVA "" CACHE FILEPATH "bin/java.exe of JDK 25 (embeds the class library)")
+    set(JBV_JAVA_CANDIDATES "${JBV_JAVA}")
+    if(NOT JBV_JAVA)
+        file(GLOB JBV_JDKS "${CMAKE_SOURCE_DIR}/.tools/jdk-25*")
+        set(JBV_JAVA_CANDIDATES "$ENV{JAVA_HOME}/bin/java.exe")
+        foreach(jdk ${JBV_JDKS})
+            list(APPEND JBV_JAVA_CANDIDATES "${jdk}/bin/java.exe")
+        endforeach()
+        find_program(JBV_PATH_JAVA java NO_CACHE)
+        list(APPEND JBV_JAVA_CANDIDATES "${JBV_PATH_JAVA}")
+    endif()
+    set(JBV_JAVA25 "")
+    foreach(java ${JBV_JAVA_CANDIDATES})
+        if(NOT JBV_JAVA25 AND EXISTS "${java}")
+            execute_process(COMMAND "${java}" -version ERROR_VARIABLE version OUTPUT_QUIET RESULT_VARIABLE failed)
+            if(NOT failed AND version MATCHES "version \"25[\".]")
+                set(JBV_JAVA25 "${java}")
+            endif()
+        endif()
+    endforeach()
+    if(NOT JBV_JAVA25)
+        message(FATAL_ERROR "JDK 25 is needed for the full profile: set JBV_JAVA to its bin/java.exe (tried: ${JBV_JAVA_CANDIDATES}).")
+    endif()
+    message(STATUS "Class library: ${JBV_JAVA25}")
+    file(GLOB_RECURSE JBV_LIBRARY_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/classpath/*.java")
+    add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/generated_classpath.asm" "${CMAKE_BINARY_DIR}/classpath.jar"
+        COMMAND "${JBV_JAVA25}" "-Djbv.root=${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/tools/Embed.java" "${CMAKE_BINARY_DIR}"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        DEPENDS ${JBV_LIBRARY_SOURCES} tools/Embed.java tools/JarPack.java tools/Lzma.java tools/ClassFiles.java
+            tools/GenerateUnicode.java
+        COMMENT "Embedding the class library" VERBATIM)
+endif()
+
 # The VM is assembly only (MASM). The C below are example hosts and test fixtures.
 set(JBV_SOURCES src/native.asm src/interp.asm src/lzma.asm src/numeric.asm src/classfile.asm src/jar.asm src/throw.asm
     src/vm.asm src/classes.asm src/gc.asm src/monitors.asm src/api.asm src/link.asm src/slow.asm src/run.asm)
 if(JBV_PROFILE STREQUAL "full")
-    list(APPEND JBV_SOURCES src/values.asm src/classpath.asm src/annotations.asm src/dynamic.asm src/reflection.asm
-        "${CMAKE_BINARY_DIR}/generated_classpath.asm")
+    list(APPEND JBV_SOURCES src/values.asm src/classpath.asm src/annotations.asm src/dynamic.asm src/reflection.asm)
 else()
     list(APPEND JBV_SOURCES src/core.asm)
 endif()
@@ -39,6 +92,11 @@ endif()
 # any import: the host supplies memory and services.
 file(WRITE "${CMAKE_BINARY_DIR}/dll/export.inc" "JBV_EXPORT TEXTEQU <EXPORT>\n")
 file(WRITE "${CMAKE_BINARY_DIR}/static/export.inc" "JBV_EXPORT TEXTEQU <PUBLIC>\n")
+if(JBV_PROFILE STREQUAL "full")   # the embedded library: data only, shared by both (embedded once)
+    add_library(jbytevm_classpath OBJECT "${CMAKE_BINARY_DIR}/generated_classpath.asm")
+    target_compile_options(jbytevm_classpath PRIVATE /safeseh)
+    list(APPEND JBV_SOURCES $<TARGET_OBJECTS:jbytevm_classpath>)
+endif()
 add_library(jbytevm SHARED ${JBV_SOURCES})
 add_library(jbytevm_static STATIC ${JBV_SOURCES})
 foreach(target jbytevm jbytevm_static)
