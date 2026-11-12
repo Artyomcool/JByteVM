@@ -313,6 +313,7 @@ JBV_API JbvStatus JBV_CALL jbv_release(JbvVM *vm, JbvRef ref) {
 }
 
 #endif
+#if !defined(_M_IX86)   /* gc_x86.asm; this is the reference */
 /* ---- Serial generational heap ------------------------------------------------------
  * Young generation: one bump region; each young block is [handle word][array length]
  * header payload, a spare word first, so the region can be
@@ -855,3 +856,4 @@ void jbv_array_set(JbvObject *array, uint32_t i, uint8_t kind, uint64_t bits) {
     default: ((int32_t *)(array + 1))[i] = jbv_i32((uint32_t)bits);
     }
 }
+#endif

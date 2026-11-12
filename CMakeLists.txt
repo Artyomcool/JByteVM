@@ -34,7 +34,7 @@ set(JBV_GC_STRESS 0 CACHE STRING "1: collect and move objects at almost every sa
 target_compile_definitions(jbytevm PRIVATE JBV_GC_STRESS=${JBV_GC_STRESS})
 if(CMAKE_SIZEOF_VOID_P EQUAL 4)
     enable_language(ASM_MASM)
-    target_sources(jbytevm PRIVATE src/native_x86.asm src/interp_x86.asm src/lzma_x86.asm src/decimal_x86.asm src/numeric_x86.asm src/classfile_x86.asm src/jar_x86.asm src/throw_x86.asm src/vm_x86.asm src/text_x86.asm src/classes_x86.asm)
+    target_sources(jbytevm PRIVATE src/native_x86.asm src/interp_x86.asm src/lzma_x86.asm src/decimal_x86.asm src/numeric_x86.asm src/classfile_x86.asm src/jar_x86.asm src/throw_x86.asm src/vm_x86.asm src/text_x86.asm src/classes_x86.asm src/gc_x86.asm)
     target_compile_options(jbytevm PRIVATE "$<$<COMPILE_LANGUAGE:ASM_MASM>:/safeseh;/I${CMAKE_SOURCE_DIR}/src>")
 endif()
 if(MSVC)

@@ -43,6 +43,21 @@ int main(void) {
     F(JbvConfig, max_memory, "CFG_MAX_MEMORY"); F(JbvConfig, max_heap, "CFG_MAX_HEAP");
     Z(JbvVM, "VM_SIZEOF"); F(JbvVM, config, "VM_CONFIG"); F(JbvVM, slots, "VM_SLOTS"); F(JbvVM, slot_refs, "VM_SLOT_REFS");
     F(JbvVM, depth, "VM_DEPTH"); F(JbvVM, monitors, "VM_MONITORS");
+    F(JbvVM, marks, "VM_MARKS"); F(JbvVM, young, "VM_YOUNG_MAP"); F(JbvVM, bump, "VM_BUMP"); F(JbvVM, bump_end, "VM_BUMP_END");
+    F(JbvVM, chunks, "VM_CHUNKS"); F(JbvVM, chunk_size, "VM_CHUNK_SIZE"); F(JbvVM, free_blocks, "VM_FREE_BLOCKS");
+    F(JbvVM, mark_stack, "VM_MARK_STACK"); F(JbvVM, mark_top, "VM_MARK_TOP"); F(JbvVM, mark_overflow, "VM_MARK_OVERFLOW");
+    F(JbvVM, promote_failed, "VM_PROMOTE_FAILED"); F(JbvVM, scanning, "VM_SCANNING"); F(JbvVM, nursery, "VM_NURSERY");
+    F(JbvVM, nursery_top, "VM_NURSERY_TOP"); F(JbvVM, nursery_size, "VM_NURSERY_SIZE"); F(JbvVM, nursery_disabled, "VM_NURSERY_OFF");
+    F(JbvVM, remembered, "VM_REMEMBERED"); F(JbvVM, remembered_count, "VM_REMEMBERED_COUNT"); F(JbvVM, remembered_capacity, "VM_REMEMBERED_CAP");
+    F(JbvVM, last_remembered, "VM_LAST_REMEMBERED"); F(JbvVM, remembered_overflow, "VM_REMEMBERED_OVERFLOW");
+    F(JbvVM, recent, "VM_RECENT"); F(JbvVM, recent_count, "VM_RECENT_COUNT"); F(JbvVM, recent_capacity, "VM_RECENT_CAP");
+    F(JbvVM, stress, "VM_STRESS"); F(JbvVM, collections, "VM_COLLECTIONS"); F(JbvVM, heap_bytes, "VM_HEAP_BYTES");
+    F(JbvVM, object_count, "VM_OBJECT_COUNT"); F(JbvVM, handle_cursor, "VM_HANDLE_CURSOR"); F(JbvVM, monitor_capacity, "VM_MONITOR_CAP");
+    F(JbvVM, config.max_depth, "VM_MAX_DEPTH"); F(JbvVM, remaining, "VM_REMAINING"); F(JbvVM, interned, "VM_INTERNED_MAP");
+    F(JbvClass, ref_slots, "C_REFS"); F(JbvClass, ref_count, "C_REF_COUNT"); F(JbvClass, ref_ready, "C_REF_READY");
+    F(JbvClass, roots_ready, "C_ROOTS_READY"); F(JbvClass, root_count, "C_ROOT_COUNT"); F(JbvClass, mirror, "C_MIRROR");
+    F(JbvFrame, base, "FR_BASE"); F(JbvFrame, locals, "FR_LOCALS"); F(JbvFrame, sp, "FR_SP");
+    Z(JbvMonitor, "MON_SIZEOF");
     F(JbvMethod, native_slots, "M_NATIVE_SLOTS"); F(JbvMethod, result_kind, "M_RESULT_KIND");
 #if JBV_PROFILE_FULL
     F(JbvField, attributes, "FIELD_ATTRIBUTES"); F(JbvMethod, attributes, "M_ATTRIBUTES"); F(JbvClass, attributes, "C_ATTRIBUTES");
