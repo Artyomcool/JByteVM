@@ -1,6 +1,7 @@
 #include "internal.h"
 #include <stdarg.h>
 
+#if !defined(_M_IX86)   /* api_x86.asm; this is the reference */
 void jbv_fp_enter(JbvFPEnv *state) {
 #if defined(_M_IX86)
     __asm mov eax,state
@@ -403,3 +404,4 @@ JBV_API JbvStatus JBV_CALL jbv_clear_exception(JbvVM *vm) {
     vm->exception = 0; vm->exception_status = JBV_OK;
     return JBV_OK;
 }
+#endif
