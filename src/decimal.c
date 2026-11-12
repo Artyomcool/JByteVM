@@ -1,4 +1,17 @@
 #include "library.h"
+#if defined(_M_IX86)
+/* decimal_x86.asm; the C below is the reference and serves other targets */
+uint32_t JBV_CALL jbv_decimal_text_x86(uint32_t lo, uint32_t hi, int single, uint16_t *out);
+int JBV_CALL jbv_parse_fp_x86(const uint16_t *s, uint32_t n, int single, uint64_t *out);
+uint32_t jbv_decimal_text(uint64_t bits, int single, uint16_t *out) { return jbv_decimal_text_x86((uint32_t)bits, (uint32_t)(bits >> 32), single, out); }
+JbvStatus jbv_parse_fp(JbvVM *vm, int32_t string, int single, uint64_t *out) {
+    JbvTextView text;
+    JbvStatus status = jbv_string_view(vm, string, &text);
+    if (status != JBV_OK) return status;
+    if (!jbv_parse_fp_x86(text.data, text.length, single, out)) return JBV_OK;
+    return jbv_throw_named(vm, "java/lang/NumberFormatException", 0, JBV_EXCEPTION);
+}
+#else
 
 /* Exact interval conversion for binary32/binary64. This uses integer arithmetic
  * only: no locale, CRT printf, FP rounding mode, or large power-of-ten tables.
@@ -36,7 +49,6 @@ static void subtract(Big *a, const Big *b) {
     }
     while (a->n > 1 && !a->word[a->n-1]) --a->n;
 }
-#if !defined(_M_IX86)
 static void add(Big *a, const Big *b) {
     uint32_t i; uint64_t carry = 0;
     for (i = 0; i < a->n || i < b->n; ++i) {
@@ -112,11 +124,6 @@ uint32_t jbv_decimal_text(uint64_t bits, int single, uint16_t *out) {
     }
     return pos;
 }
-#else
-/* decimal_x86.asm */
-uint32_t JBV_CALL jbv_decimal_text_x86(uint32_t lo, uint32_t hi, int single, uint16_t *out);
-uint32_t jbv_decimal_text(uint64_t bits, int single, uint16_t *out) { return jbv_decimal_text_x86((uint32_t)bits, (uint32_t)(bits >> 32), single, out); }
-#endif
 
 static uint32_t bit_length(const Big *a) {
     uint32_t n=(a->n-1)*32, top=a->word[a->n-1];
@@ -220,3 +227,4 @@ JbvStatus jbv_parse_fp(JbvVM *vm, int32_t string, int single, uint64_t *out) {
 invalid:
     return jbv_throw_named(vm,"java/lang/NumberFormatException",0,JBV_EXCEPTION);
 }
+#endif

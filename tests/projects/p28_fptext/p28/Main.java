@@ -22,6 +22,17 @@ public final class Main {
             if (f == f && Float.parseFloat(t) != f) return "froundtrip " + t;
             if (i % 20000 == 0) sample.append(s).append(' ').append(t).append(' ');
         }
+        String[] inputs = {"0x1.8p1", "0X.8P-1074", "0x1p-1075", "0x1.0000000000001p0", "-0x1.fffffffffffffp1023", "0x1.fffffffffffff8p1023",
+            "2.4703282292062327208828439643411068618252990130716238221279284125033775364e-324", "2.4703282292062327e-324", "4.9406564584124654e-324",
+            "1.7976931348623158e308", "1.7976931348623159e308", "9007199254740993", "9007199254740993.000000000000000000000000000001",
+            "  12.5e+3f ", "-0", "+.5", "5.", "1e400", "1e-400", "123456789012345678901234567890e-20", "0.1D", "NaN", "-Infinity", "1_0", "",
+            "e5", ".", "0x", "0x1", "1e", "--1", "1.2.3", "0x1.8p", "Infinityx", " - 1", "1e2147483648", "1e-99999999999", "0.000000000000000000000000000000000000000000001e45"};
+        for (String in : inputs) {
+            String d, f;
+            try { d = Double.toString(Double.parseDouble(in)); } catch (NumberFormatException e) { d = "NFE"; }
+            try { f = Float.toString(Float.parseFloat(in)); } catch (NumberFormatException e) { f = "NFE"; }
+            sample.append('[').append(in).append(' ').append(d).append(' ').append(f).append(']');
+        }
         return sample.append(h).toString();
     }
 }

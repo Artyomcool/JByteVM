@@ -1,4 +1,4 @@
-; Float/double to Java text for x86 (decimal.c's jbv_decimal_text is the reference and
+; Float/double to Java text and back for x86 (decimal.c's jbv_decimal_text is the reference and
 ; serves x64): exact interval conversion with integer arithmetic only, the shortest
 ; admissible decimal with at least two digits, then Java's plain or E notation.
 ; uint32_t jbv_decimal_text_x86(uint32_t lo, uint32_t hi, int single, uint16_t *out)
@@ -8,6 +8,7 @@
 .model flat, C
 option casemap:none
 PUBLIC jbv_decimal_text_x86
+PUBLIC jbv_parse_fp_x86
 
 BIG    EQU 516
 B_R    EQU -BIG
@@ -567,4 +568,548 @@ finish:
     pop ebp
     ret
 jbv_decimal_text_x86 ENDP
+
+; ---- parsing: int jbv_parse_fp_x86(const uint16_t *s, uint32_t n, int single, uint64_t *out)
+; 0 with *out set, 1 for a malformed number. Same algorithm as decimal.c: up to 768
+; significant decimal (300 hex) digits kept exactly, the rest only as a sticky bit.
+F_R     EQU -BIG
+F_S     EQU -2*BIG
+F_T     EQU -3*BIG
+L_END   EQU F_T-4
+L_BASE  EQU F_T-8
+L_KEPT  EQU F_T-12
+L_LIMIT EQU F_T-16
+L_ANY   EQU F_T-20
+L_DOT   EQU F_T-24
+L_STICK EQU F_T-28
+L_FRAC  EQU F_T-32
+L_DROP  EQU F_T-36
+L_EXP   EQU F_T-40
+L_FB    EQU F_T-44
+L_BIAS  EQU F_T-48
+L_MIN   EQU F_T-52
+L_MAX   EQU F_T-56
+L_E     EQU F_T-60
+L_VAL   EQU F_T-68      ; qword
+L_SIGN  EQU F_T-76      ; qword: the sign bit in place
+L_INF   EQU F_T-84      ; qword
+PFRAME  EQU 3*BIG+84
+
+; edi = a += ecx (small)
+big_adds:
+    xor edx, edx
+as_loop:
+    test ecx, ecx
+    jz as_ret
+    cmp edx, [edi]
+    jae as_ext
+    add [edi+edx*4+4], ecx
+    mov ecx, 0
+    adc ecx, 0
+    inc edx
+    jmp as_loop
+as_ext:
+    mov [edi+edx*4+4], ecx
+    inc DWORD PTR [edi]
+as_ret:
+    ret
+; edi = a <<= ecx bits
+big_shl:
+    jecxz bsh_ret
+    push ecx
+    mov ecx, 2
+    call big_mul
+    pop ecx
+    dec ecx
+    jmp big_shl
+bsh_ret:
+    ret
+; edi = a >>= 1
+big_half:
+    mov ecx, [edi]
+    clc
+bh_loop:
+    rcr DWORD PTR [edi+ecx*4], 1
+    dec ecx
+    jnz bh_loop
+    mov ecx, [edi]
+    cmp ecx, 1
+    jbe bh_ret
+    cmp DWORD PTR [edi+ecx*4], 0
+    jne bh_ret
+    dec DWORD PTR [edi]
+bh_ret:
+    ret
+; esi = a -> eax = its bit length
+bitlen:
+    mov ecx, [esi]
+    mov eax, [esi+ecx*4]
+    dec ecx
+    shl ecx, 5
+    bsr eax, eax
+    jz bl_zero
+    lea eax, [ecx+eax+1]
+    ret
+bl_zero:
+    mov eax, ecx
+    ret
+; ZF = s[ebx..end) is exactly the ASCII string at edi (esi = s)
+match_word:
+    mov ecx, ebx
+mw_loop:
+    movzx eax, BYTE PTR [edi]
+    cmp ecx, [ebp+L_END]
+    je mw_end
+    test eax, eax
+    jz mw_no
+    cmp ax, [esi+ecx*2]
+    jne mw_ret
+    inc edi
+    inc ecx
+    jmp mw_loop
+mw_end:
+    test eax, eax
+mw_ret:
+    ret
+mw_no:
+    test esp, esp
+    ret
+
+jbv_parse_fp_x86 PROC
+    push ebp
+    mov ebp, esp
+    sub esp, PFRAME
+    push ebx
+    push esi
+    push edi
+    mov esi, [ebp+8]
+    xor eax, eax
+    mov [ebp+L_SIGN], eax
+    mov [ebp+L_SIGN+4], eax
+    mov [ebp+L_INF], eax
+    mov [ebp+L_INF+4], eax
+    cmp DWORD PTR [ebp+16], eax
+    mov DWORD PTR [ebp+L_FB], 52
+    mov DWORD PTR [ebp+L_BIAS], 1023
+    mov DWORD PTR [ebp+L_MIN], -1022
+    mov DWORD PTR [ebp+L_MAX], 1023
+    mov DWORD PTR [ebp+L_INF+4], 7FF00000h
+    je @F
+    mov DWORD PTR [ebp+L_FB], 23
+    mov DWORD PTR [ebp+L_BIAS], 127
+    mov DWORD PTR [ebp+L_MIN], -126
+    mov DWORD PTR [ebp+L_MAX], 127
+    mov DWORD PTR [ebp+L_INF+4], 0
+    mov DWORD PTR [ebp+L_INF], 7F800000h
+@@:
+    xor ebx, ebx                        ; trim ASCII controls and spaces
+    mov ecx, [ebp+12]
+pt_lead:
+    cmp ebx, ecx
+    jae pt_trail
+    cmp WORD PTR [esi+ebx*2], 32
+    ja pt_trail
+    inc ebx
+    jmp pt_lead
+pt_trail:
+    cmp ecx, ebx
+    jbe pt_done
+    cmp WORD PTR [esi+ecx*2-2], 32
+    ja pt_done
+    dec ecx
+    jmp pt_trail
+pt_done:
+    mov [ebp+L_END], ecx
+    cmp ebx, ecx
+    je p_invalid
+    movzx eax, WORD PTR [esi+ebx*2]
+    cmp eax, '+'
+    je p_signed
+    cmp eax, '-'
+    jne p_unsigned
+    lea eax, [ebp+L_SIGN+4]
+    cmp DWORD PTR [ebp+16], 0
+    je @F
+    lea eax, [ebp+L_SIGN]
+@@:
+    mov DWORD PTR [eax], 80000000h
+p_signed:
+    inc ebx
+p_unsigned:
+    mov edi, OFFSET s_nan
+    call match_word
+    jnz p_not_nan
+    mov eax, [ebp+L_FB]                 ; quiet NaN, no sign
+    dec eax
+    bts DWORD PTR [ebp+L_INF], eax
+    mov eax, [ebp+L_INF]
+    mov edx, [ebp+L_INF+4]
+    jmp p_store
+p_not_nan:
+    mov edi, OFFSET s_inf
+    call match_word
+    jz p_inf
+    cmp ebx, [ebp+L_END]
+    je p_invalid
+    mov ecx, [ebp+L_END]                ; one f/F/d/D suffix
+    movzx eax, WORD PTR [esi+ecx*2-2]
+    or eax, 20h
+    cmp eax, 'f'
+    je @F
+    cmp eax, 'd'
+    jne p_nosuffix
+@@:
+    dec DWORD PTR [ebp+L_END]
+p_nosuffix:
+    mov DWORD PTR [ebp+L_BASE], 10
+    mov DWORD PTR [ebp+L_LIMIT], 768
+    lea eax, [ebx+2]
+    cmp eax, [ebp+L_END]
+    ja p_dec
+    cmp WORD PTR [esi+ebx*2], '0'
+    jne p_dec
+    movzx eax, WORD PTR [esi+ebx*2+2]
+    or eax, 20h
+    cmp eax, 'x'
+    jne p_dec
+    mov DWORD PTR [ebp+L_BASE], 16
+    mov DWORD PTR [ebp+L_LIMIT], 300
+    add ebx, 2
+p_dec:
+    xor eax, eax
+    xor edx, edx
+    lea edi, [ebp+F_R]
+    call big_set
+    inc eax
+    lea edi, [ebp+F_S]
+    call big_set
+    xor eax, eax
+    mov [ebp+L_KEPT], eax
+    mov [ebp+L_ANY], eax
+    mov [ebp+L_DOT], eax
+    mov [ebp+L_STICK], eax
+    mov [ebp+L_FRAC], eax
+    mov [ebp+L_DROP], eax
+    mov [ebp+L_EXP], eax
+pd_loop:
+    cmp ebx, [ebp+L_END]
+    jae pd_end
+    movzx eax, WORD PTR [esi+ebx*2]
+    cmp eax, '.'
+    jne pd_digit
+    cmp DWORD PTR [ebp+L_DOT], 0
+    jne pd_digit
+    mov DWORD PTR [ebp+L_DOT], 1
+    inc ebx
+    jmp pd_loop
+pd_digit:
+    lea ecx, [eax-'0']
+    cmp ecx, 9
+    jbe pd_value
+    mov ecx, [ebp+L_BASE]
+    cmp ecx, 16
+    jne pd_value
+    or eax, 20h
+    sub eax, 'a'
+    cmp eax, 5
+    ja pd_value
+    lea ecx, [eax+10]
+pd_value:
+    cmp ecx, [ebp+L_BASE]
+    jae pd_end
+    mov DWORD PTR [ebp+L_ANY], 1
+    cmp DWORD PTR [ebp+L_DOT], 0
+    je @F
+    inc DWORD PTR [ebp+L_FRAC]
+@@:
+    mov eax, [ebp+L_KEPT]
+    or eax, ecx
+    jz pd_next                          ; leading zeros
+    mov eax, [ebp+L_KEPT]
+    cmp eax, [ebp+L_LIMIT]
+    jae pd_drop
+    push ecx
+    lea edi, [ebp+F_R]
+    mov ecx, [ebp+L_BASE]
+    call big_mul
+    pop ecx
+    call big_adds
+    inc DWORD PTR [ebp+L_KEPT]
+    jmp pd_next
+pd_drop:
+    inc DWORD PTR [ebp+L_DROP]
+    test ecx, ecx
+    jz pd_next
+    mov DWORD PTR [ebp+L_STICK], 1
+pd_next:
+    inc ebx
+    jmp pd_loop
+pd_end:
+    cmp DWORD PTR [ebp+L_ANY], 0
+    je p_invalid
+    cmp ebx, [ebp+L_END]
+    jae pe_none
+    movzx eax, WORD PTR [esi+ebx*2]
+    or eax, 20h
+    cmp DWORD PTR [ebp+L_BASE], 16
+    je pe_hex
+    cmp eax, 'e'
+    jne pe_none
+    jmp pe_parse
+pe_hex:
+    cmp eax, 'p'
+    jne p_invalid
+pe_parse:
+    inc ebx
+    xor edi, edi
+    cmp ebx, [ebp+L_END]
+    jae pe_digits
+    movzx eax, WORD PTR [esi+ebx*2]
+    cmp eax, '+'
+    je pe_sign
+    cmp eax, '-'
+    jne pe_digits
+    inc edi
+pe_sign:
+    inc ebx
+pe_digits:
+    mov edx, ebx
+    xor eax, eax
+pe_loop:
+    cmp ebx, [ebp+L_END]
+    jae pe_end
+    movzx ecx, WORD PTR [esi+ebx*2]
+    sub ecx, '0'
+    cmp ecx, 9
+    ja pe_end
+    cmp eax, 100000000                  ; past 10^9 the result is 0 or infinite anyway
+    jae @F
+    imul eax, eax, 10
+    add eax, ecx
+@@:
+    inc ebx
+    jmp pe_loop
+pe_end:
+    cmp ebx, edx
+    je p_invalid
+    test edi, edi
+    jz @F
+    neg eax
+@@:
+    mov [ebp+L_EXP], eax
+    jmp pe_done
+pe_none:
+    cmp DWORD PTR [ebp+L_BASE], 16
+    je p_invalid
+pe_done:
+    cmp ebx, [ebp+L_END]
+    jne p_invalid
+    cmp DWORD PTR [ebp+L_KEPT], 0
+    je p_zero
+    cmp DWORD PTR [ebp+L_BASE], 10
+    jne p_hexscale
+    mov eax, [ebp+L_EXP]                ; power of ten and the order of magnitude
+    sub eax, [ebp+L_FRAC]
+    add eax, [ebp+L_DROP]
+    mov edx, eax
+    add edx, [ebp+L_KEPT]
+    dec edx
+    cmp edx, 309
+    jg p_inf
+    cmp edx, -325
+    jl p_zero
+    lea edi, [ebp+F_R]
+    test eax, eax
+    jns @F
+    neg eax
+    lea edi, [ebp+F_S]
+@@:
+    mov ecx, 10
+pw_loop:
+    test eax, eax
+    jz p_scaled
+    push eax
+    call big_mul
+    pop eax
+    dec eax
+    jmp pw_loop
+p_hexscale:
+    mov eax, [ebp+L_EXP]
+    mov ecx, [ebp+L_FRAC]
+    sub ecx, [ebp+L_DROP]
+    shl ecx, 2
+    sub eax, ecx
+    push eax
+    lea esi, [ebp+F_R]
+    call bitlen
+    pop ecx
+    lea edx, [eax+ecx-1]
+    cmp edx, 1023
+    jg p_inf
+    cmp edx, -1075
+    jl p_zero
+    lea edi, [ebp+F_R]
+    test ecx, ecx
+    jns @F
+    neg ecx
+    lea edi, [ebp+F_S]
+@@:
+    call big_shl
+p_scaled:
+    lea esi, [ebp+F_R]                  ; e = the binary exponent of r / s
+    call bitlen
+    push eax
+    lea esi, [ebp+F_S]
+    call bitlen
+    pop edx
+    sub edx, eax
+    mov [ebp+L_E], edx
+    js pe_neg
+    lea edi, [ebp+F_T]
+    lea esi, [ebp+F_S]
+    call big_copy
+    mov ecx, [ebp+L_E]
+    call big_shl
+    lea esi, [ebp+F_R]
+    lea edi, [ebp+F_T]
+    jmp pe_cmp
+pe_neg:
+    lea edi, [ebp+F_T]
+    lea esi, [ebp+F_R]
+    call big_copy
+    mov ecx, [ebp+L_E]
+    neg ecx
+    call big_shl
+    lea esi, [ebp+F_T]
+    lea edi, [ebp+F_S]
+pe_cmp:
+    call big_cmp
+    test eax, eax
+    jns @F
+    dec DWORD PTR [ebp+L_E]
+@@:
+    mov eax, [ebp+L_E]
+    cmp eax, [ebp+L_MAX]
+    jg p_inf
+    mov edx, [ebp+L_MIN]
+    sub edx, [ebp+L_FB]
+    dec edx
+    cmp eax, edx
+    jl p_zero
+    cmp eax, [ebp+L_MIN]                ; scale to fb + 1 significant bits
+    jge @F
+    mov eax, [ebp+L_MIN]
+@@:
+    mov ecx, [ebp+L_FB]
+    sub ecx, eax
+    lea edi, [ebp+F_R]
+    jns @F
+    neg ecx
+    lea edi, [ebp+F_S]
+@@:
+    call big_shl
+    lea edi, [ebp+F_T]
+    lea esi, [ebp+F_S]
+    call big_copy
+    mov ecx, [ebp+L_FB]
+    inc ecx
+    call big_shl
+    xor eax, eax
+    mov [ebp+L_VAL], eax
+    mov [ebp+L_VAL+4], eax
+    mov ebx, [ebp+L_FB]
+    inc ebx
+pb_loop:                                ; long division: one result bit per step
+    lea esi, [ebp+F_R]
+    lea edi, [ebp+F_T]
+    call big_cmp
+    test eax, eax
+    js @F
+    lea edi, [ebp+F_R]
+    lea esi, [ebp+F_T]
+    call big_sub
+    bts DWORD PTR [ebp+L_VAL], ebx
+@@:
+    lea edi, [ebp+F_T]
+    call big_half
+    dec ebx
+    jns pb_loop
+    lea edi, [ebp+F_R]                  ; round half to even (sticky digits count as above)
+    mov ecx, 2
+    call big_mul
+    lea esi, [ebp+F_R]
+    lea edi, [ebp+F_S]
+    call big_cmp
+    test eax, eax
+    jg p_up
+    jnz p_rounded
+    cmp DWORD PTR [ebp+L_STICK], 0
+    jne p_up
+    test BYTE PTR [ebp+L_VAL], 1
+    jz p_rounded
+p_up:
+    add DWORD PTR [ebp+L_VAL], 1
+    adc DWORD PTR [ebp+L_VAL+4], 0
+p_rounded:
+    mov eax, [ebp+L_VAL]
+    mov edx, [ebp+L_VAL+4]
+    mov ecx, [ebp+L_E]
+    cmp ecx, [ebp+L_MIN]
+    jl p_signed_out                     ; subnormal: the bits as they are
+    cmp DWORD PTR [ebp+16], 0
+    je p_ov64
+    cmp eax, 1000000h
+    jne p_pack
+    jmp p_carry
+p_ov64:
+    test eax, eax
+    jnz p_pack
+    cmp edx, 200000h
+    jne p_pack
+p_carry:                                ; rounded up to the next power of two
+    shrd eax, edx, 1
+    shr edx, 1
+    inc ecx
+p_pack:
+    cmp ecx, [ebp+L_MAX]
+    jg p_inf
+    add ecx, [ebp+L_BIAS]
+    cmp DWORD PTR [ebp+16], 0
+    je p_pack64
+    and eax, 7FFFFFh
+    shl ecx, 23
+    or eax, ecx
+    xor edx, edx
+    jmp p_signed_out
+p_pack64:
+    and edx, 0FFFFFh
+    shl ecx, 20
+    or edx, ecx
+    jmp p_signed_out
+p_inf:
+    mov eax, [ebp+L_INF]
+    mov edx, [ebp+L_INF+4]
+    jmp p_signed_out
+p_zero:
+    xor eax, eax
+    xor edx, edx
+p_signed_out:
+    or eax, [ebp+L_SIGN]
+    or edx, [ebp+L_SIGN+4]
+p_store:
+    mov ecx, [ebp+20]
+    mov [ecx], eax
+    mov [ecx+4], edx
+    xor eax, eax
+    jmp p_leave
+p_invalid:
+    mov eax, 1
+p_leave:
+    pop edi
+    pop esi
+    pop ebx
+    mov esp, ebp
+    pop ebp
+    ret
+jbv_parse_fp_x86 ENDP
 END
