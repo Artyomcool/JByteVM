@@ -237,6 +237,7 @@ JbvStatus jbv_raise(JbvVM *vm, JbvStatus status) {
     return jbv_throw_named(vm, name, 0, status);
 }
 #endif
+#if !defined(_M_IX86)   /* x86: in assembly; this is the reference */
 JBV_API JbvStatus JBV_CALL jbv_exception(JbvVM *vm, JbvRef *out) {
     JbvStatus status;
     if (!vm || !out) return JBV_BAD_ARGUMENT;
@@ -244,3 +245,4 @@ JBV_API JbvStatus JBV_CALL jbv_exception(JbvVM *vm, JbvRef *out) {
     if (status == JBV_OK) *out = vm->exception;
     return status;
 }
+#endif

@@ -377,4 +377,48 @@ ordered:
     ja more
     jmp zero32
 jbv_numeric ENDP
+;
+@jbv_kind@4 PROC SYSCALL            ; cl = a descriptor char -> eax = its slot kind
+    xor eax, eax
+    inc eax                             ; references: L [ P
+    cmp cl, 'L'
+    je @F
+    cmp cl, '['
+    je @F
+    cmp cl, 'P'
+    je @F
+    mov al, 2
+    cmp cl, 'J'
+    je @F
+    mov al, 4
+    cmp cl, 'F'
+    je @F
+    inc eax
+    cmp cl, 'D'
+    je @F
+    xor eax, eax
+@@:
+    ret
+@jbv_kind@4 ENDP
+; the operand and result kinds of a numeric opcode: a | b << 8 | result << 16 (b = 7: none)
+@jbv_numeric_types@4 PROC SYSCALL   ; cl = op (97..152)
+    movzx ecx, cl
+    lea ecx, [ecx+ecx*2-97*3]
+    movzx eax, BYTE PTR [numeric_kinds+ecx+2]
+    shl eax, 8
+    mov al, [numeric_kinds+ecx+1]
+    shl eax, 8
+    mov al, [numeric_kinds+ecx]
+    ret
+@jbv_numeric_types@4 ENDP
+.const
+numeric_kinds LABEL BYTE
+    DB 2, 2, 2, 4, 4, 4, 5, 5, 5, 5, 5, 5, 2, 2, 2, 4, 4, 4, 5, 5, 5, 5, 5, 5
+    DB 2, 2, 2, 4, 4, 4, 5, 5, 5, 5, 5, 5, 2, 2, 2, 4, 4, 4, 5, 5, 5, 5, 5, 5
+    DB 2, 2, 2, 4, 4, 4, 5, 5, 5, 4, 4, 0, 2, 7, 2, 4, 7, 4, 5, 7, 5, 4, 4, 0
+    DB 2, 0, 2, 2, 0, 2, 2, 0, 2, 2, 0, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2
+    DB 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 0, 0, 7, 2, 0, 7, 4, 0, 7, 5, 2, 7, 0
+    DB 2, 7, 4, 2, 7, 5, 4, 7, 0, 4, 7, 2, 4, 7, 5, 5, 7, 0, 5, 7, 2, 5, 7, 4
+    DB 4, 4, 0, 4, 4, 0, 4, 4, 0, 2, 2, 0, 4, 4, 0, 4, 4, 0, 5, 5, 0, 5, 5, 0
+.code
 END

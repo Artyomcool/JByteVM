@@ -1,6 +1,7 @@
 #include "internal.h"
 
 int _fltused = 0;
+#if !defined(_M_IX86)   /* x86: in assembly; this is the reference */
 uint8_t jbv_kind(uint8_t c) {
     return c == 'L' || c == '[' || c == 'P' ? JBV_REF : c == 'J' ? JBV_LONG :
         c == 'F' ? JBV_FLOAT : c == 'D' ? JBV_DOUBLE : JBV_INT;
@@ -29,6 +30,7 @@ uint32_t jbv_numeric_types(uint8_t op) {
     }
     return a | (b << 8) | (r << 16);
 }
+#endif
 #if !defined(_M_IX86)   /* numeric_x86.asm */
 typedef union Number { uint64_t u; int64_t j; double d; } Number;
 typedef union Single { uint32_t u; float f; } Single;

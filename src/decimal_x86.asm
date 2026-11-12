@@ -1112,4 +1112,46 @@ p_leave:
     pop ebp
     ret
 jbv_parse_fp_x86 ENDP
+;
+EXTERN SYSCALL @jbv_string_view@12:PROC
+EXTERN SYSCALL @jbv_throw_named@16:PROC
+@jbv_decimal_text@16 PROC SYSCALL   ; ecx single, edx out, [esp+4] bits -> eax chars
+    push edx
+    push ecx
+    push DWORD PTR [esp+16]
+    push DWORD PTR [esp+16]
+    call jbv_decimal_text_x86
+    add esp, 16
+    ret 8
+@jbv_decimal_text@16 ENDP
+@jbv_parse_fp@16 PROC SYSCALL       ; ecx vm, edx String, [esp+4] single, [esp+8] out
+    push ebx
+    mov ebx, ecx
+    sub esp, 8
+    push esp
+    call @jbv_string_view@12
+    pop ecx                             ; the chars
+    pop edx                             ; their count
+    test eax, eax
+    jnz pf_ret
+    push DWORD PTR [esp+12]
+    push DWORD PTR [esp+12]
+    push edx
+    push ecx
+    call jbv_parse_fp_x86
+    add esp, 16
+    test eax, eax
+    jz pf_ret
+    push 22
+    push 0
+    mov edx, OFFSET pf_nfe
+    mov ecx, ebx
+    call @jbv_throw_named@16
+pf_ret:
+    pop ebx
+    ret 8
+@jbv_parse_fp@16 ENDP
+.const
+pf_nfe DB 'java/lang/NumberFormatException', 0
+.code
 END

@@ -431,7 +431,7 @@ jbv_status_string ENDP
 ; ---- the public VM API (cdecl, exported)
 EXTERN SYSCALL @jbv_bootstrap@4:PROC
 EXTERN SYSCALL @jbv_free_heap@4:PROC
-EXTERN SYSCALL @jbv_parse@16:PROC
+EXTERN jbv_parse_owned:PROC
 EXTERN SYSCALL @jbv_classpath_find@20:PROC
 EXTERN SYSCALL @jbv_library_id@8:PROC
 EXTERN SYSCALL @jbv_exception_name@8:PROC
@@ -936,4 +936,73 @@ cs_ret:
     pop ebp
     ret
 jbv_call_slots ENDP
+;
+@jbv_parse@16 PROC SYSCALL          ; ecx vm, edx bytes, [esp+4] size, [esp+8] out: a copy, then parsed
+    push esi
+    push edi
+    push ebx
+    mov ebx, ecx
+    mov esi, edx
+    mov eax, 3                          ; BAD_CLASS
+    mov edx, [esp+16]
+    cmp edx, 10
+    jb pa_ret
+    cmp edx, 64*1024*1024
+    ja pa_ret
+    mov ecx, ebx
+    call @jbv_alloc@8
+    test eax, eax
+    jnz @F
+    mov eax, 2
+    jmp pa_ret
+@@:
+    mov edi, eax
+    mov ecx, [esp+16]
+    rep movsb
+    push DWORD PTR [esp+20]
+    push DWORD PTR [esp+20]
+    push eax
+    push ebx
+    call jbv_parse_owned
+    add esp, 16
+pa_ret:
+    pop ebx
+    pop edi
+    pop esi
+    ret 8
+@jbv_parse@16 ENDP
+jbv_features PROC EXPORT            ; the profile's features
+IF JBV_PROFILE_FULL
+    mov eax, 1 or 2 or 4 or 8 or 16 or 64 or 128
+ELSEIF JBV_PROFILE_CORE
+    mov eax, 1 or 2 or 4
+ELSE
+    mov eax, 1 or 2 or 4 or 8
+ENDIF
+    ret
+jbv_features ENDP
+jbv_set_host_services PROC EXPORT   ; (vm, services or 0): installed while idle
+    mov ecx, [esp+4]
+    mov eax, 1
+    jecxz hs_ret
+    mov eax, 11
+    cmp DWORD PTR [ecx+VM_DEPTH], 0
+    jne hs_ret
+    mov edx, [esp+8]
+    xor eax, eax
+    mov [ecx+VM_CLOCK], eax
+    mov [ecx+VM_WRITE], eax
+    mov [ecx+VM_SERVICES_USER], eax
+    test edx, edx
+    jz hs_ret
+    mov eax, [edx]
+    mov [ecx+VM_CLOCK], eax
+    mov eax, [edx+4]
+    mov [ecx+VM_WRITE], eax
+    mov eax, [edx+8]
+    mov [ecx+VM_SERVICES_USER], eax
+    xor eax, eax
+hs_ret:
+    ret
+jbv_set_host_services ENDP
 END

@@ -45,6 +45,7 @@ static Reader attribute(Reader *r, JbvClass *c, JbvText *name) {
 #else
 #include "layout_check.h"
 #endif
+#if !defined(_M_IX86)   /* x86: in assembly; this is the reference */
 JbvStatus jbv_parse(JbvVM *vm, const void *bytes, size_t size, JbvClass **out) {
     uint8_t *image;
     size_t k;
@@ -54,6 +55,7 @@ JbvStatus jbv_parse(JbvVM *vm, const void *bytes, size_t size, JbvClass **out) {
     for (k = 0; k < size; ++k) ((volatile uint8_t *)image)[k] = ((const uint8_t *)bytes)[k];
     return jbv_parse_owned(vm, image, size, out);
 }
+#endif
 #if !defined(_M_IX86)
 /* Takes ownership of image (allocated with jbv_alloc), also on failure. */
 /* Length of the instruction at code[i] (trusted bytecode). */

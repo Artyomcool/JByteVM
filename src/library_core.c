@@ -1,5 +1,6 @@
 #include "internal.h"
 
+#if !defined(_M_IX86)   /* core_x86.asm; this is the reference */
 /* The core profile supplies object identity and cloning. Text, Class mirrors,
  * primitive wrappers and the Java class library are separate build features. */
 JBV_GC static JbvStatus JBV_CALL core_native(JbvVM *vm, void *user, const int32_t *args, uint16_t count, uint64_t *out) {
@@ -41,3 +42,4 @@ JBV_GC JBV_API JbvStatus JBV_CALL jbv_string_new_utf8(JbvVM *vm,const char *text
 JBV_API JbvStatus JBV_CALL jbv_string_length(JbvVM *vm,JbvRef ref,uint32_t *out){(void)vm;(void)ref;(void)out;return JBV_UNSUPPORTED_FEATURE;}
 JBV_API JbvStatus JBV_CALL jbv_string_read_utf16(JbvVM *vm,JbvRef ref,uint32_t start,uint32_t count,uint16_t *out){(void)vm;(void)ref;(void)start;(void)count;(void)out;return JBV_UNSUPPORTED_FEATURE;}
 JBV_API JbvStatus JBV_CALL jbv_string_read_utf8(JbvVM *vm,JbvRef ref,char *out,uint32_t capacity,uint32_t *bytes){(void)vm;(void)ref;(void)out;(void)capacity;(void)bytes;return JBV_UNSUPPORTED_FEATURE;}
+#endif

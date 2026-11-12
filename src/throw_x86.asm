@@ -1149,4 +1149,27 @@ r_divide:                               ; ArithmeticException "/ by zero"
     call @jbv_throw_detail@40
     ret
 @jbv_raise@8 ENDP
+;
+jbv_exception PROC EXPORT           ; (vm, out): the pending exception, retained for the host
+    mov ecx, [esp+4]
+    mov edx, [esp+8]
+    mov eax, 1
+    test ecx, ecx
+    jz @F
+    test edx, edx
+    jz @F
+    push edx
+    push DWORD PTR [ecx+VM_EXCEPTION]
+    push ecx
+    call jbv_retain
+    add esp, 8
+    pop edx
+    test eax, eax
+    jnz @F
+    mov ecx, [esp+4]
+    mov ecx, [ecx+VM_EXCEPTION]
+    mov [edx], ecx
+@@:
+    ret
+jbv_exception ENDP
 END
