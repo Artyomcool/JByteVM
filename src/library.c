@@ -1,11 +1,24 @@
 #include "library.h"
 #include "classpath.h"
 #define L "java/lang/"
-#define STR "Ljava/lang/String;"
-#define OBJ "Ljava/lang/Object;"
-#define CLS "Ljava/lang/Class;"
-#define SEQ "Ljava/lang/CharSequence;"
-#define SB "Ljava/lang/StringBuilder;"
+/* In the method tables the common reference types are one character each; install_methods
+ * expands them (STR..SB below, in order of the expansions table). */
+#define STR "!"
+#define OBJ "#"
+#define CLS "$"
+#define SEQ "%"
+#define SB "&"
+static const char *const expansions[] = {"Ljava/lang/String;", "Ljava/lang/Object;", "Ljava/lang/Class;", "Ljava/lang/CharSequence;", "Ljava/lang/StringBuilder;"};
+/* Writes the expansion of a table descriptor to out (if not 0); returns its length. */
+static uint32_t expand(const char *d, char *out) {
+    uint32_t n = 0;
+    for (; *d; ++d) {
+        const char *x = (uint8_t)(*d - '!') < 6 && *d != '"' ? expansions[*d - '!' - (*d > '"')] : 0;
+        if (!x) { if (out) out[n] = *d; ++n; continue; }
+        for (; *x; ++x) { if (out) out[n] = *x; ++n; }
+    }
+    return n;
+}
 typedef struct MethodSpec {
     const char *name, *descriptor;
     uint8_t op, kind, flags;
@@ -303,12 +316,12 @@ JBV_GC static JbvStatus JBV_CALL java_native(JbvVM *vm, void *user, const int32_
         uint8_t *text;
         uint32_t n = 0, close;
         if (m->descriptor.size > 0xff00) return JBV_LINKAGE_ERROR;
-        text = (uint8_t *)jbv_alloc(vm, (size_t)m->descriptor.size + sizeof(SB));
+        text = (uint8_t *)jbv_alloc(vm, (size_t)m->descriptor.size + sizeof("Ljava/lang/StringBuilder;"));
         if (!text) return JBV_OUT_OF_MEMORY;
         text[n++] = '(';
-        if (!(m->flags & JBV_STATIC) && !init) { const char *receiver = m->line_count == 'B' ? SB : STR; while (*receiver) text[n++] = (uint8_t)*receiver++; }
+        if (!(m->flags & JBV_STATIC) && !init) { const char *receiver = expansions[m->line_count == 'B' ? 4 : 0]; while (*receiver) text[n++] = (uint8_t)*receiver++; }
         for (close = 1; m->descriptor.data[close] != ')'; ++close) text[n++] = m->descriptor.data[close];
-        if (init) { text[n++] = ')'; for (i = 0; i < sizeof(STR) - 1; ++i) text[n++] = (uint8_t)STR[i]; }
+        if (init) { text[n++] = ')'; { const char *r = expansions[0]; while (*r) text[n++] = (uint8_t)*r++; } }
         else for (i = close; i < m->descriptor.size; ++i) text[n++] = m->descriptor.data[i];
         descriptor.data = text; descriptor.size = (uint16_t)n;
         name = init ? jbv_text("init") : m->name;
@@ -327,13 +340,18 @@ JBV_GC static JbvStatus JBV_CALL java_native(JbvVM *vm, void *user, const int32_
 }
 #endif
 static JbvStatus install_methods(JbvVM *vm, JbvClass *c, const MethodSpec *spec, uint32_t count) {
-    uint32_t i;
-    c->methods = (JbvMethod *)jbv_alloc(vm, count * sizeof(*c->methods));
+    uint32_t i, bytes = 0;
+    char *text;
+    for (i = 0; i < count; ++i) bytes += expand(spec[i].descriptor, 0);
+    /* one block: the methods, then their expanded descriptors (freed with c->methods) */
+    c->methods = (JbvMethod *)jbv_alloc(vm, count * sizeof(*c->methods) + bytes);
     if (!c->methods) return JBV_OUT_OF_MEMORY;
     c->method_count = (uint16_t)count;
+    text = (char *)(c->methods + count);
     for (i = 0; i < count; ++i) {
         JbvMethod *m = &c->methods[i];
-        m->name = jbv_text(spec[i].name); m->descriptor = jbv_text(spec[i].descriptor);
+        m->name = jbv_text(spec[i].name);
+        m->descriptor.data = (const uint8_t *)text; m->descriptor.size = (uint16_t)expand(spec[i].descriptor, text); text += m->descriptor.size;
         m->flags = (uint16_t)((spec[i].flags & 7 ? 0 : 1) | spec[i].flags | (c->flags & JBV_INTERFACE ? JBV_ABSTRACT : JBV_NATIVE));
         m->intrinsic = spec[i].op == O_INIT ? 1 : 3;
         m->native_slots = library_native; m->native_user = (void *)(uintptr_t)(spec[i].op | ((uint32_t)spec[i].kind << 8));
@@ -421,7 +439,7 @@ JbvStatus jbv_library_class(JbvVM *vm, JbvText name, JbvClass **out) {
         if (!c->fields) { status = JBV_OUT_OF_MEMORY; goto fail; }
         c->field_count = 1;
         c->fields[0].name = jbv_text(id >= B_BOOLEAN ? "TYPE" : "value");
-        c->fields[0].descriptor = jbv_text(id >= B_BOOLEAN ? CLS : id == B_CLASS ? "J" : "[C");
+        c->fields[0].descriptor = jbv_text(id >= B_BOOLEAN ? expansions[2] : id == B_CLASS ? "J" : "[C");
         c->fields[0].flags = id >= B_BOOLEAN ? 1 | JBV_STATIC | JBV_FINAL : 0x0002;
     }
     c->next = vm->classes; vm->classes = c; *out = c; return JBV_OK;

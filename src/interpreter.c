@@ -269,7 +269,7 @@ JBV_LAYOUT(method, offsetof(JbvMethod, max_stack) == 2 && offsetof(JbvMethod, de
     offsetof(JbvFrame, previous) == 0 && offsetof(JbvFrame, owner) == 4 && offsetof(JbvFrame, method) == 8 && offsetof(JbvFrame, has_monitors) == 28 &&
     sizeof(JbvFrame) == 32);
 JBV_LAYOUT(klass, offsetof(JbvClass, component) == (JBV_PROFILE_FULL ? 72 : 68) && offsetof(JbvClass, flags) == (JBV_PROFILE_FULL ? 56 : 52) &&
-    offsetof(JbvClass, init_state) == (JBV_PROFILE_FULL ? 82 : 78) && JBV_INTERFACE == 0x200 && JBV_ABSTRACT == 0x400);
+    offsetof(JbvClass, init_state) == (JBV_PROFILE_FULL ? 82 : 78) && offsetof(JbvClass, array_kind) == (JBV_PROFILE_FULL ? 81 : 77) && JBV_INTERFACE == 0x200 && JBV_ABSTRACT == 0x400);
 JBV_LAYOUT(frame, offsetof(JbvFrame, pc) == 12 && offsetof(JbvFrame, sp) == 16 && offsetof(JbvFrame, locals) == 24);
 JBV_LAYOUT(core, offsetof(JbvCoreState, vm) == 28 && offsetof(JbvCoreState, status) == 32 &&
     offsetof(JbvCoreState, result) == 48 && JBV_INT + 1 == 1 && JBV_REF + 1 == 2 && JBV_LONG + 1 == 3 && JBV_DOUBLE + 1 == 6);
@@ -878,6 +878,9 @@ resume:
             SP -= 2; PC += 2; break;
         }
 #endif
+#if JBV_X86_CORE   /* the core runs the common array accesses: here the generic case serves all */
+        case 46: case 50: case 51: case 52: case 53: case 79: case 84: case 85: case 86:
+#else
         case 46: XALOAD(int32_t, 0); break;
         case 50: XALOAD(int32_t, 1); break;
         case 51: XALOAD(int8_t, 0); break;    /* boolean elements are stored as 0/1 */
@@ -890,6 +893,7 @@ resume:
             else { XASTORE(uint8_t, locals[SP - 1]); }
             break;
         case 85: case 86: XASTORE(uint16_t, locals[SP - 1]); break;
+#endif
         case 47: case 48: case 49: case 83:
         case 80: case 81: case 82: {
             JbvObject *array;

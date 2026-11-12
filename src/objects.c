@@ -834,3 +834,22 @@ JBV_API JbvStatus JBV_CALL jbv_heap_stats(JbvVM *vm, JbvHeapStats *out) {
     out->bytes = vm->heap_bytes; out->objects = vm->object_count; out->collections = vm->collections;
     return JBV_OK;
 }
+uint64_t jbv_array_get(JbvObject *array, uint32_t i, uint8_t kind) {
+    switch (kind) {
+    case 'Z': return ((uint8_t *)(array + 1))[i];
+    case 'B': return (uint32_t)(int32_t)((int8_t *)(array + 1))[i];
+    case 'C': return ((uint16_t *)(array + 1))[i];
+    case 'S': return (uint32_t)(int32_t)((int16_t *)(array + 1))[i];
+    case 'J': case 'D': return jbv_slot_bits((int32_t *)(array + 1) + 2 * i, JBV_LONG);
+    default: return (uint32_t)((int32_t *)(array + 1))[i];
+    }
+}
+void jbv_array_set(JbvObject *array, uint32_t i, uint8_t kind, uint64_t bits) {
+    switch (kind) {
+    case 'Z': ((uint8_t *)(array + 1))[i] = (uint8_t)(bits & 1); break;
+    case 'B': ((uint8_t *)(array + 1))[i] = (uint8_t)bits; break;
+    case 'C': case 'S': ((uint16_t *)(array + 1))[i] = (uint16_t)bits; break;
+    case 'J': case 'D': jbv_put_bits((int32_t *)(array + 1) + 2 * i, bits, JBV_LONG); break;
+    default: ((int32_t *)(array + 1))[i] = jbv_i32((uint32_t)bits);
+    }
+}

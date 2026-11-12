@@ -10,6 +10,7 @@ PUBLIC op_aastore
 PUBLIC op_aconst_null
 PUBLIC op_areturn
 PUBLIC op_arraylength
+PUBLIC op_bastore
 PUBLIC op_bipush
 PUBLIC op_checkcast
 PUBLIC op_d2f
@@ -193,6 +194,7 @@ EXTERN SYSCALL @jbv_core_finish@4:PROC
 
 IF JBV_PROFILE_FULL
 CLASS_COMPONENT EQU 72
+CLASS_ARRAY_KIND EQU 81
 CLASS_FLAGS EQU 56
 CLASS_INIT EQU 82
 CLASS_SLOTS EQU 76
@@ -203,6 +205,7 @@ METHOD_ARGS EQU 36
 METHOD_RESULT EQU 38
 ELSE
 CLASS_COMPONENT EQU 68
+CLASS_ARRAY_KIND EQU 77
 CLASS_FLAGS EQU 52
 CLASS_INIT EQU 78
 METHOD_CODE EQU 24
@@ -312,7 +315,7 @@ op_table LABEL DWORD
     DWORD exit_op
     DWORD exit_op
     DWORD op_aastore
-    DWORD exit_op
+    DWORD op_bastore
     DWORD op_xastore_85
     DWORD op_xastore_86
     DWORD op_pop
@@ -569,7 +572,7 @@ op_table_w LABEL DWORD
     DWORD exit_op
     DWORD exit_op
     DWORD op_aastore
-    DWORD exit_op
+    DWORD op_bastore
     DWORD op_xastore_85
     DWORD op_xastore_86
     DWORD op_pop
@@ -778,7 +781,6 @@ frame_in_c:                      ; a core activation: C runs it to its end
     call @jbv_core_finish@4
     jmp core_return
 
-ALIGN 16
 op_iconst_2:
     mov eax, -1
     mov [edi+ebx*4], eax
@@ -786,7 +788,6 @@ op_iconst_2:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_iconst_3:
     mov eax, 0
     mov [edi+ebx*4], eax
@@ -794,7 +795,6 @@ op_iconst_3:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_iconst_4:
     mov eax, 1
     mov [edi+ebx*4], eax
@@ -802,7 +802,6 @@ op_iconst_4:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_iconst_5:
     mov eax, 2
     mov [edi+ebx*4], eax
@@ -810,7 +809,6 @@ op_iconst_5:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_iconst_6:
     mov eax, 3
     mov [edi+ebx*4], eax
@@ -818,7 +816,6 @@ op_iconst_6:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_iconst_7:
     mov eax, 4
     mov [edi+ebx*4], eax
@@ -826,7 +823,6 @@ op_iconst_7:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_iconst_8:
     mov eax, 5
     mov [edi+ebx*4], eax
@@ -834,7 +830,6 @@ op_iconst_8:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_aconst_null:
     xor eax, eax
     mov [edi+ebx*4], eax
@@ -842,7 +837,6 @@ op_aconst_null:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_bipush:
     movsx eax, BYTE PTR [esi]
     inc esi
@@ -851,7 +845,6 @@ op_bipush:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_sipush:
     movzx eax, WORD PTR [esi]
     xchg al, ah
@@ -862,7 +855,6 @@ op_sipush:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_ldc_18:
     movzx ecx, BYTE PTR [esi]
     imul ecx, ecx, 24
@@ -881,7 +873,6 @@ op_ldc_18:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_ldc_19:
     movzx ecx, WORD PTR [esi]
     xchg cl, ch
@@ -901,7 +892,6 @@ op_ldc_19:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_load_21:
     movzx ecx, BYTE PTR [esi]
     inc esi
@@ -911,7 +901,6 @@ op_load_21:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_load_25:
     movzx ecx, BYTE PTR [esi]
     inc esi
@@ -921,7 +910,6 @@ op_load_25:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_load_26:
     mov eax, [edi+0]
     mov [edi+ebx*4], eax
@@ -929,7 +917,6 @@ op_load_26:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_load_27:
     mov eax, [edi+4]
     mov [edi+ebx*4], eax
@@ -937,7 +924,6 @@ op_load_27:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_load_28:
     mov eax, [edi+8]
     mov [edi+ebx*4], eax
@@ -945,7 +931,6 @@ op_load_28:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_load_29:
     mov eax, [edi+12]
     mov [edi+ebx*4], eax
@@ -953,7 +938,6 @@ op_load_29:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_load_42:
     mov eax, [edi+0]
     mov [edi+ebx*4], eax
@@ -961,7 +945,6 @@ op_load_42:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_load_43:
     mov eax, [edi+4]
     mov [edi+ebx*4], eax
@@ -969,7 +952,6 @@ op_load_43:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_load_44:
     mov eax, [edi+8]
     mov [edi+ebx*4], eax
@@ -977,7 +959,6 @@ op_load_44:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_load_45:
     mov eax, [edi+12]
     mov [edi+ebx*4], eax
@@ -985,7 +966,6 @@ op_load_45:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_store_54:
     movzx ecx, BYTE PTR [esi]
     inc esi
@@ -995,7 +975,6 @@ op_store_54:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_store_58:
     movzx ecx, BYTE PTR [esi]
     inc esi
@@ -1005,7 +984,6 @@ op_store_58:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_store_59:
     mov [edi+0], eax
     mov BYTE PTR [ebp+0], 0
@@ -1013,7 +991,6 @@ op_store_59:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_store_60:
     mov [edi+4], eax
     mov BYTE PTR [ebp+1], 0
@@ -1021,7 +998,6 @@ op_store_60:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_store_61:
     mov [edi+8], eax
     mov BYTE PTR [ebp+2], 0
@@ -1029,7 +1005,6 @@ op_store_61:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_store_62:
     mov [edi+12], eax
     mov BYTE PTR [ebp+3], 0
@@ -1037,7 +1012,6 @@ op_store_62:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_store_75:
     mov [edi+0], eax
     mov BYTE PTR [ebp+0], 1
@@ -1045,7 +1019,6 @@ op_store_75:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_store_76:
     mov [edi+4], eax
     mov BYTE PTR [ebp+1], 1
@@ -1053,7 +1026,6 @@ op_store_76:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_store_77:
     mov [edi+8], eax
     mov BYTE PTR [ebp+2], 1
@@ -1061,7 +1033,6 @@ op_store_77:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_store_78:
     mov [edi+12], eax
     mov BYTE PTR [ebp+3], 1
@@ -1069,19 +1040,16 @@ op_store_78:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_pop:
     dec ebx
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_pop2:
     sub ebx, 2
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_dup:
     mov [edi+ebx*4], eax
     mov cl, [ebp+ebx-1]
@@ -1089,7 +1057,6 @@ op_dup:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_dupx_90:
     mov eax, [edi+ebx*4-4]
     mov [edi+ebx*4+0], eax
@@ -1107,7 +1074,6 @@ op_dupx_90:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_dupx_91:
     mov eax, [edi+ebx*4-4]
     mov [edi+ebx*4+0], eax
@@ -1129,7 +1095,6 @@ op_dupx_91:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_dupx_92:
     mov eax, [edi+ebx*4-8]
     mov [edi+ebx*4+0], eax
@@ -1143,7 +1108,6 @@ op_dupx_92:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_dupx_93:
     mov eax, [edi+ebx*4-8]
     mov [edi+ebx*4+0], eax
@@ -1169,7 +1133,6 @@ op_dupx_93:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_dupx_94:
     mov eax, [edi+ebx*4-8]
     mov [edi+ebx*4+0], eax
@@ -1199,7 +1162,6 @@ op_dupx_94:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_swap:
     mov ecx, [edi+ebx*4-8]
     mov [edi+ebx*4-4], ecx
@@ -1211,42 +1173,36 @@ op_swap:
     mov [ebp+ebx-2], cl
     DISPATCH
 
-ALIGN 16
 op_int_96:
     add eax, [edi+ebx*4-8]
     dec ebx
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_int_104:
     imul eax, [edi+ebx*4-8]
     dec ebx
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_int_126:
     and eax, [edi+ebx*4-8]
     dec ebx
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_int_128:
     or eax, [edi+ebx*4-8]
     dec ebx
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_int_130:
     xor eax, [edi+ebx*4-8]
     dec ebx
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_int_100:
     mov ecx, eax
     mov eax, [edi+ebx*4-8]
@@ -1255,7 +1211,6 @@ op_int_100:
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_int_120:
     mov ecx, eax
     mov eax, [edi+ebx*4-8]
@@ -1264,7 +1219,6 @@ op_int_120:
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_int_122:
     mov ecx, eax
     mov eax, [edi+ebx*4-8]
@@ -1273,7 +1227,6 @@ op_int_122:
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_int_124:
     mov ecx, eax
     mov eax, [edi+ebx*4-8]
@@ -1282,7 +1235,6 @@ op_int_124:
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_int_108:
     mov ecx, eax
     test ecx, ecx
@@ -1296,7 +1248,6 @@ op_int_108:
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_int_112:
     mov ecx, eax
     test ecx, ecx
@@ -1311,13 +1262,11 @@ op_int_112:
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_ineg:
     neg eax
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_iinc:
     movzx ecx, BYTE PTR [esi]
     movsx edx, BYTE PTR [esi+1]
@@ -1325,25 +1274,21 @@ op_iinc:
     add [edi+ecx*4], edx
     DISPATCH
 
-ALIGN 16
 op_narrow_145:
     movsx eax, al
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_narrow_146:
     movzx eax, ax
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_narrow_147:
     movsx eax, ax
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_if_153:
     test eax, eax
     jne br_no_1
@@ -1368,7 +1313,6 @@ br_no_1:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_if_154:
     test eax, eax
     je br_no_2
@@ -1393,7 +1337,6 @@ br_no_2:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_if_155:
     test eax, eax
     jge br_no_3
@@ -1418,7 +1361,6 @@ br_no_3:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_if_156:
     test eax, eax
     jl br_no_4
@@ -1443,7 +1385,6 @@ br_no_4:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_if_157:
     test eax, eax
     jle br_no_5
@@ -1468,7 +1409,6 @@ br_no_5:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_if_158:
     test eax, eax
     jg br_no_6
@@ -1493,7 +1433,6 @@ br_no_6:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_ifcmp_159:
     cmp [edi+ebx*4-8], eax
     jne br_no_7
@@ -1518,7 +1457,6 @@ br_no_7:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_ifcmp_160:
     cmp [edi+ebx*4-8], eax
     je br_no_8
@@ -1543,7 +1481,6 @@ br_no_8:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_ifcmp_161:
     cmp [edi+ebx*4-8], eax
     jge br_no_9
@@ -1568,7 +1505,6 @@ br_no_9:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_ifcmp_162:
     cmp [edi+ebx*4-8], eax
     jl br_no_10
@@ -1593,7 +1529,6 @@ br_no_10:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_ifcmp_163:
     cmp [edi+ebx*4-8], eax
     jle br_no_11
@@ -1618,7 +1553,6 @@ br_no_11:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_ifcmp_164:
     cmp [edi+ebx*4-8], eax
     jg br_no_12
@@ -1643,7 +1577,6 @@ br_no_12:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_ifcmp_165:
     cmp [edi+ebx*4-8], eax
     jne br_no_13
@@ -1668,7 +1601,6 @@ br_no_13:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_ifcmp_166:
     cmp [edi+ebx*4-8], eax
     je br_no_14
@@ -1693,7 +1625,6 @@ br_no_14:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_ifnull:
     test eax, eax
     jne br_no_15
@@ -1718,7 +1649,6 @@ br_no_15:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_ifnonnull:
     test eax, eax
     je br_no_16
@@ -1743,7 +1673,6 @@ br_no_16:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_goto:
     movzx edx, WORD PTR [esi]
     xchg dl, dh
@@ -1759,7 +1688,6 @@ goto_go:
     lea esi, [esi+edx-1]
     DISPATCH
 
-ALIGN 16
 op_tableswitch:
     mov edx, [esp]
     mov ecx, esi
@@ -1797,7 +1725,6 @@ ts_go:
     lea esi, [esi+edx-1]
     DISPATCH
 
-ALIGN 16
 op_lookupswitch:
     mov edx, [esp]
     mov ecx, esi
@@ -1850,7 +1777,6 @@ ls_go:
     lea esi, [esi+edx-1]
     DISPATCH
 
-ALIGN 16
 op_arraylength:
     test eax, eax
     jz exit_op
@@ -1864,7 +1790,6 @@ op_arraylength:
     mov BYTE PTR [ebp+ebx-1], 0
     DISPATCH
 
-ALIGN 16
 op_xaload_46:
     mov ecx, [edi+ebx*4-8]
     test ecx, ecx
@@ -1881,7 +1806,6 @@ op_xaload_46:
     mov BYTE PTR [ebp+ebx-1], 0
     DISPATCH
 
-ALIGN 16
 op_xaload_50:
     mov ecx, [edi+ebx*4-8]
     test ecx, ecx
@@ -1898,7 +1822,6 @@ op_xaload_50:
     mov BYTE PTR [ebp+ebx-1], 1
     DISPATCH
 
-ALIGN 16
 op_xaload_51:
     mov ecx, [edi+ebx*4-8]
     test ecx, ecx
@@ -1915,7 +1838,6 @@ op_xaload_51:
     mov BYTE PTR [ebp+ebx-1], 0
     DISPATCH
 
-ALIGN 16
 op_xaload_52:
     mov ecx, [edi+ebx*4-8]
     test ecx, ecx
@@ -1932,7 +1854,6 @@ op_xaload_52:
     mov BYTE PTR [ebp+ebx-1], 0
     DISPATCH
 
-ALIGN 16
 op_xaload_53:
     mov ecx, [edi+ebx*4-8]
     test ecx, ecx
@@ -1949,7 +1870,29 @@ op_xaload_53:
     mov BYTE PTR [ebp+ebx-1], 0
     DISPATCH
 
-ALIGN 16
+op_bastore:
+    mov ecx, [edi+ebx*4-12]
+    test ecx, ecx
+    jz exit_op
+    and ecx, 0FFFFFFh
+    mov edx, [esp]
+    mov edx, [edx+20]
+    mov ecx, [edx+ecx*4]
+    mov edx, [edi+ebx*4-8]
+    cmp edx, [ecx-4]
+    jae exit_op
+    push ecx
+    mov ecx, [ecx]
+    cmp BYTE PTR [ecx+CLASS_ARRAY_KIND], 'Z'
+    pop ecx
+    jne @F
+    and eax, 1
+@@:
+    mov [ecx+edx+4], al
+    sub ebx, 3
+    mov eax, [edi+ebx*4-4]
+    DISPATCH
+
 op_xastore_79:
     mov ecx, [edi+ebx*4-12]
     test ecx, ecx
@@ -1966,7 +1909,6 @@ op_xastore_79:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_xastore_85:
     mov ecx, [edi+ebx*4-12]
     test ecx, ecx
@@ -1983,7 +1925,6 @@ op_xastore_85:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_xastore_86:
     mov ecx, [edi+ebx*4-12]
     test ecx, ecx
@@ -2000,7 +1941,6 @@ op_xastore_86:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_getfield:
     movzx ecx, WORD PTR [esi]
     xchg cl, ch
@@ -2026,7 +1966,6 @@ op_getfield:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_putfield:
     movzx ecx, WORD PTR [esi]
     xchg cl, ch
@@ -2102,7 +2041,6 @@ put_null:
     pop edx
     jmp exit_op
 
-ALIGN 16
 op_getstatic:
     movzx ecx, WORD PTR [esi]
     xchg cl, ch
@@ -2125,7 +2063,6 @@ op_getstatic:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_putstatic:
     movzx ecx, WORD PTR [esi]
     xchg cl, ch
@@ -2152,7 +2089,6 @@ op_putstatic:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_aastore:
     mov ecx, [edi+ebx*4-12]
     test ecx, ecx
@@ -2223,7 +2159,6 @@ call_failed:                     ; eax = status, edx = state; esi just past the 
     mov [edx+32], eax
     jmp exit_op
 
-ALIGN 16
 op_invokestatic:
     movzx ecx, WORD PTR [esi]
     xchg cl, ch
@@ -2237,11 +2172,14 @@ op_invokestatic:
     jne exit_op
     mov edx, [ecx+8]
     mov eax, [ecx+0]
+    jmp call_2
+
+call_2:
     test WORD PTR [edx], 0520h
-    jnz call_c_st
+    jnz call_c_c2
     cmp BYTE PTR [edx+METHOD_ACCESSOR], 0
-    jne acc_st
-acc_back_st:
+    jne acc_c2
+acc_back_c2:
     push eax
     push edx
     mov edx, [esp+8]
@@ -2263,7 +2201,7 @@ acc_back_st:
     push esp
     call enter_run
     cmp eax, 1279872256
-    je call_limit_st
+    je call_limit_c2
     pop ecx
     mov edx, [ecx+88]
     movq xmm0, QWORD PTR [ecx+48]
@@ -2284,26 +2222,26 @@ acc_back_st:
     add esi, 2
     mov ecx, ebp
     mov ebp, [edx+8]
-    jmp call_kind_st
-call_limit_st:
+    jmp call_kind_c2
+call_limit_c2:
     pop eax
     add esp, 112
     jmp exit_op
-acc_st:
+acc_c2:
     push ecx
     push eax
     mov ecx, [edx+METHOD_CODE]
     cmp BYTE PTR [edx+METHOD_ACCESSOR], 1
-    jne acc_set_st
+    jne acc_set_c2
     movzx ecx, WORD PTR [ecx+2]
     xchg cl, ch
     imul ecx, ecx, 24
     add ecx, [eax+8]
     mov ecx, [ecx+16]
     test ecx, ecx
-    jz acc_fail_st
+    jz acc_fail_c2
     cmp BYTE PTR [ecx+38], 1
-    jne acc_fail_st
+    jne acc_fail_c2
     mov eax, [edi+ebx*4-4]
     and eax, 0FFFFFFh
     mov edx, [esp+8]
@@ -2317,18 +2255,18 @@ acc_st:
     add esp, 8
     add esi, 2
     DISPATCH
-acc_set_st:
+acc_set_c2:
     movzx ecx, WORD PTR [ecx+3]
     xchg cl, ch
     imul ecx, ecx, 24
     add ecx, [eax+8]
     mov ecx, [ecx+16]
     test ecx, ecx
-    jz acc_fail_st
+    jz acc_fail_c2
     cmp BYTE PTR [ecx+38], 1
-    jne acc_fail_st
+    jne acc_fail_c2
     cmp WORD PTR [ecx+36], 4900h
-    jne acc_fail_st
+    jne acc_fail_c2
     mov eax, [edi+ebx*4-8]
     and eax, 0FFFFFFh
     mov edx, [esp+8]
@@ -2342,11 +2280,11 @@ acc_set_st:
     add esp, 8
     add esi, 2
     DISPATCH
-acc_fail_st:
+acc_fail_c2:
     pop eax
     pop ecx
-    jmp acc_back_st
-call_c_st:
+    jmp acc_back_c2
+call_c_c2:
     push eax
     push edx
     mov edx, [esp+8]
@@ -2388,7 +2326,7 @@ call_c_st:
     jnz call_failed
     movzx ecx, BYTE PTR [ecx+42]
     add esi, 2
-call_result_st:
+call_result_c2:
     mov eax, [edx+28]
     push ecx
     mov ecx, [eax+376]
@@ -2399,13 +2337,13 @@ call_result_st:
     mov [edx+40], ecx
     pop ecx
     movq xmm0, QWORD PTR [edx+48]
-call_kind_st:
+call_kind_c2:
     test ecx, ecx
-    jz fd_void_st
+    jz fd_void_c2
     cmp cl, 3
-    je fd_wide_st
+    je fd_wide_c2
     cmp cl, 6
-    je fd_wide_st
+    je fd_wide_c2
     cmp cl, 2
     sete al
     mov [ebp+ebx], al
@@ -2413,18 +2351,205 @@ call_kind_st:
     mov [edi+ebx*4], eax
     inc ebx
     DISPATCH
-fd_wide_st:
+fd_wide_c2:
     movq QWORD PTR [edi+ebx*4], xmm0
     mov BYTE PTR [ebp+ebx], 0
     mov BYTE PTR [ebp+ebx+1], 0
     add ebx, 2
     mov eax, [edi+ebx*4-4]
     DISPATCH
-fd_void_st:
+fd_void_c2:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
+call_4:
+    test WORD PTR [edx], 0520h
+    jnz call_c_c4
+    cmp BYTE PTR [edx+METHOD_ACCESSOR], 0
+    jne acc_c4
+acc_back_c4:
+    push eax
+    push edx
+    mov edx, [esp+8]
+    mov eax, esi
+    dec eax
+    sub eax, [edx+0]
+    mov [edx+12], eax
+    lea edx, [edx+56]
+    mov [edx+12], eax
+    mov eax, ebx
+    sub eax, [edx+24]
+    mov [edx+16], eax
+    pop edx
+    pop eax
+    movzx ecx, WORD PTR [ecx+40]
+    neg ecx
+    add ecx, ebx
+    sub esp, 112
+    push esp
+    call enter_run
+    cmp eax, 1279872256
+    je call_limit_c4
+    pop ecx
+    mov edx, [ecx+88]
+    movq xmm0, QWORD PTR [ecx+48]
+    mov esi, [ecx+20]
+    mov [edx+20], esi
+    movq xmm1, QWORD PTR [ecx+36]
+    movq QWORD PTR [edx+36], xmm1
+    mov ebx, [ecx+96]
+    mov ebp, [ecx+64]
+    movzx ebp, BYTE PTR [ebp+METHOD_RESULT]
+    add esp, 112
+    mov edi, [edx+4]
+    mov esi, [edx+0]
+    add esi, [edx+12]
+    inc esi
+    test eax, eax
+    jnz frame_failed
+    add esi, 4
+    mov ecx, ebp
+    mov ebp, [edx+8]
+    jmp call_kind_c4
+call_limit_c4:
+    pop eax
+    add esp, 112
+    jmp exit_op
+acc_c4:
+    push ecx
+    push eax
+    mov ecx, [edx+METHOD_CODE]
+    cmp BYTE PTR [edx+METHOD_ACCESSOR], 1
+    jne acc_set_c4
+    movzx ecx, WORD PTR [ecx+2]
+    xchg cl, ch
+    imul ecx, ecx, 24
+    add ecx, [eax+8]
+    mov ecx, [ecx+16]
+    test ecx, ecx
+    jz acc_fail_c4
+    cmp BYTE PTR [ecx+38], 1
+    jne acc_fail_c4
+    mov eax, [edi+ebx*4-4]
+    and eax, 0FFFFFFh
+    mov edx, [esp+8]
+    mov edx, [edx+20]
+    mov eax, [edx+eax*4]
+    mov edx, [ecx+32]
+    mov eax, [eax+edx*4+4]
+    mov dl, [ecx+36]
+    mov [edi+ebx*4-4], eax
+    mov [ebp+ebx-1], dl
+    add esp, 8
+    add esi, 4
+    DISPATCH
+acc_set_c4:
+    movzx ecx, WORD PTR [ecx+3]
+    xchg cl, ch
+    imul ecx, ecx, 24
+    add ecx, [eax+8]
+    mov ecx, [ecx+16]
+    test ecx, ecx
+    jz acc_fail_c4
+    cmp BYTE PTR [ecx+38], 1
+    jne acc_fail_c4
+    cmp WORD PTR [ecx+36], 4900h
+    jne acc_fail_c4
+    mov eax, [edi+ebx*4-8]
+    and eax, 0FFFFFFh
+    mov edx, [esp+8]
+    mov edx, [edx+20]
+    mov eax, [edx+eax*4]
+    mov edx, [ecx+32]
+    mov ecx, [edi+ebx*4-4]
+    mov [eax+edx*4+4], ecx
+    sub ebx, 2
+    mov eax, [edi+ebx*4-4]
+    add esp, 8
+    add esi, 4
+    DISPATCH
+acc_fail_c4:
+    pop eax
+    pop ecx
+    jmp acc_back_c4
+call_c_c4:
+    push eax
+    push edx
+    mov edx, [esp+8]
+    mov eax, esi
+    dec eax
+    sub eax, [edx+0]
+    mov [edx+12], eax
+    lea edx, [edx+56]
+    mov [edx+12], eax
+    mov eax, ebx
+    sub eax, [edx+24]
+    mov [edx+16], eax
+    movzx eax, WORD PTR [ecx+40]
+    neg eax
+    add eax, ebx
+    pop edx
+    push ecx
+    push eax
+    mov ecx, [esp+12]
+    lea ecx, [ecx+48]
+    push ecx
+    mov ecx, [esp+8]
+    movzx ecx, WORD PTR [ecx+40]
+    push ecx
+    lea ecx, [ebp+eax]
+    push ecx
+    lea ecx, [edi+eax*4]
+    push ecx
+    push edx
+    mov edx, [esp+28]
+    mov ecx, [esp+32]
+    mov ecx, [ecx+28]
+    call @jbv_execute@28
+    pop ebx
+    pop ecx
+    add esp, 4
+    mov edx, [esp]
+    test eax, eax
+    jnz call_failed
+    movzx ecx, BYTE PTR [ecx+42]
+    add esi, 4
+call_result_c4:
+    mov eax, [edx+28]
+    push ecx
+    mov ecx, [eax+376]
+    mov [edx+20], ecx
+    mov ecx, [eax+1984]
+    mov [edx+36], ecx
+    mov ecx, [eax+1992]
+    mov [edx+40], ecx
+    pop ecx
+    movq xmm0, QWORD PTR [edx+48]
+call_kind_c4:
+    test ecx, ecx
+    jz fd_void_c4
+    cmp cl, 3
+    je fd_wide_c4
+    cmp cl, 6
+    je fd_wide_c4
+    cmp cl, 2
+    sete al
+    mov [ebp+ebx], al
+    movd eax, xmm0
+    mov [edi+ebx*4], eax
+    inc ebx
+    DISPATCH
+fd_wide_c4:
+    movq QWORD PTR [edi+ebx*4], xmm0
+    mov BYTE PTR [ebp+ebx], 0
+    mov BYTE PTR [ebp+ebx+1], 0
+    add ebx, 2
+    mov eax, [edi+ebx*4-4]
+    DISPATCH
+fd_void_c4:
+    mov eax, [edi+ebx*4-4]
+    DISPATCH
+
 op_invoke_182:
     movzx ecx, WORD PTR [esi]
     xchg cl, ch
@@ -2485,194 +2610,8 @@ inv_182_3:
     mov eax, [ecx+68]
     jmp inv_182_call
 inv_182_call:
-    test WORD PTR [edx], 0520h
-    jnz call_c_182
-    cmp BYTE PTR [edx+METHOD_ACCESSOR], 0
-    jne acc_182
-acc_back_182:
-    push eax
-    push edx
-    mov edx, [esp+8]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov [edx+12], eax
-    lea edx, [edx+56]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    pop edx
-    pop eax
-    movzx ecx, WORD PTR [ecx+40]
-    neg ecx
-    add ecx, ebx
-    sub esp, 112
-    push esp
-    call enter_run
-    cmp eax, 1279872256
-    je call_limit_182
-    pop ecx
-    mov edx, [ecx+88]
-    movq xmm0, QWORD PTR [ecx+48]
-    mov esi, [ecx+20]
-    mov [edx+20], esi
-    movq xmm1, QWORD PTR [ecx+36]
-    movq QWORD PTR [edx+36], xmm1
-    mov ebx, [ecx+96]
-    mov ebp, [ecx+64]
-    movzx ebp, BYTE PTR [ebp+METHOD_RESULT]
-    add esp, 112
-    mov edi, [edx+4]
-    mov esi, [edx+0]
-    add esi, [edx+12]
-    inc esi
-    test eax, eax
-    jnz frame_failed
-    add esi, 2
-    mov ecx, ebp
-    mov ebp, [edx+8]
-    jmp call_kind_182
-call_limit_182:
-    pop eax
-    add esp, 112
-    jmp exit_op
-acc_182:
-    push ecx
-    push eax
-    mov ecx, [edx+METHOD_CODE]
-    cmp BYTE PTR [edx+METHOD_ACCESSOR], 1
-    jne acc_set_182
-    movzx ecx, WORD PTR [ecx+2]
-    xchg cl, ch
-    imul ecx, ecx, 24
-    add ecx, [eax+8]
-    mov ecx, [ecx+16]
-    test ecx, ecx
-    jz acc_fail_182
-    cmp BYTE PTR [ecx+38], 1
-    jne acc_fail_182
-    mov eax, [edi+ebx*4-4]
-    and eax, 0FFFFFFh
-    mov edx, [esp+8]
-    mov edx, [edx+20]
-    mov eax, [edx+eax*4]
-    mov edx, [ecx+32]
-    mov eax, [eax+edx*4+4]
-    mov dl, [ecx+36]
-    mov [edi+ebx*4-4], eax
-    mov [ebp+ebx-1], dl
-    add esp, 8
-    add esi, 2
-    DISPATCH
-acc_set_182:
-    movzx ecx, WORD PTR [ecx+3]
-    xchg cl, ch
-    imul ecx, ecx, 24
-    add ecx, [eax+8]
-    mov ecx, [ecx+16]
-    test ecx, ecx
-    jz acc_fail_182
-    cmp BYTE PTR [ecx+38], 1
-    jne acc_fail_182
-    cmp WORD PTR [ecx+36], 4900h
-    jne acc_fail_182
-    mov eax, [edi+ebx*4-8]
-    and eax, 0FFFFFFh
-    mov edx, [esp+8]
-    mov edx, [edx+20]
-    mov eax, [edx+eax*4]
-    mov edx, [ecx+32]
-    mov ecx, [edi+ebx*4-4]
-    mov [eax+edx*4+4], ecx
-    sub ebx, 2
-    mov eax, [edi+ebx*4-4]
-    add esp, 8
-    add esi, 2
-    DISPATCH
-acc_fail_182:
-    pop eax
-    pop ecx
-    jmp acc_back_182
-call_c_182:
-    push eax
-    push edx
-    mov edx, [esp+8]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov [edx+12], eax
-    lea edx, [edx+56]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    movzx eax, WORD PTR [ecx+40]
-    neg eax
-    add eax, ebx
-    pop edx
-    push ecx
-    push eax
-    mov ecx, [esp+12]
-    lea ecx, [ecx+48]
-    push ecx
-    mov ecx, [esp+8]
-    movzx ecx, WORD PTR [ecx+40]
-    push ecx
-    lea ecx, [ebp+eax]
-    push ecx
-    lea ecx, [edi+eax*4]
-    push ecx
-    push edx
-    mov edx, [esp+28]
-    mov ecx, [esp+32]
-    mov ecx, [ecx+28]
-    call @jbv_execute@28
-    pop ebx
-    pop ecx
-    add esp, 4
-    mov edx, [esp]
-    test eax, eax
-    jnz call_failed
-    movzx ecx, BYTE PTR [ecx+42]
-    add esi, 2
-call_result_182:
-    mov eax, [edx+28]
-    push ecx
-    mov ecx, [eax+376]
-    mov [edx+20], ecx
-    mov ecx, [eax+1984]
-    mov [edx+36], ecx
-    mov ecx, [eax+1992]
-    mov [edx+40], ecx
-    pop ecx
-    movq xmm0, QWORD PTR [edx+48]
-call_kind_182:
-    test ecx, ecx
-    jz fd_void_182
-    cmp cl, 3
-    je fd_wide_182
-    cmp cl, 6
-    je fd_wide_182
-    cmp cl, 2
-    sete al
-    mov [ebp+ebx], al
-    movd eax, xmm0
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-fd_wide_182:
-    movq QWORD PTR [edi+ebx*4], xmm0
-    mov BYTE PTR [ebp+ebx], 0
-    mov BYTE PTR [ebp+ebx+1], 0
-    add ebx, 2
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-fd_void_182:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
+    jmp call_2
 
-ALIGN 16
 op_invoke_185:
     movzx ecx, WORD PTR [esi]
     xchg cl, ch
@@ -2733,194 +2672,8 @@ inv_185_3:
     mov eax, [ecx+68]
     jmp inv_185_call
 inv_185_call:
-    test WORD PTR [edx], 0520h
-    jnz call_c_185
-    cmp BYTE PTR [edx+METHOD_ACCESSOR], 0
-    jne acc_185
-acc_back_185:
-    push eax
-    push edx
-    mov edx, [esp+8]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov [edx+12], eax
-    lea edx, [edx+56]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    pop edx
-    pop eax
-    movzx ecx, WORD PTR [ecx+40]
-    neg ecx
-    add ecx, ebx
-    sub esp, 112
-    push esp
-    call enter_run
-    cmp eax, 1279872256
-    je call_limit_185
-    pop ecx
-    mov edx, [ecx+88]
-    movq xmm0, QWORD PTR [ecx+48]
-    mov esi, [ecx+20]
-    mov [edx+20], esi
-    movq xmm1, QWORD PTR [ecx+36]
-    movq QWORD PTR [edx+36], xmm1
-    mov ebx, [ecx+96]
-    mov ebp, [ecx+64]
-    movzx ebp, BYTE PTR [ebp+METHOD_RESULT]
-    add esp, 112
-    mov edi, [edx+4]
-    mov esi, [edx+0]
-    add esi, [edx+12]
-    inc esi
-    test eax, eax
-    jnz frame_failed
-    add esi, 4
-    mov ecx, ebp
-    mov ebp, [edx+8]
-    jmp call_kind_185
-call_limit_185:
-    pop eax
-    add esp, 112
-    jmp exit_op
-acc_185:
-    push ecx
-    push eax
-    mov ecx, [edx+METHOD_CODE]
-    cmp BYTE PTR [edx+METHOD_ACCESSOR], 1
-    jne acc_set_185
-    movzx ecx, WORD PTR [ecx+2]
-    xchg cl, ch
-    imul ecx, ecx, 24
-    add ecx, [eax+8]
-    mov ecx, [ecx+16]
-    test ecx, ecx
-    jz acc_fail_185
-    cmp BYTE PTR [ecx+38], 1
-    jne acc_fail_185
-    mov eax, [edi+ebx*4-4]
-    and eax, 0FFFFFFh
-    mov edx, [esp+8]
-    mov edx, [edx+20]
-    mov eax, [edx+eax*4]
-    mov edx, [ecx+32]
-    mov eax, [eax+edx*4+4]
-    mov dl, [ecx+36]
-    mov [edi+ebx*4-4], eax
-    mov [ebp+ebx-1], dl
-    add esp, 8
-    add esi, 4
-    DISPATCH
-acc_set_185:
-    movzx ecx, WORD PTR [ecx+3]
-    xchg cl, ch
-    imul ecx, ecx, 24
-    add ecx, [eax+8]
-    mov ecx, [ecx+16]
-    test ecx, ecx
-    jz acc_fail_185
-    cmp BYTE PTR [ecx+38], 1
-    jne acc_fail_185
-    cmp WORD PTR [ecx+36], 4900h
-    jne acc_fail_185
-    mov eax, [edi+ebx*4-8]
-    and eax, 0FFFFFFh
-    mov edx, [esp+8]
-    mov edx, [edx+20]
-    mov eax, [edx+eax*4]
-    mov edx, [ecx+32]
-    mov ecx, [edi+ebx*4-4]
-    mov [eax+edx*4+4], ecx
-    sub ebx, 2
-    mov eax, [edi+ebx*4-4]
-    add esp, 8
-    add esi, 4
-    DISPATCH
-acc_fail_185:
-    pop eax
-    pop ecx
-    jmp acc_back_185
-call_c_185:
-    push eax
-    push edx
-    mov edx, [esp+8]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov [edx+12], eax
-    lea edx, [edx+56]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    movzx eax, WORD PTR [ecx+40]
-    neg eax
-    add eax, ebx
-    pop edx
-    push ecx
-    push eax
-    mov ecx, [esp+12]
-    lea ecx, [ecx+48]
-    push ecx
-    mov ecx, [esp+8]
-    movzx ecx, WORD PTR [ecx+40]
-    push ecx
-    lea ecx, [ebp+eax]
-    push ecx
-    lea ecx, [edi+eax*4]
-    push ecx
-    push edx
-    mov edx, [esp+28]
-    mov ecx, [esp+32]
-    mov ecx, [ecx+28]
-    call @jbv_execute@28
-    pop ebx
-    pop ecx
-    add esp, 4
-    mov edx, [esp]
-    test eax, eax
-    jnz call_failed
-    movzx ecx, BYTE PTR [ecx+42]
-    add esi, 4
-call_result_185:
-    mov eax, [edx+28]
-    push ecx
-    mov ecx, [eax+376]
-    mov [edx+20], ecx
-    mov ecx, [eax+1984]
-    mov [edx+36], ecx
-    mov ecx, [eax+1992]
-    mov [edx+40], ecx
-    pop ecx
-    movq xmm0, QWORD PTR [edx+48]
-call_kind_185:
-    test ecx, ecx
-    jz fd_void_185
-    cmp cl, 3
-    je fd_wide_185
-    cmp cl, 6
-    je fd_wide_185
-    cmp cl, 2
-    sete al
-    mov [ebp+ebx], al
-    movd eax, xmm0
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-fd_wide_185:
-    movq QWORD PTR [edi+ebx*4], xmm0
-    mov BYTE PTR [ebp+ebx], 0
-    mov BYTE PTR [ebp+ebx+1], 0
-    add ebx, 2
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-fd_void_185:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
+    jmp call_4
 
-ALIGN 16
 op_invokespecial:
     movzx ecx, WORD PTR [esi]
     xchg cl, ch
@@ -2947,194 +2700,8 @@ op_invokespecial:
 special_call:
     mov edx, [ecx+28]
     mov eax, [ecx+24]
-    test WORD PTR [edx], 0520h
-    jnz call_c_sp
-    cmp BYTE PTR [edx+METHOD_ACCESSOR], 0
-    jne acc_sp
-acc_back_sp:
-    push eax
-    push edx
-    mov edx, [esp+8]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov [edx+12], eax
-    lea edx, [edx+56]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    pop edx
-    pop eax
-    movzx ecx, WORD PTR [ecx+40]
-    neg ecx
-    add ecx, ebx
-    sub esp, 112
-    push esp
-    call enter_run
-    cmp eax, 1279872256
-    je call_limit_sp
-    pop ecx
-    mov edx, [ecx+88]
-    movq xmm0, QWORD PTR [ecx+48]
-    mov esi, [ecx+20]
-    mov [edx+20], esi
-    movq xmm1, QWORD PTR [ecx+36]
-    movq QWORD PTR [edx+36], xmm1
-    mov ebx, [ecx+96]
-    mov ebp, [ecx+64]
-    movzx ebp, BYTE PTR [ebp+METHOD_RESULT]
-    add esp, 112
-    mov edi, [edx+4]
-    mov esi, [edx+0]
-    add esi, [edx+12]
-    inc esi
-    test eax, eax
-    jnz frame_failed
-    add esi, 2
-    mov ecx, ebp
-    mov ebp, [edx+8]
-    jmp call_kind_sp
-call_limit_sp:
-    pop eax
-    add esp, 112
-    jmp exit_op
-acc_sp:
-    push ecx
-    push eax
-    mov ecx, [edx+METHOD_CODE]
-    cmp BYTE PTR [edx+METHOD_ACCESSOR], 1
-    jne acc_set_sp
-    movzx ecx, WORD PTR [ecx+2]
-    xchg cl, ch
-    imul ecx, ecx, 24
-    add ecx, [eax+8]
-    mov ecx, [ecx+16]
-    test ecx, ecx
-    jz acc_fail_sp
-    cmp BYTE PTR [ecx+38], 1
-    jne acc_fail_sp
-    mov eax, [edi+ebx*4-4]
-    and eax, 0FFFFFFh
-    mov edx, [esp+8]
-    mov edx, [edx+20]
-    mov eax, [edx+eax*4]
-    mov edx, [ecx+32]
-    mov eax, [eax+edx*4+4]
-    mov dl, [ecx+36]
-    mov [edi+ebx*4-4], eax
-    mov [ebp+ebx-1], dl
-    add esp, 8
-    add esi, 2
-    DISPATCH
-acc_set_sp:
-    movzx ecx, WORD PTR [ecx+3]
-    xchg cl, ch
-    imul ecx, ecx, 24
-    add ecx, [eax+8]
-    mov ecx, [ecx+16]
-    test ecx, ecx
-    jz acc_fail_sp
-    cmp BYTE PTR [ecx+38], 1
-    jne acc_fail_sp
-    cmp WORD PTR [ecx+36], 4900h
-    jne acc_fail_sp
-    mov eax, [edi+ebx*4-8]
-    and eax, 0FFFFFFh
-    mov edx, [esp+8]
-    mov edx, [edx+20]
-    mov eax, [edx+eax*4]
-    mov edx, [ecx+32]
-    mov ecx, [edi+ebx*4-4]
-    mov [eax+edx*4+4], ecx
-    sub ebx, 2
-    mov eax, [edi+ebx*4-4]
-    add esp, 8
-    add esi, 2
-    DISPATCH
-acc_fail_sp:
-    pop eax
-    pop ecx
-    jmp acc_back_sp
-call_c_sp:
-    push eax
-    push edx
-    mov edx, [esp+8]
-    mov eax, esi
-    dec eax
-    sub eax, [edx+0]
-    mov [edx+12], eax
-    lea edx, [edx+56]
-    mov [edx+12], eax
-    mov eax, ebx
-    sub eax, [edx+24]
-    mov [edx+16], eax
-    movzx eax, WORD PTR [ecx+40]
-    neg eax
-    add eax, ebx
-    pop edx
-    push ecx
-    push eax
-    mov ecx, [esp+12]
-    lea ecx, [ecx+48]
-    push ecx
-    mov ecx, [esp+8]
-    movzx ecx, WORD PTR [ecx+40]
-    push ecx
-    lea ecx, [ebp+eax]
-    push ecx
-    lea ecx, [edi+eax*4]
-    push ecx
-    push edx
-    mov edx, [esp+28]
-    mov ecx, [esp+32]
-    mov ecx, [ecx+28]
-    call @jbv_execute@28
-    pop ebx
-    pop ecx
-    add esp, 4
-    mov edx, [esp]
-    test eax, eax
-    jnz call_failed
-    movzx ecx, BYTE PTR [ecx+42]
-    add esi, 2
-call_result_sp:
-    mov eax, [edx+28]
-    push ecx
-    mov ecx, [eax+376]
-    mov [edx+20], ecx
-    mov ecx, [eax+1984]
-    mov [edx+36], ecx
-    mov ecx, [eax+1992]
-    mov [edx+40], ecx
-    pop ecx
-    movq xmm0, QWORD PTR [edx+48]
-call_kind_sp:
-    test ecx, ecx
-    jz fd_void_sp
-    cmp cl, 3
-    je fd_wide_sp
-    cmp cl, 6
-    je fd_wide_sp
-    cmp cl, 2
-    sete al
-    mov [ebp+ebx], al
-    movd eax, xmm0
-    mov [edi+ebx*4], eax
-    inc ebx
-    DISPATCH
-fd_wide_sp:
-    movq QWORD PTR [edi+ebx*4], xmm0
-    mov BYTE PTR [ebp+ebx], 0
-    mov BYTE PTR [ebp+ebx+1], 0
-    add ebx, 2
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
-fd_void_sp:
-    mov eax, [edi+ebx*4-4]
-    DISPATCH
+    jmp call_2
 
-ALIGN 16
 op_new:
     movzx ecx, WORD PTR [esi]
     xchg cl, ch
@@ -3256,7 +2823,6 @@ new_c:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_this_getfield:
     movzx ecx, WORD PTR [esi+1]
     xchg cl, ch
@@ -3284,7 +2850,6 @@ op_this_getfield:
     add esi, 3
     DISPATCH
 
-ALIGN 16
 op_iinc_goto:
     movzx edx, WORD PTR [esi+3]
     xchg dl, dh
@@ -3306,7 +2871,6 @@ iinc_goto_go:
     lea esi, [esi+edx+2]
     DISPATCH
 
-ALIGN 16
 op_checkcast:
     movzx ecx, WORD PTR [esi]
     xchg cl, ch
@@ -3334,7 +2898,6 @@ cc_ok:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_instanceof:
     movzx ecx, WORD PTR [esi]
     xchg cl, ch
@@ -3365,7 +2928,6 @@ io_store:
     add esi, 2
     DISPATCH
 
-ALIGN 16
 op_fload_23:
     movzx ecx, BYTE PTR [esi]
     inc esi
@@ -3375,7 +2937,6 @@ op_fload_23:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_fload_34:
     mov eax, [edi+0]
     mov [edi+ebx*4], eax
@@ -3383,7 +2944,6 @@ op_fload_34:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_fload_35:
     mov eax, [edi+4]
     mov [edi+ebx*4], eax
@@ -3391,7 +2951,6 @@ op_fload_35:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_fload_36:
     mov eax, [edi+8]
     mov [edi+ebx*4], eax
@@ -3399,7 +2958,6 @@ op_fload_36:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_fload_37:
     mov eax, [edi+12]
     mov [edi+ebx*4], eax
@@ -3407,7 +2965,6 @@ op_fload_37:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_fstore_56:
     movzx ecx, BYTE PTR [esi]
     inc esi
@@ -3417,7 +2974,6 @@ op_fstore_56:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_fstore_67:
     mov [edi+0], eax
     mov BYTE PTR [ebp+0], 0
@@ -3425,7 +2981,6 @@ op_fstore_67:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_fstore_68:
     mov [edi+4], eax
     mov BYTE PTR [ebp+1], 0
@@ -3433,7 +2988,6 @@ op_fstore_68:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_fstore_69:
     mov [edi+8], eax
     mov BYTE PTR [ebp+2], 0
@@ -3441,7 +2995,6 @@ op_fstore_69:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_fstore_70:
     mov [edi+12], eax
     mov BYTE PTR [ebp+3], 0
@@ -3449,7 +3002,6 @@ op_fstore_70:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_wload_22:
     movzx ecx, BYTE PTR [esi]
     inc esi
@@ -3462,7 +3014,6 @@ op_wload_22:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wload_30:
     movq xmm0, QWORD PTR [edi+0]
     mov eax, [edi+4]
@@ -3473,7 +3024,6 @@ op_wload_30:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wload_31:
     movq xmm0, QWORD PTR [edi+4]
     mov eax, [edi+8]
@@ -3484,7 +3034,6 @@ op_wload_31:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wload_32:
     movq xmm0, QWORD PTR [edi+8]
     mov eax, [edi+12]
@@ -3495,7 +3044,6 @@ op_wload_32:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wload_33:
     movq xmm0, QWORD PTR [edi+12]
     mov eax, [edi+16]
@@ -3506,7 +3054,6 @@ op_wload_33:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wstore_55:
     movzx ecx, BYTE PTR [esi]
     inc esi
@@ -3518,7 +3065,6 @@ op_wstore_55:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_wstorew_55:
     movzx ecx, BYTE PTR [esi]
     inc esi
@@ -3529,7 +3075,6 @@ op_wstorew_55:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_wstore_63:
     movq xmm0, QWORD PTR [edi+ebx*4-8]
     movq QWORD PTR [edi+0], xmm0
@@ -3539,7 +3084,6 @@ op_wstore_63:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_wstorew_63:
     movq QWORD PTR [edi+0], xmm7
     mov BYTE PTR [ebp+0], 0
@@ -3548,7 +3092,6 @@ op_wstorew_63:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_wstore_64:
     movq xmm0, QWORD PTR [edi+ebx*4-8]
     movq QWORD PTR [edi+4], xmm0
@@ -3558,7 +3101,6 @@ op_wstore_64:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_wstorew_64:
     movq QWORD PTR [edi+4], xmm7
     mov BYTE PTR [ebp+1], 0
@@ -3567,7 +3109,6 @@ op_wstorew_64:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_wstore_65:
     movq xmm0, QWORD PTR [edi+ebx*4-8]
     movq QWORD PTR [edi+8], xmm0
@@ -3577,7 +3118,6 @@ op_wstore_65:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_wstorew_65:
     movq QWORD PTR [edi+8], xmm7
     mov BYTE PTR [ebp+2], 0
@@ -3586,7 +3126,6 @@ op_wstorew_65:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_wstore_66:
     movq xmm0, QWORD PTR [edi+ebx*4-8]
     movq QWORD PTR [edi+12], xmm0
@@ -3596,7 +3135,6 @@ op_wstore_66:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_wstorew_66:
     movq QWORD PTR [edi+12], xmm7
     mov BYTE PTR [ebp+3], 0
@@ -3605,7 +3143,6 @@ op_wstorew_66:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_wconst_9:
     mov eax, 0
     mov edx, 0
@@ -3620,7 +3157,6 @@ op_wconst_9:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wconst_10:
     mov eax, 1
     mov edx, 0
@@ -3635,7 +3171,6 @@ op_wconst_10:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wconst_14:
     mov eax, 0
     mov edx, 0
@@ -3650,7 +3185,6 @@ op_wconst_14:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wconst_15:
     mov eax, 0
     mov edx, 1072693248
@@ -3665,7 +3199,6 @@ op_wconst_15:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_fconst_11:
     mov eax, 0
     mov [edi+ebx*4], eax
@@ -3673,7 +3206,6 @@ op_fconst_11:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_fconst_12:
     mov eax, 1065353216
     mov [edi+ebx*4], eax
@@ -3681,7 +3213,6 @@ op_fconst_12:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_fconst_13:
     mov eax, 1073741824
     mov [edi+ebx*4], eax
@@ -3689,7 +3220,6 @@ op_fconst_13:
     inc ebx
     DISPATCH
 
-ALIGN 16
 op_ldc2_w:
     movzx ecx, WORD PTR [esi]
     xchg cl, ch
@@ -3712,7 +3242,6 @@ op_ldc2_w:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wide_97:
     movq xmm0, QWORD PTR [edi+ebx*4-16]
     movq xmm1, QWORD PTR [edi+ebx*4-8]
@@ -3723,7 +3252,6 @@ op_wide_97:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_widew_97:
     movq xmm0, QWORD PTR [edi+ebx*4-16]
     movdqa xmm1, xmm7
@@ -3734,7 +3262,6 @@ op_widew_97:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wide_101:
     movq xmm0, QWORD PTR [edi+ebx*4-16]
     movq xmm1, QWORD PTR [edi+ebx*4-8]
@@ -3745,7 +3272,6 @@ op_wide_101:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_widew_101:
     movq xmm0, QWORD PTR [edi+ebx*4-16]
     movdqa xmm1, xmm7
@@ -3756,7 +3282,6 @@ op_widew_101:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wide_127:
     movq xmm0, QWORD PTR [edi+ebx*4-16]
     movq xmm1, QWORD PTR [edi+ebx*4-8]
@@ -3767,7 +3292,6 @@ op_wide_127:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_widew_127:
     movq xmm0, QWORD PTR [edi+ebx*4-16]
     movdqa xmm1, xmm7
@@ -3778,7 +3302,6 @@ op_widew_127:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wide_129:
     movq xmm0, QWORD PTR [edi+ebx*4-16]
     movq xmm1, QWORD PTR [edi+ebx*4-8]
@@ -3789,7 +3312,6 @@ op_wide_129:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_widew_129:
     movq xmm0, QWORD PTR [edi+ebx*4-16]
     movdqa xmm1, xmm7
@@ -3800,7 +3322,6 @@ op_widew_129:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wide_131:
     movq xmm0, QWORD PTR [edi+ebx*4-16]
     movq xmm1, QWORD PTR [edi+ebx*4-8]
@@ -3811,7 +3332,6 @@ op_wide_131:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_widew_131:
     movq xmm0, QWORD PTR [edi+ebx*4-16]
     movdqa xmm1, xmm7
@@ -3822,7 +3342,6 @@ op_widew_131:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wide_105:
     movq xmm7, QWORD PTR [edi+ebx*4-8]
     movq xmm0, QWORD PTR [edi+ebx*4-16]
@@ -3844,7 +3363,6 @@ op_wide_105:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wide_99:
     movsd xmm0, QWORD PTR [edi+ebx*4-16]
     addsd xmm0, QWORD PTR [edi+ebx*4-8]
@@ -3854,7 +3372,6 @@ op_wide_99:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_widew_99:
     movsd xmm0, QWORD PTR [edi+ebx*4-16]
     addsd xmm0, xmm7
@@ -3864,7 +3381,6 @@ op_widew_99:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wide_103:
     movsd xmm0, QWORD PTR [edi+ebx*4-16]
     subsd xmm0, QWORD PTR [edi+ebx*4-8]
@@ -3874,7 +3390,6 @@ op_wide_103:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_widew_103:
     movsd xmm0, QWORD PTR [edi+ebx*4-16]
     subsd xmm0, xmm7
@@ -3884,7 +3399,6 @@ op_widew_103:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wide_107:
     movsd xmm0, QWORD PTR [edi+ebx*4-16]
     mulsd xmm0, QWORD PTR [edi+ebx*4-8]
@@ -3894,7 +3408,6 @@ op_wide_107:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_widew_107:
     movsd xmm0, QWORD PTR [edi+ebx*4-16]
     mulsd xmm0, xmm7
@@ -3904,7 +3417,6 @@ op_widew_107:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_wide_111:
     movsd xmm0, QWORD PTR [edi+ebx*4-16]
     divsd xmm0, QWORD PTR [edi+ebx*4-8]
@@ -3914,7 +3426,6 @@ op_wide_111:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_widew_111:
     movsd xmm0, QWORD PTR [edi+ebx*4-16]
     divsd xmm0, xmm7
@@ -3924,7 +3435,6 @@ op_widew_111:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_lmulw:
     movq xmm0, QWORD PTR [edi+ebx*4-16]
     movdqa xmm1, xmm0
@@ -3945,7 +3455,6 @@ op_lmulw:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_float_98:
     movss xmm0, DWORD PTR [edi+ebx*4-8]
     addss xmm0, DWORD PTR [edi+ebx*4-4]
@@ -3954,7 +3463,6 @@ op_float_98:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_float_102:
     movss xmm0, DWORD PTR [edi+ebx*4-8]
     subss xmm0, DWORD PTR [edi+ebx*4-4]
@@ -3963,7 +3471,6 @@ op_float_102:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_float_106:
     movss xmm0, DWORD PTR [edi+ebx*4-8]
     mulss xmm0, DWORD PTR [edi+ebx*4-4]
@@ -3972,7 +3479,6 @@ op_float_106:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_float_110:
     movss xmm0, DWORD PTR [edi+ebx*4-8]
     divss xmm0, DWORD PTR [edi+ebx*4-4]
@@ -3981,7 +3487,6 @@ op_float_110:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_lneg:
     pxor xmm0, xmm0
     movq xmm1, QWORD PTR [edi+ebx*4-8]
@@ -3991,7 +3496,6 @@ op_lneg:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_dneg:
     xor eax, 80000000h
     mov edx, eax
@@ -4004,13 +3508,11 @@ op_dneg:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_fneg:
     xor eax, 80000000h
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_lshift_121:
     mov ecx, eax
     and ecx, 63
@@ -4035,7 +3537,6 @@ lsh_done_121:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_lshift_123:
     mov ecx, eax
     and ecx, 63
@@ -4060,7 +3561,6 @@ lsh_done_123:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_lshift_125:
     mov ecx, eax
     and ecx, 63
@@ -4085,7 +3585,6 @@ lsh_done_125:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_lcmp:
     mov eax, [edi+ebx*4-12]
     cmp eax, [edi+ebx*4-4]
@@ -4107,7 +3606,6 @@ lcmp_st:
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_fcmp_149:
     movss xmm0, DWORD PTR [edi+ebx*4-8]
     ucomiss xmm0, DWORD PTR [edi+ebx*4-4]
@@ -4129,7 +3627,6 @@ fcmp_st_149:
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_fcmp_150:
     movss xmm0, DWORD PTR [edi+ebx*4-8]
     ucomiss xmm0, DWORD PTR [edi+ebx*4-4]
@@ -4151,7 +3648,6 @@ fcmp_st_150:
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_fcmp_151:
     movsd xmm0, QWORD PTR [edi+ebx*4-16]
     ucomisd xmm0, QWORD PTR [edi+ebx*4-8]
@@ -4173,7 +3669,6 @@ fcmp_st_151:
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_fcmp_152:
     movsd xmm0, QWORD PTR [edi+ebx*4-16]
     ucomisd xmm0, QWORD PTR [edi+ebx*4-8]
@@ -4195,7 +3690,6 @@ fcmp_st_152:
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_i2l:
     cdq
     movd xmm0, eax
@@ -4208,13 +3702,11 @@ op_i2l:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_l2i:
     dec ebx
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_i2d:
     cvtsi2sd xmm0, eax
     movsd QWORD PTR [edi+ebx*4-4], xmm0
@@ -4224,14 +3716,12 @@ op_i2d:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_i2f:
     cvtsi2ss xmm0, eax
     movss DWORD PTR [edi+ebx*4-4], xmm0
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_f2d:
     cvtss2sd xmm0, DWORD PTR [edi+ebx*4-4]
     movsd QWORD PTR [edi+ebx*4-4], xmm0
@@ -4241,7 +3731,6 @@ op_f2d:
     movdqa xmm7, xmm0
     DISPATCH_W
 
-ALIGN 16
 op_d2f:
     cvtsd2ss xmm0, QWORD PTR [edi+ebx*4-8]
     dec ebx
@@ -4249,7 +3738,6 @@ op_d2f:
     mov eax, [edi+ebx*4-4]
     DISPATCH
 
-ALIGN 16
 op_d2i:
     cvttsd2si ecx, QWORD PTR [edi+ebx*4-8]
     cmp ecx, 80000000h
@@ -4259,7 +3747,6 @@ op_d2i:
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_f2i:
     cvttss2si ecx, DWORD PTR [edi+ebx*4-4]
     cmp ecx, 80000000h
@@ -4268,7 +3755,6 @@ op_f2i:
     mov [edi+ebx*4-4], eax
     DISPATCH
 
-ALIGN 16
 op_l2d:
     fild QWORD PTR [edi+ebx*4-8]
     fstp QWORD PTR [edi+ebx*4-8]
@@ -4383,7 +3869,6 @@ frame_failed:                    ; the callee failed: the caller unwinds (edx = 
     mov [edx+32], eax
     jmp exit_op
 
-ALIGN 16
 op_ireturn:
     mov edx, [esp]
     mov ecx, [edx+64]
@@ -4417,7 +3902,6 @@ ir_go:
     mov DWORD PTR [edx+32], 1380275200
     jmp exit_op
 
-ALIGN 16
 op_areturn:
     mov edx, [esp]
     movd xmm0, eax
@@ -4427,7 +3911,6 @@ op_areturn:
     mov DWORD PTR [edx+32], 1380275200
     jmp exit_op
 
-ALIGN 16
 op_return:
     xor eax, eax
     mov edx, [esp]
