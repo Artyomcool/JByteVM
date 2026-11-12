@@ -1,5 +1,6 @@
 #include "classpath.h"
 
+#if !defined(_M_IX86)   /* classpath_x86.asm; this is the reference */
 enum { H_PRIMITIVE,H_COPY,H_ARRAY,H_HASH,H_CLOCK,H_WRITE,H_COLLECT,H_FBITS,H_FVALUE,H_DBITS,H_DVALUE,H_PARSE,H_SQRT,H_ROUND,H_ASCII };
 static const char *const hooks[] = {"primitive","arraycopy","newArrayLike","identityHash","clock","write","collect",
     "floatBits","bitsFloat","doubleBits","bitsDouble","parseFP","sqrt","roundIntegral","ascii",
@@ -151,3 +152,4 @@ JbvStatus jbv_classpath_load(JbvVM *vm, JbvText name, JbvClass **out) {
         }
     *out = c; return jbv_link(vm, c, 0);
 }
+#endif

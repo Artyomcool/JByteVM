@@ -153,6 +153,9 @@ JBV_GEN_LAYOUT(FR_HAS_MONITORS, offsetof(JbvFrame, has_monitors) == 28);
 JBV_GEN_LAYOUT(MON_SIZEOF, sizeof(JbvMonitor) == 12);
 JBV_GEN_LAYOUT(M_NATIVE_SLOTS, offsetof(JbvMethod, native_slots) == 56);
 JBV_GEN_LAYOUT(M_RESULT_KIND, offsetof(JbvMethod, result_kind) == 38);
+JBV_GEN_LAYOUT(VM_CLOCK, offsetof(JbvVM, services.clock) == 2068);
+JBV_GEN_LAYOUT(VM_WRITE, offsetof(JbvVM, services.write) == 2072);
+JBV_GEN_LAYOUT(VM_SERVICES_USER, offsetof(JbvVM, services.user) == 2076);
 JBV_GEN_LAYOUT(FIELD_ATTRIBUTES, offsetof(JbvField, attributes) == 20);
 JBV_GEN_LAYOUT(M_ATTRIBUTES, offsetof(JbvMethod, attributes) == 24);
 JBV_GEN_LAYOUT(C_ATTRIBUTES, offsetof(JbvClass, attributes) == 44);
@@ -309,4 +312,7 @@ JBV_GEN_LAYOUT(FR_HAS_MONITORS, offsetof(JbvFrame, has_monitors) == 28);
 JBV_GEN_LAYOUT(MON_SIZEOF, sizeof(JbvMonitor) == 12);
 JBV_GEN_LAYOUT(M_NATIVE_SLOTS, offsetof(JbvMethod, native_slots) == 52);
 JBV_GEN_LAYOUT(M_RESULT_KIND, offsetof(JbvMethod, result_kind) == 34);
+JBV_GEN_LAYOUT(VM_CLOCK, offsetof(JbvVM, services.clock) == 2068);
+JBV_GEN_LAYOUT(VM_WRITE, offsetof(JbvVM, services.write) == 2072);
+JBV_GEN_LAYOUT(VM_SERVICES_USER, offsetof(JbvVM, services.user) == 2076);
 #endif

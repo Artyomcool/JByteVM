@@ -59,6 +59,7 @@ int main(void) {
     F(JbvFrame, base, "FR_BASE"); F(JbvFrame, locals, "FR_LOCALS"); F(JbvFrame, sp, "FR_SP"); F(JbvFrame, has_monitors, "FR_HAS_MONITORS");
     Z(JbvMonitor, "MON_SIZEOF");
     F(JbvMethod, native_slots, "M_NATIVE_SLOTS"); F(JbvMethod, result_kind, "M_RESULT_KIND");
+    F(JbvVM, services.clock, "VM_CLOCK"); F(JbvVM, services.write, "VM_WRITE"); F(JbvVM, services.user, "VM_SERVICES_USER");
 #if JBV_PROFILE_FULL
     F(JbvField, attributes, "FIELD_ATTRIBUTES"); F(JbvMethod, attributes, "M_ATTRIBUTES"); F(JbvClass, attributes, "C_ATTRIBUTES");
 #endif
