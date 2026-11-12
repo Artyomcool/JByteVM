@@ -3,6 +3,7 @@
 /* Bounded container reader only. Code, member declarations and CP relationships
  * are supplied by a trusted producer; no bytecode verification is performed. */
 
+#if !defined(_M_IX86)   /* classfile_x86.asm parses; this is the reference */
 typedef struct Reader {
     const uint8_t *data;
     size_t size, pos;
@@ -41,6 +42,9 @@ static Reader attribute(Reader *r, JbvClass *c, JbvText *name) {
     sub.bad = r->bad;
     return sub;
 }
+#else
+#include "layout_check.h"
+#endif
 JbvStatus jbv_parse(JbvVM *vm, const void *bytes, size_t size, JbvClass **out) {
     uint8_t *image;
     size_t k;
@@ -50,6 +54,7 @@ JbvStatus jbv_parse(JbvVM *vm, const void *bytes, size_t size, JbvClass **out) {
     for (k = 0; k < size; ++k) ((volatile uint8_t *)image)[k] = ((const uint8_t *)bytes)[k];
     return jbv_parse_owned(vm, image, size, out);
 }
+#if !defined(_M_IX86)
 /* Takes ownership of image (allocated with jbv_alloc), also on failure. */
 /* Length of the instruction at code[i] (trusted bytecode). */
 static uint32_t op_length(const uint8_t *code, uint32_t i) {
@@ -72,12 +77,14 @@ static void prepare_code(JbvMethod *m, uint8_t *code, uint32_t size) {
         if (size == 5 && code[0] == 0x2a && code[1] == 0xb4 && (code[4] == 0xac || code[4] == 0xb0)) m->accessor = 1;
         else if (size == 6 && code[0] == 0x2a && code[1] == 0x1b && code[2] == 0xb5 && code[5] == 0xb1) m->accessor = 2;
     }
-    for (i = 0; i < size; i += op_length(code, i)) {
+    for (i = 0; i < size; ) {   /* the length first: a marker has none of its own */
+        uint32_t length = op_length(code, i);
         if (code[i] == 0x2a && i + 1 < size && code[i + 1] == 0xb4) code[i] = 203;
         else if (code[i] == 0x84 && i + 3 < size && code[i + 3] == 0xa7) code[i] = 204;
+        i += length;
     }
 }
-JbvStatus jbv_parse_owned(JbvVM *vm, uint8_t *image, size_t size, JbvClass **out) {
+JbvStatus JBV_CALL jbv_parse_owned(JbvVM *vm, uint8_t *image, size_t size, JbvClass **out) {
     Reader r;
     JbvClass *c;
     JbvStatus status = JBV_BAD_CLASS;
@@ -209,4 +216,4 @@ fail:
     jbv_free_class(vm, c);
     return status;
 }
-
+#endif

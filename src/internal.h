@@ -232,7 +232,7 @@ void jbv_free_heap(JbvVM *vm);
 void jbv_free_class(JbvVM *vm, JbvClass *c);
 JbvStatus jbv_parse(JbvVM *vm, const void *bytes, size_t size, JbvClass **out);
 /* Adopts image: a jbv_alloc buffer or a slice of vm->library; released on failure. */
-JbvStatus jbv_parse_owned(JbvVM *vm, uint8_t *image, size_t size, JbvClass **out);
+JbvStatus JBV_CALL jbv_parse_owned(JbvVM *vm, uint8_t *image, size_t size, JbvClass **out);   /* x86: classfile_x86.asm */
 JbvStatus jbv_signature(JbvText descriptor, uint16_t *args, int *returns);
 int jbv_descriptor_type(JbvText descriptor, uint32_t *pos, uint32_t *width);
 void jbv_prepare_method(JbvMethod *method);
