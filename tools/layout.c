@@ -22,6 +22,15 @@ int main(void) {
     F(JbvClass, super_name, "C_SUPER_NAME"); F(JbvClass, source_file, "C_SOURCE_FILE"); F(JbvClass, methods, "C_METHODS");
     F(JbvClass, fields, "C_FIELDS"); F(JbvClass, flags, "C_FLAGS"); F(JbvClass, interface_count, "C_INTERFACE_COUNT");
     F(JbvClass, interface_indices, "C_INTERFACE_INDICES");
+    F(JbvClass, next, "C_NEXT"); F(JbvClass, super, "C_SUPER"); F(JbvClass, instance_slots, "C_INSTANCE_SLOTS");
+    F(JbvClass, link_state, "C_LINK_STATE"); F(JbvClass, init_state, "C_INIT_STATE");
+    F(JbvMethod, intrinsic, "M_INTRINSIC"); F(JbvMethod, native, "M_NATIVE"); F(JbvMethod, native_user, "M_NATIVE_USER");
+    Z(JbvFrame, "FR_SIZEOF"); F(JbvFrame, previous, "FR_PREVIOUS"); F(JbvFrame, owner, "FR_OWNER"); F(JbvFrame, method, "FR_METHOD");
+    F(JbvFrame, pc, "FR_PC");
+    F(JbvVM, classes, "VM_CLASSES"); F(JbvVM, throwable_class, "VM_THROWABLE"); F(JbvVM, trace_element_class, "VM_TRACE_ELEMENT");
+    F(JbvVM, throwable_init, "VM_THROWABLE_INIT"); F(JbvVM, frames, "VM_FRAMES"); F(JbvVM, exception, "VM_EXCEPTION");
+    F(JbvVM, emergency_oom, "VM_EMERGENCY_OOM"); F(JbvVM, exception_status, "VM_EXCEPTION_STATUS"); F(JbvVM, heap_limit, "VM_HEAP_LIMIT");
+    F(JbvVM, handles, "VM_HANDLES");
 #if JBV_PROFILE_FULL
     F(JbvField, attributes, "FIELD_ATTRIBUTES"); F(JbvMethod, attributes, "M_ATTRIBUTES"); F(JbvClass, attributes, "C_ATTRIBUTES");
 #endif

@@ -1,4 +1,5 @@
 #include "library.h"
+#if !defined(_M_IX86)   /* throw_x86.asm */
 
 static int internal_frame(JbvFrame *frame, JbvClass *throwable) {
     return jbv_text_is(frame->owner->name,"jbv/runtime/Support") ||
@@ -46,3 +47,4 @@ JbvStatus jbv_capture_trace(JbvVM *vm, int32_t *out) {
     if (status == JBV_OK) *out=array_ref;
     (void)jbv_release(vm,array_ref);return status;
 }
+#endif
