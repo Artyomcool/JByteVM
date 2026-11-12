@@ -1,5 +1,6 @@
 #include "classpath.h"
 
+#if !defined(_M_IX86)   /* reflection_x86.asm; this is the reference */
 #define R "java/lang/reflect/"
 typedef struct Member { JbvClass *owner; void *target; uint8_t kind; } Member;
 typedef struct Members { Member *data; uint32_t size, capacity; } Members;
@@ -431,3 +432,4 @@ JbvStatus JBV_CALL jbv_reflect_native(JbvVM *vm, void *user, const int32_t *a, u
     }
     if(status==JBV_OK)*out=(uint32_t)ref;return status;
 }
+#endif
