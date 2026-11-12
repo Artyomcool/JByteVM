@@ -61,6 +61,9 @@ int main(void) {
     F(JbvMethod, native_slots, "M_NATIVE_SLOTS"); F(JbvMethod, result_kind, "M_RESULT_KIND");
     F(JbvVM, native_frame, "VM_NATIVE_FRAME"); F(JbvVM, fp_ready, "VM_FP_READY"); F(JbvMethod, argument_slots, "M_ARG_SLOTS");
     F(JbvVM, config.max_instructions, "VM_MAX_INSTRUCTIONS");
+    Z(JbvLink, "LK_SIZEOF"); F(JbvLink, owner, "LK_OWNER"); F(JbvLink, symbolic, "LK_SYMBOLIC"); F(JbvLink, member, "LK_MEMBER");
+    F(JbvLink, slot, "LK_SLOT"); F(JbvLink, kind, "LK_KIND"); F(JbvLink, type, "LK_TYPE"); F(JbvLink, fast, "LK_FAST"); F(JbvLink, argc, "LK_ARGC");
+    F(JbvLink, result, "LK_RESULT"); F(JbvLink, address, "LK_ADDRESS"); F(JbvClass, init_error, "C_INIT_ERROR"); F(JbvMethod, return_char, "M_RETURN_CHAR");
     F(JbvVM, services.clock, "VM_CLOCK"); F(JbvVM, services.write, "VM_WRITE"); F(JbvVM, services.user, "VM_SERVICES_USER");
 #if JBV_PROFILE_FULL
     F(JbvField, attributes, "FIELD_ATTRIBUTES"); F(JbvMethod, attributes, "M_ATTRIBUTES"); F(JbvClass, attributes, "C_ATTRIBUTES");

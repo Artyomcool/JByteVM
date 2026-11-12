@@ -1,5 +1,6 @@
 #include "internal.h"
 
+#if !defined(_M_IX86)   /* link_x86.asm; this is the reference */
 static int integral(uint8_t c) {
     return c == 'I' || c == 'B' || c == 'C' || c == 'S' || c == 'Z';
 }
@@ -202,6 +203,10 @@ int32_t jbv_narrow(int32_t value, uint8_t type) {
     default: return value;
     }
 }
+#else
+JbvStatus jbv_link_member(JbvVM *vm, JbvClass *c, uint16_t index, JbvLink **out);
+#define link_member jbv_link_member
+#endif
 /* What the x86 core keeps per method: where it runs, plus copies of vm->handles and the
  * young region, reloaded from the VM after anything that may collect. The rest it reads
  * through vm. */
