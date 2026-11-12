@@ -1,4 +1,7 @@
 #include "classpath.h"
+#if !defined(_M_IX86)
+#include <emmintrin.h>
+#endif
 
 #if !defined(_M_IX86)   /* classpath_x86.asm; this is the reference */
 enum { H_PRIMITIVE,H_COPY,H_ARRAY,H_HASH,H_CLOCK,H_WRITE,H_COLLECT,H_FBITS,H_FVALUE,H_DBITS,H_DVALUE,H_PARSE,H_SQRT,H_ROUND,H_ASCII };
@@ -92,13 +95,7 @@ JBV_GC static JbvStatus JBV_CALL hook(JbvVM *vm, void *user, const int32_t *a, u
     case H_SQRT: {
         union { uint64_t bits; double value; } n;
         n.bits = jbv_slot_bits(a, JBV_DOUBLE);
-#if defined(_M_IX86)
-        __asm fld n.value
-        __asm fsqrt
-        __asm fstp n.value
-#else
-        return JBV_UNSUPPORTED_FEATURE;
-#endif
+        n.value = _mm_cvtsd_f64(_mm_sqrt_sd(_mm_setzero_pd(), _mm_set_sd(n.value)));   /* no CRT */
         *out = n.bits; return JBV_OK;
     }
     case H_ROUND: *out = integral_round(jbv_slot_bits(a, JBV_DOUBLE), a[2]); return JBV_OK;

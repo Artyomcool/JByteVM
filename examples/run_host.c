@@ -123,9 +123,13 @@ static const JbvNativeEntry natives[] = {
 /* Crash report: faulting address relative to jbytevm.dll and the registers. */
 static LONG WINAPI crashed(EXCEPTION_POINTERS *info) {
     uintptr_t base = (uintptr_t)GetModuleHandleA("jbytevm.dll"), ip = (uintptr_t)info->ExceptionRecord->ExceptionAddress;
+#if defined(_M_IX86)
     CONTEXT *r = info->ContextRecord;
     fprintf(stderr, "crash %08lx at rva %x (eax %08lx ebx %08lx ecx %08lx edx %08lx esi %08lx edi %08lx ebp %08lx esp %08lx)\n",
         info->ExceptionRecord->ExceptionCode, (unsigned)(ip - base), r->Eax, r->Ebx, r->Ecx, r->Edx, r->Esi, r->Edi, r->Ebp, r->Esp);
+#else
+    fprintf(stderr, "crash %08lx at rva %x\n", info->ExceptionRecord->ExceptionCode, (unsigned)(ip - base));
+#endif
     return EXCEPTION_EXECUTE_HANDLER;
 }
 

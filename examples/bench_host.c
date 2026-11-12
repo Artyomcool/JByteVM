@@ -33,7 +33,11 @@ static DWORD WINAPI sampler(LPVOID unused) {
         if (SuspendThread(target) == (DWORD)-1) break;
         context.ContextFlags = CONTEXT_CONTROL;
         if (GetThreadContext(target, &context)) {
+#if defined(_M_IX86)
             uintptr_t ip = context.Eip;
+#else
+            uintptr_t ip = (uintptr_t)context.Rip;
+#endif
             if (ip >= base && ip < base + 0x100000) fprintf(samples, "%x\n", (unsigned)(ip - base));
             else fprintf(samples, "other\n");
         }
@@ -46,9 +50,13 @@ static DWORD WINAPI sampler(LPVOID unused) {
 /* Crash report: faulting address relative to jbytevm.dll and the registers. */
 static LONG WINAPI crashed(EXCEPTION_POINTERS *info) {
     uintptr_t base = (uintptr_t)GetModuleHandleA("jbytevm.dll"), ip = (uintptr_t)info->ExceptionRecord->ExceptionAddress;
+#if defined(_M_IX86)
     CONTEXT *r = info->ContextRecord;
     fprintf(stderr, "crash %08lx at rva %x (eax %08lx ebx %08lx ecx %08lx edx %08lx esi %08lx edi %08lx ebp %08lx esp %08lx)\n",
         info->ExceptionRecord->ExceptionCode, (unsigned)(ip - base), r->Eax, r->Ebx, r->Ecx, r->Edx, r->Esi, r->Edi, r->Ebp, r->Esp);
+#else
+    fprintf(stderr, "crash %08lx at rva %x\n", info->ExceptionRecord->ExceptionCode, (unsigned)(ip - base));
+#endif
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
