@@ -1,6 +1,6 @@
 ; Classes and references: bootstrap, array classes, resolution and lazy loading, linking (superclass,
 ; interfaces, instance slots), assignability, method/field lookup with JVM interface
-; rules, handle validation and host pins. Same fastcall names as the C; ebx is the VM.
+; rules, handle validation and host pins. Fastcall; ebx is the VM.
 .686
 .model flat, C
 option casemap:none
@@ -991,13 +991,6 @@ lf_parent:                              ; eax = a class -> eax = the field there
 @jbv_lookup_field@20 ENDP
 
 ; ---- references: generation << 24 | handle index
-@jbv_handle_ref@8 PROC SYSCALL      ; ecx vm, edx index
-    mov eax, [ecx+VM_GENERATIONS]
-    movzx eax, BYTE PTR [eax+edx]
-    shl eax, 24
-    or eax, edx
-    ret
-@jbv_handle_ref@8 ENDP
 @jbv_object@12 PROC SYSCALL         ; ecx vm, edx ref, [esp+4] out: a live handle of its generation
     mov eax, S_NULL
     test edx, edx

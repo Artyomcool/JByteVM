@@ -1,6 +1,6 @@
 ; VM basics: accounted allocation,
 ; text comparison, class/method/field lookup, freeing classes, the public VM API.
-; Internal functions keep the C names (fastcall); the API is cdecl and exported.
+; Internal functions are fastcall; the API is cdecl and exported.
 .686
 .model flat, C
 option casemap:none
@@ -37,16 +37,6 @@ statuses LABEL BYTE
     DB 'unknown status', 0
 
 .code
-@jbv_u16@4 PROC SYSCALL
-    movzx eax, WORD PTR [ecx]
-    xchg al, ah
-    ret
-@jbv_u16@4 ENDP
-@jbv_u32@4 PROC SYSCALL
-    mov eax, [ecx]
-    bswap eax
-    ret
-@jbv_u32@4 ENDP
 
 ; Blocks carry their size in an 8-byte header and come zeroed; the total limit counts them.
 @jbv_alloc@8 PROC SYSCALL           ; ecx vm, edx bytes
@@ -164,23 +154,6 @@ ti_ret:
     pop esi
     ret 8
 @jbv_text_is@12 ENDP
-; ecx = class, edx = index, tag on the stack -> the constant, or 0
-@jbv_cp@12 PROC SYSCALL
-    movzx edx, dx
-    xor eax, eax
-    test edx, edx
-    jz @F
-    cmp dx, WORD PTR [ecx+C_POOL_SIZE]
-    jae @F
-    imul edx, edx, CP_SIZEOF
-    add edx, [ecx+C_POOL]
-    mov cl, [esp+4]
-    cmp [edx+CP_TAG], cl
-    jne @F
-    mov eax, edx
-@@:
-    ret 4
-@jbv_cp@12 ENDP
 
 ; ZF = the JbvText at eax equals the one at edx
 text_same:

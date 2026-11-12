@@ -7,9 +7,9 @@ Registers: esi bytecode pointer, edi locals (the operand stack follows them, sp 
 from locals), ebx sp, ebp reference bits, eax top of stack (write-through: memory always
 holds every slot, eax is a copy of the top), ecx/edx scratch. Every handler ends with
 its own dispatch. An opcode the core does not run, or any condition it does not handle
-(null, bounds, unresolved constant, exhausted budget), returns to C at that opcode,
-which executes it completely and calls the core again; the C loop alone is a complete
-interpreter. Layout constants are checked by static asserts in interpreter.c."""
+(null, bounds, unresolved constant, exhausted budget), returns to jbv_run (run.asm) at
+that opcode, which executes it (or slow.asm does) and calls the core again. The layout
+constants below follow src/layout.inc."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -110,7 +110,7 @@ for op, code in [(145, 'movsx eax, al'), (146, 'movzx eax, ax'), (147, 'movsx ea
 # can re-execute the branch from the unchanged stack and report the limit.
 OFFSET = ['movzx edx, WORD PTR [esi]', 'xchg dl, dh', 'movsx edx, dx']
 cold = []   # rarely taken tails, emitted after the handlers
-def budget(label):   # edx = offset; backward branches cost one unit; exhausted: back to C
+def budget(label):   # edx = offset; backward branches cost one unit; exhausted: back to jbv_run
     cold.append('\n'.join([f'{label}_borrow:                ; the low word was 0: borrow from the high word, or stop',
         f'    cmp DWORD PTR [ecx+{VM_REMAINING + 4}], 0', f'    je {label}_out', f'    dec DWORD PTR [ecx+{VM_REMAINING + 4}]', f'    jmp {label}_back',
         f'{label}_out:', f'    mov DWORD PTR [ecx+{VM_REMAINING}], 0', '    jmp exit_op', '']))
@@ -339,7 +339,7 @@ handler([187], 'op_new', lines(['movzx ecx, WORD PTR [esi]', 'xchg cl, ch', f'im
     [f'mov eax, [edx+{STATE["result"]}]', 'mov [edi+ebx*4], eax', 'mov BYTE PTR [ebp+ebx], 1', 'inc ebx', 'add esi, 2'], DISPATCH))
 
 # Superinstructions: 203 = aload_0 getfield, 204 = iinc goto (the rest of the pair is
-# unchanged; on any special case the core leaves the marker to C, which runs the first opcode).
+# unchanged; on any special case the core leaves the marker to jbv_run, which runs the first opcode).
 handler([203], 'op_this_getfield', lines(['movzx ecx, WORD PTR [esi+1]', 'xchg cl, ch', f'imul ecx, ecx, {CONSTANT_SIZE}', 'mov edx, [esp]',
     f'add ecx, [edx+{STATE["pool"]}]', f'mov ecx, [ecx+{CONSTANT_LINK}]', 'test ecx, ecx', 'jz exit_op',
     f'cmp BYTE PTR [ecx+{LINK_FAST}], 1', 'jne exit_op', 'mov eax, [edi]', 'test eax, eax', 'jz exit_op'], deref('eax'), [
@@ -349,7 +349,7 @@ handler([204], 'op_iinc_goto', lines(['movzx edx, WORD PTR [esi+3]', 'xchg dl, d
     'movzx ecx, BYTE PTR [esi]', 'lea ecx, [edi+ecx*4]', 'push edx', 'movsx edx, BYTE PTR [esi+1]', 'add [ecx], edx', 'pop edx',
     'lea esi, [esi+edx+2]'], DISPATCH))
 
-# checkcast/instanceof against a resolved class: null and the exact class here, the rest in C
+# checkcast/instanceof against a resolved class: null and the exact class here, the rest in jbv_run
 CLASS_REF = ['movzx ecx, WORD PTR [esi]', 'xchg cl, ch', f'imul ecx, ecx, {CONSTANT_SIZE}', 'mov edx, [esp]',
              f'add ecx, [edx+{STATE["pool"]}]', 'cmp BYTE PTR [ecx], 7', 'jne exit_op', f'mov ecx, [ecx+{CONSTANT_LINK}]', 'test ecx, ecx', 'jz exit_op']
 def receiver_class():   # eax = non-null reference -> edx = its class (eax kept)
@@ -362,7 +362,7 @@ handler([193], 'op_instanceof', lines(CLASS_REF, ['test eax, eax', 'jz io_store'
 
 # float/long/double. Two-slot values keep the low word in the lower slot; eax is the
 # top slot (the high word). Doubles and floats use SSE2 (IEEE, the VM's MXCSR); cases
-# with special Java results (division, remainder, out-of-range or NaN conversions) go to C.
+# with special Java results (division, remainder, out-of-range or NaN conversions) go to jbv_run.
 TOP = 'mov eax, [edi+ebx*4-4]'
 # Store forwarding: every two-slot value is written by one 8-byte store; 4-byte loads of
 # its halves and 8-byte loads of the whole then forward. (Two 4-byte stores read back
@@ -459,8 +459,8 @@ handler([139], 'op_f2i', lines(['cvttss2si ecx, DWORD PTR [edi+ebx*4-4]', 'cmp e
     'mov eax, ecx', 'mov [edi+ebx*4-4], eax'], DISPATCH))
 handler([138], 'op_l2d', lines(['fild QWORD PTR [edi+ebx*4-8]', 'fstp QWORD PTR [edi+ebx*4-8]', TOP], DISPATCH))   # x87 at 53-bit precision: one rounding
 
-# Returns: the value into state->result and JBV_CORE_RETURN into state->status; C
-# unwinds the frame. ireturn of byte/char/short/boolean narrows in C.
+# Returns: the value into state->result and JBV_CORE_RETURN into state->status; jbv_run
+# unwinds the frame. ireturn of byte/char/short/boolean narrows in jbv_run.
 CORE_RETURN = 0x52455400
 def ret(value):
     return value + ['mov edx, [esp]', 'movd xmm0, eax', f'movq QWORD PTR [edx+{STATE["result"]}], xmm0',   # one 8-byte store: the call site reads 8 bytes
@@ -519,20 +519,22 @@ handler([176], 'op_areturn', lines(ret([])))
 handler([177], 'op_return', lines(ret(['xor eax, eax'])))
 
 out = ['; Generated by tools/gen_interp.py; do not edit.', '; ' + __doc__.strip().splitlines()[0],
-       '.686', '.xmm', '.model flat, C', 'option casemap:none', 'option noscoped                 ; handler labels are referenced by op_table', 'INCLUDE profile.inc', 'PUBLIC jbv_interpret_x86', 'EXTERN SYSCALL @jbv_execute@28:PROC   ; fastcall (/Gr), no C decoration', 'EXTERN SYSCALL @jbv_remember@8:PROC', 'EXTERN SYSCALL @jbv_new@16:PROC', 'EXTERN SYSCALL @jbv_core_leave@4:PROC', 'EXTERN SYSCALL @jbv_core_finish@4:PROC', '',
-       'IF JBV_PROFILE_FULL', 'CLASS_COMPONENT EQU 72', 'CLASS_ARRAY_KIND EQU 81', 'CLASS_FLAGS EQU 56', 'CLASS_INIT EQU 82', 'CLASS_SLOTS EQU 76', 'METHOD_ACCESSOR EQU 49', 'METHOD_RCHAR EQU 50',
-       'METHOD_CODE EQU 28', 'METHOD_ARGS EQU 36', 'METHOD_RESULT EQU 38',
-       'ELSE', 'CLASS_COMPONENT EQU 68', 'CLASS_ARRAY_KIND EQU 77', 'CLASS_FLAGS EQU 52', 'CLASS_INIT EQU 78', 'METHOD_CODE EQU 24', 'METHOD_ARGS EQU 32', 'METHOD_RESULT EQU 34', 'CLASS_SLOTS EQU 72', 'METHOD_ACCESSOR EQU 45', 'METHOD_RCHAR EQU 46', 'ENDIF', '',
+       '.686', '.xmm', '.model flat, C', 'option casemap:none', 'option noscoped                 ; handler labels are referenced by op_table', 'PUBLIC jbv_interpret_x86', 'EXTERN SYSCALL @jbv_execute@28:PROC', 'EXTERN SYSCALL @jbv_remember@8:PROC', 'EXTERN SYSCALL @jbv_new@16:PROC', 'EXTERN SYSCALL @jbv_core_leave@4:PROC', 'EXTERN SYSCALL @jbv_core_finish@4:PROC', '',
+       'INCLUDE layout.inc', '; the offsets below are written as numbers in the handlers: checked against layout.inc',
+       '.ERRNZ CP_SIZEOF - 24', '.ERRNZ CP_BITS - 8', '.ERRNZ CP_TEXT - 16', '.ERRNZ TEXT_DATA - 0', '.ERRNZ TEXT_SIZE - 4', '.ERRNZ LK_OWNER - 0', '.ERRNZ LK_MEMBER - 8', '.ERRNZ LK_SEEN - 12', '.ERRNZ LK_TARGET_OWNER - 16', '.ERRNZ LK_TARGET - 20', '.ERRNZ LK_SPECIAL_OWNER - 24', '.ERRNZ LK_SPECIAL - 28', '.ERRNZ LK_SLOT - 32', '.ERRNZ LK_KIND - 36', '.ERRNZ LK_TYPE - 37', '.ERRNZ LK_FAST - 38', '.ERRNZ LK_READY - 39', '.ERRNZ LK_ARGC - 40', '.ERRNZ LK_RESULT - 42', '.ERRNZ LK_TRIVIAL - 43', '.ERRNZ LK_ADDRESS - 44', '.ERRNZ LK_PIC_SEEN - 48', '.ERRNZ LK_PIC_OWNER - 60', '.ERRNZ LK_PIC_TARGET - 72', '.ERRNZ VM_MAX_SLOTS - 12', '.ERRNZ VM_MAX_DEPTH - 16', '.ERRNZ VM_SLOTS - 336', '.ERRNZ VM_USED_SLOTS - 340', '.ERRNZ VM_DEPTH - 344', '.ERRNZ VM_REMAINING - 352', '.ERRNZ VM_OBJECT_CLASS - 360', '.ERRNZ VM_SLOT_REFS - 364', '.ERRNZ VM_FRAMES - 368', '.ERRNZ VM_HANDLES - 376', '.ERRNZ VM_GENERATIONS - 380', '.ERRNZ VM_HANDLE_CAPACITY - 392', '.ERRNZ VM_HANDLE_CURSOR - 396', '.ERRNZ VM_OBJECT_COUNT - 400', '.ERRNZ VM_NURSERY - 1984', '.ERRNZ VM_NURSERY_TOP - 1988', '.ERRNZ VM_NURSERY_SIZE - 1992', '.ERRNZ VM_LAST_REMEMBERED - 2012', '.ERRNZ VM_HEAP_BYTES - 2036', '.ERRNZ VM_HEAP_LIMIT - 2040', '.ERRNZ VM_USED_MAP - 2108', '.ERRNZ VM_YOUNG_MAP - 2112', '.ERRNZ M_MAX_STACK - 2', '.ERRNZ M_MAX_LOCALS - 4', '.ERRNZ M_DESCRIPTOR - 16', '.ERRNZ C_POOL - 8', '.ERRNZ FR_PREVIOUS - 0', '.ERRNZ FR_OWNER - 4', '.ERRNZ FR_METHOD - 8', '.ERRNZ FR_PC - 12', '.ERRNZ FR_SP - 16', '.ERRNZ FR_BASE - 20', '.ERRNZ FR_LOCALS - 24', '.ERRNZ FR_HAS_MONITORS - 28', '.ERRNZ FR_SIZEOF - 32', '.ERRNZ ACT_PC - 12', '.ERRNZ ACT_SP - 16', '.ERRNZ ACT_HANDLES - 20', '.ERRNZ ACT_POOL - 24', '.ERRNZ ACT_VM - 28', '.ERRNZ ACT_STATUS - 32', '.ERRNZ ACT_NURSERY - 36', '.ERRNZ ACT_NSIZE - 40', '.ERRNZ ACT_RESULT - 48', '.ERRNZ ACT_FRAME - 56', '.ERRNZ ACT_CALLER - 88', '.ERRNZ ACT_SAVED - 92', '.ERRNZ ACT_ARGBASE - 96', '.ERRNZ ACT_RESUME - 100', '.ERRNZ ACT_ASM - 101', '.ERRNZ ACT_RET - 104', '.ERRNZ ACT_SIZE - 112',
+       'CLASS_COMPONENT EQU C_COMPONENT', 'CLASS_ARRAY_KIND EQU C_ARRAY_KIND', 'CLASS_FLAGS EQU C_FLAGS', 'CLASS_INIT EQU C_INIT_STATE',
+       'CLASS_SLOTS EQU C_INSTANCE_SLOTS', 'METHOD_ACCESSOR EQU M_ACCESSOR', 'METHOD_RCHAR EQU M_RETURN_CHAR', 'METHOD_CODE EQU M_CODE',
+       'METHOD_ARGS EQU M_ARG_SLOTS', 'METHOD_RESULT EQU M_RESULT_KIND', '',
        'DISPATCH_W MACRO', '    movzx ecx, BYTE PTR [esi]', '    inc esi', '    jmp DWORD PTR op_table_w[ecx*4]', 'ENDM', '',
        'DISPATCH MACRO', '    movzx ecx, BYTE PTR [esi]', '    inc esi', '    jmp DWORD PTR op_table[ecx*4]', 'ENDM', '',
        '.const', 'ALIGN 4', 'op_table LABEL DWORD']
 import os
-OFF = {int(x) for x in os.environ.get('JBV_CORE_OFF', '').split(',') if x}   # bisecting: opcodes left to C
+OFF = {int(x) for x in os.environ.get('JBV_CORE_OFF', '').split(',') if x}   # bisecting: opcodes left to jbv_run
 for op in range(256): out.append(f'    DWORD {"exit_op" if op in OFF else handlers.get(op, "exit_op")}')
 out += ['op_table_w LABEL DWORD']
 for op in range(256): out.append(f'    DWORD {"exit_op" if op in OFF else wide_handlers.get(op, handlers.get(op, "exit_op"))}')
 out += ['', '.code',
-        '; void jbv_interpret_x86(JbvFastState *state): runs from state->pc until an opcode for C.',
+        '; void jbv_interpret_x86(JbvFastState *state): runs from state->pc until an opcode for jbv_run.',
         'jbv_interpret_x86 PROC',
         '    push ebp', '    push ebx', '    push esi', '    push edi',
         '    mov edx, [esp+20]', '    push edx                     ; [esp] = state',
@@ -540,11 +542,11 @@ out += ['', '.code',
         f'    mov edi, [edx+{STATE["locals"]}]', f'    mov ebp, [edx+{STATE["refs"]}]', f'    mov ebx, [edx+{STATE["sp"]}]',
         '    mov eax, [edi+ebx*4-4]       ; top of stack (a local if the stack is empty: read only)',
         '    DISPATCH',
-        'exit_op:                         ; esi is just past the opcode C has to run',
+        'exit_op:                         ; esi is just past the opcode jbv_run has to run',
         '    dec esi', '    mov edx, [esp]', '    mov eax, esi', f'    sub eax, [edx+{STATE["code"]}]', f'    mov [edx+{STATE["pc"]}], eax',
         f'    mov [edx+{STATE["sp"]}], ebx', f'    cmp BYTE PTR [edx+{ACT_ASM}], 0', '    jne frame_in_c',
         '    pop edx', '    pop edi', '    pop esi', '    pop ebx', '    pop ebp', '    ret',
-        'frame_in_c:                      ; a core activation: C runs it to its end',
+        'frame_in_c:                      ; a core activation: jbv_run runs it to its end',
         '    mov ecx, edx', '    call @jbv_core_finish@4', '    jmp core_return', '']
 out += body
 out += cold

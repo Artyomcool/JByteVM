@@ -378,3 +378,25 @@ VM_CLOCK EQU 2068
 VM_WRITE EQU 2072
 VM_SERVICES_USER EQU 2076
 ENDIF
+; JbvActivation: the core state the x86 core runs from, then the method's frame and, for
+; activations the core makes itself, its caller and resume data (profile-independent)
+ACT_CODE    EQU 0
+ACT_LOCALS  EQU 4
+ACT_REFS    EQU 8
+ACT_PC      EQU 12
+ACT_SP      EQU 16
+ACT_HANDLES EQU 20
+ACT_POOL    EQU 24
+ACT_VM      EQU 28
+ACT_STATUS  EQU 32
+ACT_NURSERY EQU 36
+ACT_NSIZE   EQU 40
+ACT_RESULT  EQU 48
+ACT_FRAME   EQU 56
+ACT_CALLER  EQU 88
+ACT_SAVED   EQU 92
+ACT_ARGBASE EQU 96
+ACT_RESUME  EQU 100
+ACT_ASM     EQU 101
+ACT_RET     EQU 104
+ACT_SIZE    EQU 112

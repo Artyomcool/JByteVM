@@ -110,7 +110,7 @@ object:
     call @jbv_object@12
     pop ecx
     ret
-retain:                 ; eax = ref; status ignored as in the C; eax, ecx, edx kept
+retain:                 ; eax = ref; the status ignored; eax, ecx, edx kept
     push edx
     push ecx
     push eax
@@ -355,7 +355,7 @@ range_error:            ; IndexOutOfBoundsException
     call @jbv_throw_named@16
     ret
 
-; ---- exported to C (fastcall)
+; ---- used by the rest of the VM (fastcall)
 @jbv_string_view@12 PROC SYSCALL    ; ecx vm, edx ref, [esp+4] view
     push ebx
     push esi
@@ -569,19 +569,6 @@ ot_ret:
     add esp, 20
     pop esi
     ret
-@jbv_object_text@12 PROC SYSCALL    ; ecx vm, edx ref, [esp+4] out
-    push ebx
-    mov ebx, ecx
-    mov eax, edx
-    call object_text
-    test eax, eax
-    jnz @F
-    mov edx, [esp+8]
-    mov [edx], ecx
-@@:
-    pop ebx
-    ret 4
-@jbv_object_text@12 ENDP
 ; digits of a magnitude in a radix, '-' first when negative -> the count
 @jbv_integer_text@20 PROC SYSCALL   ; ecx negative, edx radix, [esp+4] magnitude, [esp+12] out
     push ebx

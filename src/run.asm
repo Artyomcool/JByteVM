@@ -44,24 +44,7 @@ ACC_NATIVE  EQU 100h
 ACC_ABSTRACT EQU 400h
 DATA0       EQU 4
 HANDLE_MASK EQU 0FFFFFFh
-; JbvActivation : the core state, then the frame
-A_CODE    EQU 0
-A_LOCALS  EQU 4
-A_REFS    EQU 8
-A_PC      EQU 12
-A_SP      EQU 16
-A_HANDLES EQU 20
-A_POOL    EQU 24
-A_VM      EQU 28
-A_STATUS  EQU 32
-A_NURSERY EQU 36
-A_NSIZE   EQU 40
-A_RESULT  EQU 48
-A_FRAME   EQU 56
-A_SAVED   EQU 92
-A_ASM     EQU 101
-ACT_SIZE  EQU 112
-F_LOCALS  EQU A_FRAME+FR_LOCALS
+F_LOCALS  EQU ACT_FRAME+FR_LOCALS
 
 .const
 n_soe DB 'java/lang/StackOverflowError', 0
@@ -70,11 +53,11 @@ n_soe DB 'java/lang/StackOverflowError', 0
 ; ebx = vm, esi = act: the core's copies of the handle table and the young region
 core_copies:
     mov eax, [ebx+VM_HANDLES]
-    mov [esi+A_HANDLES], eax
+    mov [esi+ACT_HANDLES], eax
     mov eax, [ebx+VM_NURSERY]
-    mov [esi+A_NURSERY], eax
+    mov [esi+ACT_NURSERY], eax
     mov eax, [ebx+VM_NURSERY_SIZE]
-    mov [esi+A_NSIZE], eax
+    mov [esi+ACT_NSIZE], eax
     ret
 
 ; ---- jbv_run: ebx = vm, esi = act, eax = a pending status (unwound first), edi = out
@@ -102,55 +85,55 @@ rn_resume:
     push esi
     call jbv_interpret_x86
     add esp, 4
-    mov eax, [esi+A_STATUS]
+    mov eax, [esi+ACT_STATUS]
     test eax, eax
     jz rn_op
-    mov DWORD PTR [esi+A_STATUS], 0
+    mov DWORD PTR [esi+ACT_STATUS], 0
     cmp eax, CORE_RETURN
     jne rn_finish
-    mov eax, [esi+A_RESULT]
+    mov eax, [esi+ACT_RESULT]
     mov [ebp+R_VALUE], eax
-    mov eax, [esi+A_RESULT+4]
+    mov eax, [esi+ACT_RESULT+4]
     mov [ebp+R_VALUE+4], eax
     xor eax, eax
     jmp rn_finish
 rn_op:                                  ; the opcode it left: edx = pc past it, edi = sp, ecx = locals
-    mov edx, [esi+A_PC]
-    mov eax, [esi+A_CODE]
+    mov edx, [esi+ACT_PC]
+    mov eax, [esi+ACT_CODE]
     movzx eax, BYTE PTR [eax+edx]
     inc edx
-    mov [esi+A_PC], edx
+    mov [esi+ACT_PC], edx
     mov [ebp+R_OP], eax
-    mov edi, [esi+A_SP]
-    mov ecx, [esi+A_LOCALS]
+    mov edi, [esi+ACT_SP]
+    mov ecx, [esi+ACT_LOCALS]
     movzx eax, BYTE PTR [rn_kind+eax]
     jmp DWORD PTR [rn_ops+eax*4]
 rn_store_sp:
-    mov [esi+A_SP], edi
+    mov [esi+ACT_SP], edi
     jmp rn_resume
 rn_nop:
     jmp rn_resume
 rn_aload0:                              ; the superinstruction markers: their first opcode
     mov eax, [ecx]
     mov [ecx+edi*4], eax
-    mov eax, [esi+A_REFS]
+    mov eax, [esi+ACT_REFS]
     mov BYTE PTR [eax+edi], 1
     inc edi
     jmp rn_store_sp
 rn_iinc:
-    mov eax, [esi+A_CODE]
+    mov eax, [esi+ACT_CODE]
     add eax, edx
     movzx edx, BYTE PTR [eax]
     movsx eax, BYTE PTR [eax+1]
     add [ecx+edx*4], eax
-    add DWORD PTR [esi+A_PC], 2
+    add DWORD PTR [esi+ACT_PC], 2
     jmp rn_resume
 rn_divide:                              ; idiv, irem
     mov eax, [ecx+edi*4-8]
     mov ebx, [ecx+edi*4-4]              ; (vm again below)
     test ebx, ebx
     jnz @F
-    mov ebx, [esi+A_VM]
+    mov ebx, [esi+ACT_VM]
     mov eax, S_DIVIDE
     jmp rn_fail
 @@:
@@ -169,8 +152,8 @@ rn_divide:                              ; idiv, irem
     je rn_quotient
     mov eax, edx
 rn_quotient:
-    mov ebx, [esi+A_VM]
-    mov ecx, [esi+A_LOCALS]
+    mov ebx, [esi+ACT_VM]
+    mov ecx, [esi+ACT_LOCALS]
     dec edi
     mov [ecx+edi*4-4], eax
     jmp rn_store_sp
@@ -196,7 +179,7 @@ rn_if2:
     jb rn_compare
     sub eax, 6
 rn_compare:                             ; edx ? ecx by eax: eq ne lt ge gt le
-    mov [esi+A_SP], edi
+    mov [esi+ACT_SP], edi
     cmp edx, ecx
     jmp DWORD PTR [rn_conditions+eax*4]
 rn_eq:
@@ -217,19 +200,19 @@ rn_gt:
 rn_le:
     jle rn_branch
 rn_skip:
-    add DWORD PTR [esi+A_PC], 2
+    add DWORD PTR [esi+ACT_PC], 2
     jmp rn_resume
 rn_branch:
 rn_goto:
-    mov eax, [esi+A_PC]
-    add eax, [esi+A_CODE]
+    mov eax, [esi+ACT_PC]
+    add eax, [esi+ACT_CODE]
     movzx eax, WORD PTR [eax]
     xchg al, ah
     movsx eax, ax
     jmp rn_jump
 rn_goto_w:
-    mov eax, [esi+A_PC]
-    add eax, [esi+A_CODE]
+    mov eax, [esi+ACT_PC]
+    add eax, [esi+ACT_CODE]
     mov eax, [eax]
     bswap eax
 rn_jump:                                ; eax = the offset; backward branches spend the budget
@@ -238,7 +221,7 @@ rn_jump:                                ; eax = the offset; backward branches sp
     mov ecx, [ebx+VM_REMAINING]
     or ecx, [ebx+VM_REMAINING+4]
     jnz rn_spend
-    mov edi, [esi+A_SP]
+    mov edi, [esi+ACT_SP]
     mov eax, S_LIMIT
     jmp rn_fail
 rn_spend:
@@ -246,10 +229,10 @@ rn_spend:
     sbb DWORD PTR [ebx+VM_REMAINING+4], 0
 @@:
     dec eax
-    add [esi+A_PC], eax
+    add [esi+ACT_PC], eax
     jmp rn_resume
 rn_ireturn:                             ; narrowed to the declared type
-    mov eax, [esi+A_FRAME+FR_METHOD]
+    mov eax, [esi+ACT_FRAME+FR_METHOD]
     movzx edx, WORD PTR [eax+M_DESCRIPTOR+TEXT_SIZE]
     mov eax, [eax+M_DESCRIPTOR+TEXT_DATA]
     movzx edx, BYTE PTR [eax+edx-1]
@@ -289,7 +272,7 @@ rn_arraylength:
     mov eax, [edx+eax*4]
     mov eax, [eax-4]
     mov [ecx+edi*4-4], eax
-    mov eax, [esi+A_REFS]
+    mov eax, [esi+ACT_REFS]
     mov BYTE PTR [eax+edi-1], 0
     jmp rn_resume
 rn_array:                               ; the generic array load/store (every element type)
@@ -318,7 +301,7 @@ rn_array_width:
     mov [ebp+R_I], eax
     neg eax
     add eax, edi
-    mov ecx, [esi+A_LOCALS]
+    mov ecx, [esi+ACT_LOCALS]
     mov edx, [ecx+eax*4]
     push DWORD PTR [ecx+eax*4+4]        ; the index
     lea eax, [ebp+R_EXC]
@@ -344,7 +327,7 @@ rn_array_width:
     je rn_array_load
     cmp BYTE PTR [ebp+R_OP], 'L'
     jne rn_array_put
-    mov ecx, [esi+A_LOCALS]
+    mov ecx, [esi+ACT_LOCALS]
     mov edx, [ecx+edi*4-4]
     test edx, edx
     jz rn_array_put
@@ -364,7 +347,7 @@ rn_array_width:
     mov eax, S_STORE
     jz rn_fail
 rn_array_put:
-    mov ecx, [esi+A_LOCALS]
+    mov ecx, [esi+ACT_LOCALS]
     mov eax, edi
     sub eax, [ebp+R_STATE+4]
     lea eax, [ecx+eax*4]
@@ -381,7 +364,7 @@ rn_array_put:
     call @jbv_array_set@20
     cmp BYTE PTR [ebp+R_OP], 'L'
     jne @F
-    mov ecx, [esi+A_LOCALS]
+    mov ecx, [esi+ACT_LOCALS]
     push DWORD PTR [ecx+edi*4-4]
     mov edx, [ebp+R_EXC]
     mov ecx, ebx
@@ -396,9 +379,9 @@ rn_array_load:
     mov ecx, [ebp+R_EXC]
     call @jbv_array_get@12
     sub edi, 2
-    mov ecx, [esi+A_LOCALS]
+    mov ecx, [esi+ACT_LOCALS]
     mov [ecx+edi*4], eax
-    mov ecx, [esi+A_REFS]
+    mov ecx, [esi+ACT_REFS]
     mov BYTE PTR [ecx+edi], 0
     inc edi
     mov eax, [ebp+R_I]                  ; the slot kind
@@ -410,51 +393,51 @@ rn_array_load:
     sete BYTE PTR [ecx+edi-1]
     jmp rn_store_sp
 @@:
-    mov eax, [esi+A_LOCALS]
+    mov eax, [esi+ACT_LOCALS]
     mov [eax+edi*4], edx
     mov BYTE PTR [ecx+edi], 0
     inc edi
     jmp rn_store_sp
 rn_slow:                                ; slow_op, the frame synced
     call sync
-    mov eax, [esi+A_PC]
+    mov eax, [esi+ACT_PC]
     mov [ebp+R_STATE], eax
     mov eax, edi
     sub eax, [esi+F_LOCALS]
     mov [ebp+R_STATE+4], eax
-    mov eax, [esi+A_REFS]
+    mov eax, [esi+ACT_REFS]
     mov ecx, [esi+F_LOCALS]
     push eax                            ; local_refs
-    push DWORD PTR [esi+A_LOCALS]       ; locals
+    push DWORD PTR [esi+ACT_LOCALS]       ; locals
     add eax, ecx
     push eax                            ; stack_refs
-    mov eax, [esi+A_LOCALS]
+    mov eax, [esi+ACT_LOCALS]
     lea eax, [eax+ecx*4]
     push eax                            ; stack
     lea eax, [ebp+R_STATE]
     push eax
     push DWORD PTR [ebp+R_OP]
-    lea eax, [esi+A_FRAME]
+    lea eax, [esi+ACT_FRAME]
     push eax
-    mov edx, [esi+A_FRAME+FR_OWNER]
+    mov edx, [esi+ACT_FRAME+FR_OWNER]
     mov ecx, ebx
     call @jbv_slow_op@36
     mov ecx, [ebp+R_STATE]
-    mov [esi+A_PC], ecx
+    mov [esi+ACT_PC], ecx
     mov ecx, [ebp+R_STATE+4]
     add ecx, [esi+F_LOCALS]
-    mov [esi+A_SP], ecx
+    mov [esi+ACT_SP], ecx
     test eax, eax
     jnz rn_finish
     jmp rn_resume
 ; the frame's copy of pc (at the opcode) and sp; edi = sp
 sync:
-    mov eax, [esi+A_PC]
+    mov eax, [esi+ACT_PC]
     dec eax
-    mov [esi+A_FRAME+FR_PC], eax
+    mov [esi+ACT_FRAME+FR_PC], eax
     mov eax, edi
     sub eax, [esi+F_LOCALS]
-    mov [esi+A_FRAME+FR_SP], eax
+    mov [esi+ACT_FRAME+FR_SP], eax
     ret
 rn_fail:                                ; eax = the status, edi = sp
     push eax
@@ -483,18 +466,18 @@ rn_finish:                              ; a failure: a handler of this method, i
     mov [ebp+R_EXC], eax                ; its class (resolving a catch type may move it)
     xor edi, edi                        ; the handler
 rn_handler:
-    mov eax, [esi+A_FRAME+FR_METHOD]
+    mov eax, [esi+ACT_FRAME+FR_METHOD]
     cmp di, [eax+M_HANDLERS]
     jae rn_unhandled
     mov eax, [eax+M_EXCEPTIONS]
     lea eax, [eax+edi*8]
     movzx ecx, WORD PTR [eax]           ; [start, end)
     xchg cl, ch
-    cmp [esi+A_FRAME+FR_PC], ecx
+    cmp [esi+ACT_FRAME+FR_PC], ecx
     jb rn_next_handler
     movzx ecx, WORD PTR [eax+2]
     xchg cl, ch
-    cmp [esi+A_FRAME+FR_PC], ecx
+    cmp [esi+ACT_FRAME+FR_PC], ecx
     jae rn_next_handler
     movzx ecx, WORD PTR [eax+6]         ; the catch type (0: any)
     xchg cl, ch
@@ -503,7 +486,7 @@ rn_handler:
     lea eax, [ebp+R_TYPE]
     push eax
     push ecx
-    mov edx, [esi+A_FRAME+FR_OWNER]
+    mov edx, [esi+ACT_FRAME+FR_OWNER]
     mov ecx, ebx
     call @jbv_class_constant@16
     test eax, eax
@@ -514,19 +497,19 @@ rn_handler:
     test eax, eax
     jz rn_next_handler
 rn_catch:                               ; the exception alone on the stack, at the handler
-    mov eax, [esi+A_FRAME+FR_METHOD]
+    mov eax, [esi+ACT_FRAME+FR_METHOD]
     mov eax, [eax+M_EXCEPTIONS]
     movzx eax, WORD PTR [eax+edi*8+4]
     xchg al, ah
-    mov [esi+A_PC], eax
+    mov [esi+ACT_PC], eax
     mov ecx, [esi+F_LOCALS]
-    mov eax, [esi+A_LOCALS]
+    mov eax, [esi+ACT_LOCALS]
     mov edx, [ebx+VM_EXCEPTION]
     mov [eax+ecx*4], edx
-    mov eax, [esi+A_REFS]
+    mov eax, [esi+ACT_REFS]
     mov BYTE PTR [eax+ecx], 1
     inc ecx
-    mov [esi+A_SP], ecx
+    mov [esi+ACT_SP], ecx
     xor eax, eax
     mov [ebx+VM_EXCEPTION], eax
     mov [ebx+VM_EXCEPTION_STATUS], eax
@@ -557,34 +540,34 @@ rn_ret:
     push ebx
     push esi
     mov esi, ecx
-    mov ebx, [esi+A_VM]
-    cmp BYTE PTR [esi+A_FRAME+FR_HAS_MONITORS], 0
+    mov ebx, [esi+ACT_VM]
+    cmp BYTE PTR [esi+ACT_FRAME+FR_HAS_MONITORS], 0
     je @F
-    lea edx, [esi+A_FRAME]
+    lea edx, [esi+ACT_FRAME]
     mov ecx, ebx
     call @jbv_release_monitors@8
 @@:
-    mov eax, [esi+A_FRAME+FR_PREVIOUS]
+    mov eax, [esi+ACT_FRAME+FR_PREVIOUS]
     mov [ebx+VM_FRAMES], eax
-    mov eax, [esi+A_SAVED]
+    mov eax, [esi+ACT_SAVED]
     mov [ebx+VM_USED_SLOTS], eax
     dec DWORD PTR [ebx+VM_DEPTH]
     pop esi
     pop ebx
     ret
 @jbv_core_leave@4 ENDP
-; an activation the core made needs C (an opcode for C, or a failure in core.status): run
+; an activation the core made needs jbv_run (an opcode it leaves, or a failure in core.status): run
 ; to its end here and unlinked; the result in core.result
 @jbv_core_finish@4 PROC SYSCALL     ; ecx act
     push ebx
     push esi
     push edi
     mov esi, ecx
-    mov ebx, [esi+A_VM]
+    mov ebx, [esi+ACT_VM]
     xor eax, eax
-    xchg eax, [esi+A_STATUS]
-    mov BYTE PTR [esi+A_ASM], 0
-    lea edi, [esi+A_RESULT]
+    xchg eax, [esi+ACT_STATUS]
+    mov BYTE PTR [esi+ACT_ASM], 0
+    lea edi, [esi+ACT_RESULT]
     call run
     push eax
     mov ecx, esi
@@ -621,12 +604,12 @@ X_RESULT EQU 24
     mov ebx, ecx
     lea esi, [ebp+X_ACT]
     mov edi, [ebp+X_M]
-    mov [esi+A_FRAME+FR_OWNER], edx
-    mov [esi+A_FRAME+FR_METHOD], edi
+    mov [esi+ACT_FRAME+FR_OWNER], edx
+    mov [esi+ACT_FRAME+FR_METHOD], edi
     xor eax, eax
-    mov [esi+A_FRAME+FR_PC], eax
-    mov [esi+A_FRAME+FR_SP], eax
-    mov BYTE PTR [esi+A_FRAME+FR_HAS_MONITORS], al
+    mov [esi+ACT_FRAME+FR_PC], eax
+    mov [esi+ACT_FRAME+FR_SP], eax
+    mov BYTE PTR [esi+ACT_FRAME+FR_HAS_MONITORS], al
     mov [ebp+X_VALUE], eax
     mov [ebp+X_VALUE+4], eax
     mov [ebp+X_ACTIVE], eax
@@ -635,7 +618,7 @@ X_RESULT EQU 24
     xor cl, 1
     mov [ebp+X_OWNFP], ecx
     mov eax, [ebx+VM_FRAMES]
-    mov [esi+A_FRAME+FR_PREVIOUS], eax
+    mov [esi+ACT_FRAME+FR_PREVIOUS], eax
     mov eax, [ebx+VM_USED_SLOTS]
     mov [ebp+X_SAVED], eax
     mov [ebp+X_BASE], eax
@@ -729,7 +712,7 @@ ex_general:
     push esi                            ; a fresh frame: the arguments copied in
     push edi
     mov esi, [ebp+X_ARGS]
-    mov edi, [ebp+X_ACT+A_LOCALS]
+    mov edi, [ebp+X_ACT+ACT_LOCALS]
     movzx ecx, WORD PTR [ebp+X_COUNT]
     rep movsd
     pop edi
@@ -740,7 +723,7 @@ ex_general:
     push esi
     push edi
     mov esi, ecx
-    mov edi, [ebp+X_ACT+A_REFS]
+    mov edi, [ebp+X_ACT+ACT_REFS]
     movzx ecx, WORD PTR [ebp+X_COUNT]
     rep movsb
     pop edi
@@ -748,12 +731,12 @@ ex_general:
     jmp ex_linked
 ex_check_arguments:
     push 0
-    push DWORD PTR [esi+A_REFS]
+    push DWORD PTR [esi+ACT_REFS]
     movzx eax, WORD PTR [ebp+X_COUNT]
     push eax
-    push DWORD PTR [esi+A_LOCALS]
+    push DWORD PTR [esi+ACT_LOCALS]
     push edi
-    mov edx, [esi+A_FRAME+FR_OWNER]
+    mov edx, [esi+ACT_FRAME+FR_OWNER]
     mov ecx, ebx
     call @jbv_arguments@28
     mov [ebp+X_STATUS], eax
@@ -770,12 +753,12 @@ ex_linked:
     jz ex_entered
     push 1                              ; the receiver's monitor, or the class's
     xor edx, edx
-    mov eax, [esi+A_LOCALS]
+    mov eax, [esi+ACT_LOCALS]
     push DWORD PTR [eax]
     test WORD PTR [edi+M_FLAGS], ACC_STATIC
     jz @F
     mov DWORD PTR [esp], 0
-    mov edx, [esi+A_FRAME+FR_OWNER]
+    mov edx, [esi+ACT_FRAME+FR_OWNER]
 @@:
     mov ecx, ebx
     call @jbv_monitor@16
@@ -790,7 +773,7 @@ ex_entered:
     push eax
     movzx eax, WORD PTR [ebp+X_COUNT]
     push eax
-    push DWORD PTR [esi+A_LOCALS]
+    push DWORD PTR [esi+ACT_LOCALS]
     mov edx, edi
     mov ecx, ebx
     call @jbv_native_call@20
@@ -812,17 +795,17 @@ ex_entered:
     mov [ebp+X_VALUE], eax
     jmp ex_done
 ex_run:
-    mov BYTE PTR [esi+A_ASM], 0
+    mov BYTE PTR [esi+ACT_ASM], 0
     mov eax, [edi+M_CODE]
-    mov [esi+A_CODE], eax
-    mov DWORD PTR [esi+A_PC], 0
+    mov [esi+ACT_CODE], eax
+    mov DWORD PTR [esi+ACT_PC], 0
     mov eax, [esi+F_LOCALS]
-    mov [esi+A_SP], eax
-    mov eax, [esi+A_FRAME+FR_OWNER]
+    mov [esi+ACT_SP], eax
+    mov eax, [esi+ACT_FRAME+FR_OWNER]
     mov eax, [eax+C_POOL]
-    mov [esi+A_POOL], eax
-    mov [esi+A_VM], ebx
-    mov DWORD PTR [esi+A_STATUS], 0
+    mov [esi+ACT_POOL], eax
+    mov [esi+ACT_VM], ebx
+    mov DWORD PTR [esi+ACT_STATUS], 0
     push edi
     xor eax, eax
     lea edi, [ebp+X_VALUE]
@@ -863,13 +846,13 @@ ex_leave:
 ex_unlink:
     cmp DWORD PTR [ebp+X_ACTIVE], 0
     je @F
-    cmp BYTE PTR [esi+A_FRAME+FR_HAS_MONITORS], 0
+    cmp BYTE PTR [esi+ACT_FRAME+FR_HAS_MONITORS], 0
     je ex_unlinked
-    lea edx, [esi+A_FRAME]
+    lea edx, [esi+ACT_FRAME]
     mov ecx, ebx
     call @jbv_release_monitors@8
 ex_unlinked:
-    mov eax, [esi+A_FRAME+FR_PREVIOUS]
+    mov eax, [esi+ACT_FRAME+FR_PREVIOUS]
     mov [ebx+VM_FRAMES], eax
 @@:
     mov eax, [ebp+X_SAVED]
@@ -926,13 +909,13 @@ ex_place:
     mov eax, [ebp+X_BASE]
     mov ecx, [ebx+VM_SLOTS]
     lea ecx, [ecx+eax*4]
-    mov [esi+A_LOCALS], ecx
+    mov [esi+ACT_LOCALS], ecx
     mov ecx, [ebx+VM_SLOT_REFS]
     add ecx, eax
-    mov [esi+A_REFS], ecx
+    mov [esi+ACT_REFS], ecx
     add edx, eax
     mov [ebx+VM_USED_SLOTS], edx
-    mov [esi+A_FRAME+FR_BASE], eax
+    mov [esi+ACT_FRAME+FR_BASE], eax
     push edi
     movzx edx, WORD PTR [ebp+X_COUNT]   ; uninitialized locals: no reference bits
     mov ecx, [esi+F_LOCALS]
@@ -945,8 +928,8 @@ ex_place:
 @@:
     pop edi
     mov eax, [ebx+VM_FRAMES]
-    mov [esi+A_FRAME+FR_PREVIOUS], eax
-    lea eax, [esi+A_FRAME]
+    mov [esi+ACT_FRAME+FR_PREVIOUS], eax
+    lea eax, [esi+ACT_FRAME]
     mov [ebx+VM_FRAMES], eax
     mov DWORD PTR [ebp+X_ACTIVE], 1
     ret

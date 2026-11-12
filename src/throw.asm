@@ -1,6 +1,6 @@
 ; Exceptions: the
 ; built-in Throwable classes made on first use, their natives, throwing by name with a
-; captured stack trace, status -> exception. Same fastcall names as the C functions.
+; captured stack trace, status -> exception. Fastcall.
 ; Every allocation may move objects: refs are kept, pointers fetched again after it.
 .686
 .model flat, C
@@ -1085,7 +1085,7 @@ td_done:
     ret 32
 @jbv_throw_detail@40 ENDP
 
-; a C status becomes the Java exception for it (already pending: kept)
+; a status becomes the Java exception for it (already pending: kept)
 @jbv_raise@8 PROC SYSCALL
     mov eax, edx
     cmp DWORD PTR [ecx+VM_EXCEPTION], 0

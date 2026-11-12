@@ -5,7 +5,6 @@
 .model flat, C
 option casemap:none
 option noscoped                 ; handler labels are referenced by op_table
-INCLUDE profile.inc
 PUBLIC jbv_interpret_x86
 PUBLIC op_aastore
 PUBLIC op_aconst_null
@@ -187,35 +186,100 @@ PUBLIC op_xaload_53
 PUBLIC op_xastore_79
 PUBLIC op_xastore_85
 PUBLIC op_xastore_86
-EXTERN SYSCALL @jbv_execute@28:PROC   ; fastcall (/Gr), no C decoration
+EXTERN SYSCALL @jbv_execute@28:PROC
 EXTERN SYSCALL @jbv_remember@8:PROC
 EXTERN SYSCALL @jbv_new@16:PROC
 EXTERN SYSCALL @jbv_core_leave@4:PROC
 EXTERN SYSCALL @jbv_core_finish@4:PROC
 
-IF JBV_PROFILE_FULL
-CLASS_COMPONENT EQU 72
-CLASS_ARRAY_KIND EQU 81
-CLASS_FLAGS EQU 56
-CLASS_INIT EQU 82
-CLASS_SLOTS EQU 76
-METHOD_ACCESSOR EQU 49
-METHOD_RCHAR EQU 50
-METHOD_CODE EQU 28
-METHOD_ARGS EQU 36
-METHOD_RESULT EQU 38
-ELSE
-CLASS_COMPONENT EQU 68
-CLASS_ARRAY_KIND EQU 77
-CLASS_FLAGS EQU 52
-CLASS_INIT EQU 78
-METHOD_CODE EQU 24
-METHOD_ARGS EQU 32
-METHOD_RESULT EQU 34
-CLASS_SLOTS EQU 72
-METHOD_ACCESSOR EQU 45
-METHOD_RCHAR EQU 46
-ENDIF
+INCLUDE layout.inc
+; the offsets below are written as numbers in the handlers: checked against layout.inc
+.ERRNZ CP_SIZEOF - 24
+.ERRNZ CP_BITS - 8
+.ERRNZ CP_TEXT - 16
+.ERRNZ TEXT_DATA - 0
+.ERRNZ TEXT_SIZE - 4
+.ERRNZ LK_OWNER - 0
+.ERRNZ LK_MEMBER - 8
+.ERRNZ LK_SEEN - 12
+.ERRNZ LK_TARGET_OWNER - 16
+.ERRNZ LK_TARGET - 20
+.ERRNZ LK_SPECIAL_OWNER - 24
+.ERRNZ LK_SPECIAL - 28
+.ERRNZ LK_SLOT - 32
+.ERRNZ LK_KIND - 36
+.ERRNZ LK_TYPE - 37
+.ERRNZ LK_FAST - 38
+.ERRNZ LK_READY - 39
+.ERRNZ LK_ARGC - 40
+.ERRNZ LK_RESULT - 42
+.ERRNZ LK_TRIVIAL - 43
+.ERRNZ LK_ADDRESS - 44
+.ERRNZ LK_PIC_SEEN - 48
+.ERRNZ LK_PIC_OWNER - 60
+.ERRNZ LK_PIC_TARGET - 72
+.ERRNZ VM_MAX_SLOTS - 12
+.ERRNZ VM_MAX_DEPTH - 16
+.ERRNZ VM_SLOTS - 336
+.ERRNZ VM_USED_SLOTS - 340
+.ERRNZ VM_DEPTH - 344
+.ERRNZ VM_REMAINING - 352
+.ERRNZ VM_OBJECT_CLASS - 360
+.ERRNZ VM_SLOT_REFS - 364
+.ERRNZ VM_FRAMES - 368
+.ERRNZ VM_HANDLES - 376
+.ERRNZ VM_GENERATIONS - 380
+.ERRNZ VM_HANDLE_CAPACITY - 392
+.ERRNZ VM_HANDLE_CURSOR - 396
+.ERRNZ VM_OBJECT_COUNT - 400
+.ERRNZ VM_NURSERY - 1984
+.ERRNZ VM_NURSERY_TOP - 1988
+.ERRNZ VM_NURSERY_SIZE - 1992
+.ERRNZ VM_LAST_REMEMBERED - 2012
+.ERRNZ VM_HEAP_BYTES - 2036
+.ERRNZ VM_HEAP_LIMIT - 2040
+.ERRNZ VM_USED_MAP - 2108
+.ERRNZ VM_YOUNG_MAP - 2112
+.ERRNZ M_MAX_STACK - 2
+.ERRNZ M_MAX_LOCALS - 4
+.ERRNZ M_DESCRIPTOR - 16
+.ERRNZ C_POOL - 8
+.ERRNZ FR_PREVIOUS - 0
+.ERRNZ FR_OWNER - 4
+.ERRNZ FR_METHOD - 8
+.ERRNZ FR_PC - 12
+.ERRNZ FR_SP - 16
+.ERRNZ FR_BASE - 20
+.ERRNZ FR_LOCALS - 24
+.ERRNZ FR_HAS_MONITORS - 28
+.ERRNZ FR_SIZEOF - 32
+.ERRNZ ACT_PC - 12
+.ERRNZ ACT_SP - 16
+.ERRNZ ACT_HANDLES - 20
+.ERRNZ ACT_POOL - 24
+.ERRNZ ACT_VM - 28
+.ERRNZ ACT_STATUS - 32
+.ERRNZ ACT_NURSERY - 36
+.ERRNZ ACT_NSIZE - 40
+.ERRNZ ACT_RESULT - 48
+.ERRNZ ACT_FRAME - 56
+.ERRNZ ACT_CALLER - 88
+.ERRNZ ACT_SAVED - 92
+.ERRNZ ACT_ARGBASE - 96
+.ERRNZ ACT_RESUME - 100
+.ERRNZ ACT_ASM - 101
+.ERRNZ ACT_RET - 104
+.ERRNZ ACT_SIZE - 112
+CLASS_COMPONENT EQU C_COMPONENT
+CLASS_ARRAY_KIND EQU C_ARRAY_KIND
+CLASS_FLAGS EQU C_FLAGS
+CLASS_INIT EQU C_INIT_STATE
+CLASS_SLOTS EQU C_INSTANCE_SLOTS
+METHOD_ACCESSOR EQU M_ACCESSOR
+METHOD_RCHAR EQU M_RETURN_CHAR
+METHOD_CODE EQU M_CODE
+METHOD_ARGS EQU M_ARG_SLOTS
+METHOD_RESULT EQU M_RESULT_KIND
 
 DISPATCH_W MACRO
     movzx ecx, BYTE PTR [esi]
@@ -747,7 +811,7 @@ op_table_w LABEL DWORD
     DWORD exit_op
 
 .code
-; void jbv_interpret_x86(JbvFastState *state): runs from state->pc until an opcode for C.
+; void jbv_interpret_x86(JbvFastState *state): runs from state->pc until an opcode for jbv_run.
 jbv_interpret_x86 PROC
     push ebp
     push ebx
@@ -762,7 +826,7 @@ jbv_interpret_x86 PROC
     mov ebx, [edx+16]
     mov eax, [edi+ebx*4-4]       ; top of stack (a local if the stack is empty: read only)
     DISPATCH
-exit_op:                         ; esi is just past the opcode C has to run
+exit_op:                         ; esi is just past the opcode jbv_run has to run
     dec esi
     mov edx, [esp]
     mov eax, esi
@@ -777,7 +841,7 @@ exit_op:                         ; esi is just past the opcode C has to run
     pop ebx
     pop ebp
     ret
-frame_in_c:                      ; a core activation: C runs it to its end
+frame_in_c:                      ; a core activation: jbv_run runs it to its end
     mov ecx, edx
     call @jbv_core_finish@4
     jmp core_return
