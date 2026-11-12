@@ -63,7 +63,10 @@ int main(void) {
     F(JbvVM, config.max_instructions, "VM_MAX_INSTRUCTIONS");
     Z(JbvLink, "LK_SIZEOF"); F(JbvLink, owner, "LK_OWNER"); F(JbvLink, symbolic, "LK_SYMBOLIC"); F(JbvLink, member, "LK_MEMBER");
     F(JbvLink, slot, "LK_SLOT"); F(JbvLink, kind, "LK_KIND"); F(JbvLink, type, "LK_TYPE"); F(JbvLink, fast, "LK_FAST"); F(JbvLink, argc, "LK_ARGC");
-    F(JbvLink, result, "LK_RESULT"); F(JbvLink, address, "LK_ADDRESS"); F(JbvClass, init_error, "C_INIT_ERROR"); F(JbvMethod, return_char, "M_RETURN_CHAR");
+    F(JbvLink, result, "LK_RESULT");
+    F(JbvLink, seen, "LK_SEEN"); F(JbvLink, target_owner, "LK_TARGET_OWNER"); F(JbvLink, target, "LK_TARGET"); F(JbvLink, special_owner, "LK_SPECIAL_OWNER");
+    F(JbvLink, special, "LK_SPECIAL"); F(JbvLink, ready, "LK_READY"); F(JbvLink, trivial, "LK_TRIVIAL"); F(JbvLink, pic_seen, "LK_PIC_SEEN");
+    F(JbvLink, pic_owner, "LK_PIC_OWNER"); F(JbvLink, pic_target, "LK_PIC_TARGET"); F(JbvLink, pic_next, "LK_PIC_NEXT"); F(JbvLink, address, "LK_ADDRESS"); F(JbvClass, init_error, "C_INIT_ERROR"); F(JbvMethod, return_char, "M_RETURN_CHAR");
     F(JbvVM, services.clock, "VM_CLOCK"); F(JbvVM, services.write, "VM_WRITE"); F(JbvVM, services.user, "VM_SERVICES_USER");
 #if JBV_PROFILE_FULL
     F(JbvField, attributes, "FIELD_ATTRIBUTES"); F(JbvMethod, attributes, "M_ATTRIBUTES"); F(JbvClass, attributes, "C_ATTRIBUTES");

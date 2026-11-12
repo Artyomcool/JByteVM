@@ -292,6 +292,7 @@ JBV_INLINE void push_value(int32_t *stack, uint8_t *refs, uint32_t *sp, uint64_t
         stack[*sp] = jbv_i32((uint32_t)(value >> 32)); refs[(*sp)++] = 0;
     } else { stack[*sp] = jbv_i32((uint32_t)value); refs[(*sp)++] = kind == JBV_REF; }
 }
+#if !defined(_M_IX86)   /* slow_x86.asm; this is the reference */
 /* Bytecodes off the hot path: everything that may resolve, allocate, call or
  * throw, wide and two-slot locals, long/float/double arithmetic and switches.
  * Kept out of jbv_execute so that its loop keeps pc and sp in registers. The
@@ -611,6 +612,11 @@ done:
 #undef PUSH_VALUE
 #undef PUSHR
 }
+#else
+JbvStatus jbv_slow_op(JbvVM *vm, JbvClass *c, JbvFrame *frame, uint8_t op, JbvOp *state,
+    int32_t *stack, uint8_t *stack_refs, int32_t *locals, uint8_t *local_refs);
+#define slow_op jbv_slow_op
+#endif
 #if JBV_X86_CORE
 JBV_GC static JbvStatus jbv_run(JbvVM *vm, JbvActivation *act, JbvStatus status, uint64_t *out);
 static void core_state(JbvVM *vm, JbvActivation *act) {   /* core.locals and core.refs are set */
