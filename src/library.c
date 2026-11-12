@@ -1,5 +1,6 @@
 #include "library.h"
 #include "classpath.h"
+#if !defined(_M_IX86)   /* library_x86.asm; this is the reference */
 #define L "java/lang/"
 /* In the method tables the common reference types are one character each; install_methods
  * expands them (STR..SB below, in order of the expansions table). */
@@ -478,3 +479,4 @@ JbvStatus jbv_literal(JbvVM *vm, JbvClass *owner, uint16_t index, int32_t *out) 
     }
     *out = jbv_i32(p->bits); return JBV_OK;
 }
+#endif
