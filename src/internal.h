@@ -201,8 +201,8 @@ JbvStatus jbv_classpath_find(JbvVM *vm, JbvText name, const uint8_t **data, uint
 #define jbv_classpath_find(vm, name, data, size) JBV_NOT_FOUND
 #endif
 /* verify: check the entry CRC-32 (host-supplied JARs; the embedded library is trusted). */
-JbvStatus jbv_archive_open(JbvVM *vm, JbvArchive *archive, const uint8_t *jar, size_t size, int verify);
-JbvStatus jbv_archive_find(const JbvArchive *archive, JbvText name, const uint8_t **data, uint32_t *size);
+JbvStatus JBV_CALL jbv_archive_open(JbvVM *vm, JbvArchive *archive, const uint8_t *jar, size_t size, int verify);
+JbvStatus JBV_CALL jbv_archive_find(const JbvArchive *archive, JbvText name, const uint8_t **data, uint32_t *size);
 /* Built-in library class, then a class of the application JAR (linked). */
 JbvStatus jbv_lazy_class(JbvVM *vm, JbvText name, JbvClass **out);
 void jbv_free_image(JbvVM *vm, uint8_t *image);
