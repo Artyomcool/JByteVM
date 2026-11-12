@@ -1,6 +1,7 @@
 #include "internal.h"
 #include <intrin.h>
 
+#if !defined(_M_IX86)   /* classes_x86.asm; this is the reference */
 int jbv_reference_type(JbvText descriptor) {
     return descriptor.size && (descriptor.data[0] == 'L' || descriptor.data[0] == '[');
 }
@@ -311,6 +312,7 @@ JBV_API JbvStatus JBV_CALL jbv_release(JbvVM *vm, JbvRef ref) {
     return JBV_OK;
 }
 
+#endif
 /* ---- Serial generational heap ------------------------------------------------------
  * Young generation: one bump region; each young block is [handle word][array length]
  * header payload, a spare word first, so the region can be
