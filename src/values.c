@@ -1,4 +1,5 @@
 #include "classpath.h"
+#if !defined(_M_IX86)   /* values_x86.asm; this is the reference */
 static const char codes[] = "ZBCSIJFDV";
 static const char *const wrappers[] = {"java/lang/Boolean","java/lang/Byte","java/lang/Character","java/lang/Short",
     "java/lang/Integer","java/lang/Long","java/lang/Float","java/lang/Double","java/lang/Void"};
@@ -101,3 +102,4 @@ JbvStatus jbv_from_object(JbvVM *vm, int32_t ref, JbvText type, uint64_t *out) {
     }
     return jbv_unbox(vm, ref, type.data[0], 0, out);
 }
+#endif
