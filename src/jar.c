@@ -7,6 +7,14 @@
 /* LZMA1 (ZIP method 14: u8 version[2], u16 props size = 5, props, then the stream),
  * after the LZMA specification. Probabilities: one block of 11-bit counters. */
 typedef struct Rc { const uint8_t *in, *end; uint32_t range, code; } Rc;
+#if defined(_M_IX86)
+/* lzma_x86.asm: decodes up to size bytes, returns how many; its own state lives here */
+typedef struct JbvLzma {
+    uint16_t *p; const uint8_t *in, *end; uint8_t *out; uint32_t size, lc, lp_mask, pb_mask;
+    uint32_t state, rep[4], pos_state, len, code, match;
+} JbvLzma;
+uint32_t JBV_CALL jbv_unlzma_x86(JbvLzma *z);
+#else
 static uint32_t rc_bit(Rc *r, uint16_t *p) {
     uint32_t bound = (r->range >> 11) * *p, bit = r->code >= bound;
     if (bit) { r->range -= bound; r->code -= bound; *p -= *p >> 5; } else { r->range = bound; *p += (2048 - *p) >> 5; }
@@ -23,6 +31,7 @@ static uint32_t rc_len(Rc *r, uint16_t *p, uint32_t pos_state) {   /* choice, ch
     if (!rc_bit(r, p + 1)) return 8 + rc_tree(r, p + 130 + pos_state * 8, 3, 0);
     return 16 + rc_tree(r, p + 258, 8, 0);
 }
+#endif
 enum { L_MATCH = 0, L_REP = 192, L_G0 = 204, L_G1 = 216, L_G2 = 228, L_LONG = 240, L_SLOT = 432, L_SPEC = 688, L_ALIGN = 803,
        L_LEN = 819, L_REPLEN = 1333, L_LIT = 1847 };
 static JbvStatus unlzma(JbvVM *vm, const uint8_t *in, size_t in_size, uint8_t *out, size_t size) {
@@ -39,6 +48,15 @@ static JbvStatus unlzma(JbvVM *vm, const uint8_t *in, size_t in_size, uint8_t *o
     for (i = 0; i < n; ++i) p[i] = 1024;
     r.in = in + 10; r.end = in + in_size; r.range = 0xffffffffu; r.code = 0;
     for (i = 0; i < 4; ++i) r.code = r.code << 8 | (r.in < r.end ? *r.in++ : 0);
+#if defined(_M_IX86)
+    {
+        JbvLzma z = {0};
+        z.p = p; z.in = r.in; z.end = r.end; z.out = out; z.size = (uint32_t)size; z.lc = lc;
+        z.lp_mask = (1u << lp) - 1; z.pb_mask = (1u << pb) - 1; z.code = r.code;
+        pos = jbv_unlzma_x86(&z);
+        (void)state; (void)rep0; (void)rep1; (void)rep2; (void)rep3; (void)len; (void)dist;
+    }
+#else
     while (pos < size) {
         uint32_t ps = (uint32_t)pos & ((1u << pb) - 1);
         if (!rc_bit(&r, p + L_MATCH + (state << 4) + ps)) {   /* literal */
@@ -101,6 +119,7 @@ static JbvStatus unlzma(JbvVM *vm, const uint8_t *in, size_t in_size, uint8_t *o
         if (rep0 >= pos) break;
         for (len += 2; len-- && pos < size; ++pos) out[pos] = out[pos - rep0 - 1];
     }
+#endif
     jbv_free(vm, p);
     return pos == size ? JBV_OK : JBV_BAD_CLASS;
 }
