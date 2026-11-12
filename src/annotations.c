@@ -1,5 +1,6 @@
 #include "classpath.h"
 
+#if !defined(_M_IX86)   /* annotations_x86.asm; this is the reference */
 #define ANNOTATION "java/lang/annotation/Annotation"
 #define IMPL "jbv/runtime/AnnotationValue"
 JBV_GC static JbvStatus read_annotation(JbvVM *vm, JbvClass *owner, const uint8_t **p, int32_t *ref);
@@ -155,3 +156,4 @@ JbvStatus jbv_annotations(JbvVM *vm, JbvClass *owner, const uint8_t *p, int32_t 
     for(i=0;i<n&&status==JBV_OK;++i){status=read_annotation(vm,owner,&p,&item);if(status==JBV_OK)store(vm,*ref,i,item);}
     (void)jbv_release(vm,*ref);return status;
 }
+#endif
