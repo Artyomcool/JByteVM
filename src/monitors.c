@@ -1,4 +1,5 @@
 #include "library.h"
+#if !defined(_M_IX86)   /* monitors_x86.asm; this is the reference */
 
 /* One host thread owns a VM. These are reentrant Java monitors, not OS mutexes.
  * Each acquisition is one table entry keyed by object ref or by class (static
@@ -52,3 +53,4 @@ void jbv_release_monitors(JbvVM *vm, JbvFrame *frame) {
         if ((entry->ref || entry->type) && entry->frame == frame) { entry->ref = 0; entry->type = 0; entry->frame = 0; }
     }
 }
+#endif

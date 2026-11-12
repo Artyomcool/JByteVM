@@ -1,4 +1,5 @@
 #include "internal.h"
+#if !defined(_M_IX86)   /* monitors_x86.asm; this is the reference */
 
 int jbv_same_package(JbvClass *a, JbvClass *b) {
     uint32_t i, na = 0, nb = 0;
@@ -27,3 +28,4 @@ JbvMethod *jbv_virtual_method(JbvClass **owner, JbvClass *resolved, JbvMethod *m
     }
     return jbv_lookup_method(owner, method->name, method->descriptor);
 }
+#endif

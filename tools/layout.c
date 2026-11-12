@@ -56,7 +56,7 @@ int main(void) {
     F(JbvVM, config.max_depth, "VM_MAX_DEPTH"); F(JbvVM, remaining, "VM_REMAINING"); F(JbvVM, interned, "VM_INTERNED_MAP");
     F(JbvClass, ref_slots, "C_REFS"); F(JbvClass, ref_count, "C_REF_COUNT"); F(JbvClass, ref_ready, "C_REF_READY");
     F(JbvClass, roots_ready, "C_ROOTS_READY"); F(JbvClass, root_count, "C_ROOT_COUNT"); F(JbvClass, mirror, "C_MIRROR");
-    F(JbvFrame, base, "FR_BASE"); F(JbvFrame, locals, "FR_LOCALS"); F(JbvFrame, sp, "FR_SP");
+    F(JbvFrame, base, "FR_BASE"); F(JbvFrame, locals, "FR_LOCALS"); F(JbvFrame, sp, "FR_SP"); F(JbvFrame, has_monitors, "FR_HAS_MONITORS");
     Z(JbvMonitor, "MON_SIZEOF");
     F(JbvMethod, native_slots, "M_NATIVE_SLOTS"); F(JbvMethod, result_kind, "M_RESULT_KIND");
 #if JBV_PROFILE_FULL
